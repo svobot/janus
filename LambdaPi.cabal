@@ -1,0 +1,83 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 22cfc83c2e049c589d75d3966cf35cc9febf4b69a71a426775acbdd5545830ce
+
+name:           LambdaPi
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/githubuser/LambdaPi#readme>
+homepage:       https://github.com/githubuser/LambdaPi#readme
+bug-reports:    https://github.com/githubuser/LambdaPi/issues
+author:         Author name here
+maintainer:     example@example.com
+copyright:      2020 Author name here
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/LambdaPi
+
+library
+  exposed-modules:
+      Interpreter
+      Parser
+      Printer
+      Scope
+      Types
+      Typing
+  other-modules:
+      Paths_LambdaPi
+  hs-source-dirs:
+      src
+  ghc-options: -Wall
+  build-depends:
+      base >=4.7 && <5
+    , mtl
+    , parsec
+    , pretty
+    , process
+    , repline
+  default-language: Haskell2010
+
+executable LambdaPi-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_LambdaPi
+  hs-source-dirs:
+      app
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      LambdaPi
+    , base >=4.7 && <5
+    , mtl
+    , parsec
+    , pretty
+    , process
+    , repline
+  default-language: Haskell2010
+
+test-suite LambdaPi-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_LambdaPi
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      LambdaPi
+    , base >=4.7 && <5
+    , mtl
+    , parsec
+    , pretty
+    , process
+    , repline
+  default-language: Haskell2010
