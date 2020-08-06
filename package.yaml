@@ -28,6 +28,7 @@ dependencies:
 - repline
 - process
 - parsec
+- extra
 
 library:
   source-dirs: src

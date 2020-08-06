@@ -20,6 +20,7 @@ import           Data.List                      ( isPrefixOf
                                                 , intercalate
                                                 , nub
                                                 )
+import           Data.List.Extra                ( trim )
 import           Parser
 import           Printer
 import           Scope
@@ -125,7 +126,7 @@ browse _ = do
 
 compileFile :: Cmd Repl
 compileFile f = do
-  x     <- liftIO $ readFile f
+  x     <- liftIO . readFile $ trim f
   stmts <- parseIO f (many $ parseStmt []) x
   maybe (return ()) (foldM (const handleStmt) ()) stmts
 

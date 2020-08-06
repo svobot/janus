@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 22cfc83c2e049c589d75d3966cf35cc9febf4b69a71a426775acbdd5545830ce
+-- hash: b939ab1cc0ea69670ff9ed072330f8bca685cd5a1a3c6d016dfdb642e55657f8
 
 name:           LambdaPi
 version:        0.1.0.0
@@ -40,6 +40,7 @@ library
   ghc-options: -Wall
   build-depends:
       base >=4.7 && <5
+    , extra
     , mtl
     , parsec
     , pretty
@@ -57,6 +58,7 @@ executable LambdaPi-exe
   build-depends:
       LambdaPi
     , base >=4.7 && <5
+    , extra
     , mtl
     , parsec
     , pretty
@@ -75,6 +77,7 @@ test-suite LambdaPi-test
   build-depends:
       LambdaPi
     , base >=4.7 && <5
+    , extra
     , mtl
     , parsec
     , pretty
