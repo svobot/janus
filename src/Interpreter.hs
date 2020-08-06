@@ -36,7 +36,7 @@ data CommandInfo = CmdInfo [String] String String (Cmd Repl)
 -- Evaluation : handle each line user inputs
 compilePhrase :: Cmd Repl
 compilePhrase x = do
-  x' <- parseIO "<interactive>" (parseStmt_ []) x
+  x' <- parseIO "<interactive>" (parseStmt []) x
   maybe (return ()) handleStmt x'
 
 -- Prefix tab completeter
@@ -113,7 +113,7 @@ help _ = liftIO . putStr $ helpTxt commands
 
 typeOf :: Cmd Repl
 typeOf x = do
-  x'             <- parseIO "<interactive>" (parseITerm_ 0 []) x
+  x'             <- parseIO "<interactive>" (parseITerm 0 []) x
   (_, _, ve, te) <- get
   t              <- maybe (return Nothing) (iinfer ve te) x'
   liftIO $ maybe (return ()) (putStrLn . render . itprint) t
@@ -126,7 +126,7 @@ browse _ = do
 compileFile :: Cmd Repl
 compileFile f = do
   x     <- liftIO $ readFile f
-  stmts <- parseIO f (many $ parseStmt_ []) x
+  stmts <- parseIO f (many $ parseStmt []) x
   maybe (return ()) (foldM (const handleStmt) ()) stmts
 
 handleStmt :: Stmt -> Repl ()
@@ -149,7 +149,7 @@ handleStmt stmt = case stmt of
     case x of
       Nothing -> liftIO $ return ()
       Just y  -> do
-        let v = iEval_ t (ve, [])
+        let v = iEval t (ve, [])
         kp (y, v)
 
   checkEval :: String -> ITerm -> Repl ()

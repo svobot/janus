@@ -30,17 +30,17 @@ data Stmt = Let String ITerm               --  let x = t
   deriving (Show)
 
 
-parseStmt_ :: [String] -> CharParser () Stmt
-parseStmt_ e =
+parseStmt :: [String] -> CharParser () Stmt
+parseStmt e =
   do
       reserved lambdaPi "let"
       x <- identifier lambdaPi
       reserved lambdaPi "="
-      t <- parseITerm_ 0 e
+      t <- parseITerm 0 e
       return (Let x t)
     <|> do
           reserved lambdaPi "assume"
-          (xs, ts) <- parseBindings_ False []
+          (xs, ts) <- parseBindings False []
           return (Assume (reverse (zip xs ts)))
     <|> do
           reserved lambdaPi "putStrLn"
@@ -50,10 +50,10 @@ parseStmt_ e =
           reserved lambdaPi "out"
           x <- option "" (stringLiteral lambdaPi)
           return (Out x)
-    <|> fmap Eval (parseITerm_ 0 e)
+    <|> fmap Eval (parseITerm 0 e)
 
-parseBindings_ :: Bool -> [String] -> CharParser () ([String], [CTerm])
-parseBindings_ b e =
+parseBindings :: Bool -> [String] -> CharParser () ([String], [CTerm])
+parseBindings b e =
   (let rec :: [String] -> [CTerm] -> CharParser () ([String], [CTerm])
        rec e ts = do
          (x, t) <- parens
@@ -61,7 +61,7 @@ parseBindings_ b e =
            (do
              x <- identifier lambdaPi
              reserved lambdaPi "::"
-             t <- parseCTerm_ 0 (if b then e else [])
+             t <- parseCTerm 0 (if b then e else [])
              return (x, t)
            )
          rec (x : e) (t : ts) <|> return (x : e, t : ts)
@@ -70,81 +70,81 @@ parseBindings_ b e =
     <|> do
           x <- identifier lambdaPi
           reserved lambdaPi "::"
-          t <- parseCTerm_ 0 e
+          t <- parseCTerm 0 e
           return (x : e, [t])
 
-parseITerm_ :: Int -> [String] -> CharParser () ITerm
-parseITerm_ 0 e =
+parseITerm :: Int -> [String] -> CharParser () ITerm
+parseITerm 0 e =
   do
       reserved lambdaPi "forall"
-      (fe, t : ts) <- parseBindings_ True e
+      (fe, t : ts) <- parseBindings True e
       reserved lambdaPi "."
-      t' <- parseCTerm_ 0 fe
+      t' <- parseCTerm 0 fe
       return (foldl (\p t -> Pi t (Inf p)) (Pi t t') ts)
     <|> try
           (do
-            t <- parseITerm_ 1 e
+            t <- parseITerm 1 e
             rest (Inf t) <|> return t
           )
     <|> do
-          t <- parens lambdaPi (parseLam_ e)
+          t <- parens lambdaPi (parseLam e)
           rest t
  where
   rest t = do
     reserved lambdaPi "->"
-    t' <- parseCTerm_ 0 ([] : e)
+    t' <- parseCTerm 0 ([] : e)
     return (Pi t t')
-parseITerm_ 1 e =
+parseITerm 1 e =
   try
       (do
-        t <- parseITerm_ 2 e
+        t <- parseITerm 2 e
         rest (Inf t) <|> return t
       )
     <|> do
-          t <- parens lambdaPi (parseLam_ e)
+          t <- parens lambdaPi (parseLam e)
           rest t
  where
   rest t = do
     reserved lambdaPi "::"
-    t' <- parseCTerm_ 0 e
+    t' <- parseCTerm 0 e
     return (Ann t t')
-parseITerm_ 2 e = do
-  t  <- parseITerm_ 3 e
-  ts <- many (parseCTerm_ 3 e)
+parseITerm 2 e = do
+  t  <- parseITerm 3 e
+  ts <- many (parseCTerm 3 e)
   return (foldl (:@:) t ts)
-parseITerm_ 3 e =
+parseITerm 3 e =
   do
       reserved lambdaPi "*"
       return Star
     <|> do
           n <- natural lambdaPi
-          return (toNat_ n)
+          return (toNat n)
     <|> do
           x <- identifier lambdaPi
           case elemIndex x e of
             Just n  -> return (Bound n)
             Nothing -> return (Free (Global x))
-    <|> parens lambdaPi (parseITerm_ 0 e)
-parseITerm_ _ _ = error "TODO" --TODO fix?
+    <|> parens lambdaPi (parseITerm 0 e)
+parseITerm _ _ = error "TODO" --TODO fix?
 
-toNat_ :: Integer -> ITerm
-toNat_ n = Ann (toNat_' n) (Inf Nat)
+toNat :: Integer -> ITerm
+toNat n = Ann (toNat' n) (Inf Nat)
  where
-  toNat_' :: Integer -> CTerm
-  toNat_' 0  = Zero
-  toNat_' n' = Succ (toNat_' (n' - 1))
+  toNat' :: Integer -> CTerm
+  toNat' 0  = Zero
+  toNat' n' = Succ (toNat' (n' - 1))
 
-parseCTerm_ :: Int -> [String] -> CharParser () CTerm
-parseCTerm_ 0 e = parseLam_ e <|> fmap Inf (parseITerm_ 0 e)
-parseCTerm_ p e =
-  try (parens lambdaPi (parseLam_ e)) <|> fmap Inf (parseITerm_ p e)
+parseCTerm :: Int -> [String] -> CharParser () CTerm
+parseCTerm 0 e = parseLam e <|> fmap Inf (parseITerm 0 e)
+parseCTerm p e =
+  try (parens lambdaPi (parseLam e)) <|> fmap Inf (parseITerm p e)
 
-parseLam_ :: [String] -> CharParser () CTerm
-parseLam_ e = do
+parseLam :: [String] -> CharParser () CTerm
+parseLam e = do
   reservedOp lambdaPi "\\"
   xs <- many1 (identifier lambdaPi)
   reservedOp lambdaPi "->"
-  t <- parseCTerm_ 0 (reverse xs ++ e)
+  t <- parseCTerm 0 (reverse xs ++ e)
   --  reserved lambdaPi "."
   return (iterate Lam t !! length xs)
 

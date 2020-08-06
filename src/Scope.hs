@@ -11,10 +11,10 @@ lpte =
     , VPi
       (VPi VNat (const VStar))
       (\m -> VPi
-        (m `vapp_` VZero)
+        (m `vapp` VZero)
         (\_ -> VPi
-          (VPi VNat (\k -> VPi (m `vapp_` k) (\_ -> m `vapp_` VSucc k)))
-          (\_ -> VPi VNat (m `vapp_`))
+          (VPi VNat (\k -> VPi (m `vapp` k) (\_ -> m `vapp` VSucc k)))
+          (\_ -> VPi VNat (m `vapp`))
         )
       )
     )
@@ -33,7 +33,7 @@ lpte =
       (\a -> VPi
         (VPi VNat (\n -> VPi (VVec a n) (const VStar)))
         (\m -> VPi
-          (m `vapp_` VZero `vapp_` VNil a)
+          (m `vapp` VZero `vapp` VNil a)
           (\_ -> VPi
             (VPi
               VNat
@@ -41,14 +41,13 @@ lpte =
                 a
                 (\x -> VPi
                   (VVec a n)
-                  (\xs -> VPi (m `vapp_` n `vapp_` xs)
-                              (\_ -> m `vapp_` VSucc n `vapp_` VCons a n x xs)
+                  (\xs -> VPi (m `vapp` n `vapp` xs)
+                              (\_ -> m `vapp` VSucc n `vapp` VCons a n x xs)
                   )
                 )
               )
             )
-            (\_ ->
-              VPi VNat (\n -> VPi (VVec a n) (\xs -> m `vapp_` n `vapp_` xs))
+            (\_ -> VPi VNat (\n -> VPi (VVec a n) (\xs -> m `vapp` n `vapp` xs))
             )
           )
         )
@@ -62,12 +61,12 @@ lpte =
       (\a -> VPi
         (VPi a (\x -> VPi a (\y -> VPi (VEq a x y) (const VStar))))
         (\m -> VPi
-          (VPi a (\x -> m `vapp_` x `vapp_` x `vapp_` VRefl a x))
+          (VPi a (\x -> m `vapp` x `vapp` x `vapp` VRefl a x))
           (\_ -> VPi
             a
             (\x -> VPi
               a
-              (\y -> VPi (VEq a x y) (\eq -> m `vapp_` x `vapp_` y `vapp_` eq))
+              (\y -> VPi (VEq a x y) (\eq -> m `vapp` x `vapp` y `vapp` eq))
             )
           )
         )
@@ -80,18 +79,18 @@ lpte =
     , VPi
       (VPi VNat (\n -> VPi (VFin n) (const VStar)))
       (\m -> VPi
-        (VPi VNat (\n -> m `vapp_` VSucc n `vapp_` VFZero n))
+        (VPi VNat (\n -> m `vapp` VSucc n `vapp` VFZero n))
         (\_ -> VPi
           (VPi
             VNat
             (\n -> VPi
               (VFin n)
-              (\f -> VPi (m `vapp_` n `vapp_` f)
-                         (\_ -> m `vapp_` VSucc n `vapp_` VFSucc n f)
+              (\f -> VPi (m `vapp` n `vapp` f)
+                         (\_ -> m `vapp` VSucc n `vapp` VFSucc n f)
               )
             )
           )
-          (\_ -> VPi VNat (\n -> VPi (VFin n) (\f -> m `vapp_` n `vapp_` f)))
+          (\_ -> VPi VNat (\n -> VPi (VFin n) (\f -> m `vapp` n `vapp` f)))
         )
       )
     )
@@ -103,7 +102,7 @@ lpve =
   , (Global "Succ", VLam VSucc)
   , (Global "Nat" , VNat)
   , ( Global "natElim"
-    , cEval_
+    , cEval
       (Lam
         (Lam
           (Lam
@@ -125,7 +124,7 @@ lpve =
   , (Global "Cons", VLam (\a -> VLam (\n -> VLam (VLam . VCons a n))))
   , (Global "Vec" , VLam (VLam . VVec))
   , ( Global "vecElim"
-    , cEval_
+    , cEval
       (Lam
         (Lam
           (Lam
@@ -152,7 +151,7 @@ lpve =
   , (Global "Refl", VLam (VLam . VRefl))
   , (Global "Eq"  , VLam (\a -> VLam (VLam . VEq a)))
   , ( Global "eqElim"
-    , cEval_
+    , cEval
       (Lam
         (Lam
           (Lam
@@ -180,7 +179,7 @@ lpve =
   , (Global "FSucc", VLam (VLam . VFSucc))
   , (Global "Fin"  , VLam VFin)
   , ( Global "finElim"
-    , cEval_
+    , cEval
       (Lam
         (Lam
           (Lam
