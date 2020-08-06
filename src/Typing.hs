@@ -8,15 +8,15 @@ import           Types
 import           Printer
 import           Text.PrettyPrint               ( render )
 
-iinfer :: NameEnv Value -> Context -> ITerm -> Repl (Maybe Type)
+iinfer :: NameEnv -> Context -> ITerm -> Repl (Maybe Type)
 iinfer d g t = case iType0_ (d, g) t of
   Left  e -> liftIO $ putStrLn e >> return Nothing
   Right v -> return (Just v)
 
-iType0_ :: (NameEnv Value, Context) -> ITerm -> Result Type
+iType0_ :: (NameEnv, Context) -> ITerm -> Result Type
 iType0_ = iType_ 0
 
-iType_ :: Int -> (NameEnv Value, Context) -> ITerm -> Result Type
+iType_ :: Int -> (NameEnv, Context) -> ITerm -> Result Type
 iType_ ii g (Ann e tyt) = do
   cType_ ii g tyt VStar
   let ty = cEval_ tyt (fst g, [])
@@ -110,7 +110,7 @@ iType_ i g (EqElim a m mr x y eq) = do
 iType_ _ _ _ = throwError "TODO"
 
 
-cType_ :: Int -> (NameEnv Value, Context) -> CTerm -> Type -> Result ()
+cType_ :: Int -> (NameEnv, Context) -> CTerm -> Type -> Result ()
 cType_ ii g (Inf e) v = do
   v' <- iType_ ii g e
   unless

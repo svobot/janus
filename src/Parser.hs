@@ -22,15 +22,15 @@ lambdaPi = makeTokenParser
 
 type CharParser st = GenParser Char st
 
-data Stmt i tinf = Let String i           --  let x = t
-                 | Assume [(String,tinf)] --  assume x :: t, assume x :: *
-                 | Eval i
-                 | PutStrLn String        --  lhs2TeX hacking, allow to print "magic" string
-                 | Out String             --  more lhs2TeX hacking, allow to print to files
+data Stmt = Let String ITerm               --  let x = t
+                 | Assume [(String,CTerm)] --  assume x :: t, assume x :: *
+                 | Eval ITerm
+                 | PutStrLn String         --  lhs2TeX hacking, allow to print "magic" string
+                 | Out String              --  more lhs2TeX hacking, allow to print to files
   deriving (Show)
 
 
-parseStmt_ :: [String] -> CharParser () (Stmt ITerm CTerm)
+parseStmt_ :: [String] -> CharParser () Stmt
 parseStmt_ e =
   do
       reserved lambdaPi "let"

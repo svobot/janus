@@ -4,7 +4,7 @@ import           Control.Monad.State.Lazy       ( StateT )
 import           Data.Bifunctor                 ( second )
 import           System.Console.Repline
 
-type Repl a = HaskelineT (StateT (State Value Value) IO) a
+type Repl a = HaskelineT (StateT IState IO) a
 
 data Name
    =  Global  String
@@ -71,13 +71,11 @@ data Neutral
 
 type Result a = Either String a
 
-type NameEnv v = [(Name, v)]
-type Ctx inf = [(Name, inf)]
-type State v inf = (Bool, String, NameEnv v, Ctx inf)
-
 type Type = Value
-type Context = [(Name, Type)]
 type Env = [Value]
+type Context = [(Name, Type)]
+type NameEnv = [(Name, Value)]
+type IState = (Bool, String, NameEnv, Context)
 
 vapp_ :: Value -> Value -> Value
 vapp_ (VLam     f) v = f v
@@ -86,7 +84,7 @@ vapp_ (VNeutral n) v = VNeutral (NApp n v)
 vfree_ :: Name -> Value
 vfree_ n = VNeutral (NFree n)
 
-cEval_ :: CTerm -> (NameEnv Value, Env) -> Value
+cEval_ :: CTerm -> (NameEnv, Env) -> Value
 cEval_ (Inf ii) d = iEval_ ii d
 cEval_ (Lam c ) d = VLam (\x -> cEval_ c (second ((:) x) d))
 cEval_ Zero     _ = VZero
@@ -98,7 +96,7 @@ cEval_ (Refl a x ) d = VRefl (cEval_ a d) (cEval_ x d)
 cEval_ (FZero n  ) d = VFZero (cEval_ n d)
 cEval_ (FSucc n f) d = VFSucc (cEval_ n d) (cEval_ f d)
 
-iEval_ :: ITerm -> (NameEnv Value, Env) -> Value
+iEval_ :: ITerm -> (NameEnv, Env) -> Value
 iEval_ (Ann c _)   d = cEval_ c d
 iEval_ Star        _ = VStar
 iEval_ (Pi ty ty') d = VPi (cEval_ ty d) (\x -> cEval_ ty' (second ((:) x) d))

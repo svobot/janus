@@ -2,7 +2,7 @@ module Scope where
 
 import           Types
 
-lpte :: Ctx Value
+lpte :: Context
 lpte =
   [ (Global "Zero", VNat)
   , (Global "Succ", VPi VNat (const VNat))
@@ -97,7 +97,7 @@ lpte =
     )
   ]
 
-lpve :: Ctx Value
+lpve :: NameEnv
 lpve =
   [ (Global "Zero", VZero)
   , (Global "Succ", VLam VSucc)

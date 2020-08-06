@@ -44,7 +44,7 @@ defaultMatcher :: MonadIO m => [(String, CompletionFunc m)]
 defaultMatcher = [(":load", fileCompleter)]
 
 -- Default tab completer
-byWord :: (Monad m, MonadState (State Value Value) m) => WordCompleter m
+byWord :: (Monad m, MonadState IState m) => WordCompleter m
 byWord n = do
   (_, _, _, te) <- get
   let scope = [ s | Global s <- reverse . nub $ map fst te ]
@@ -129,7 +129,7 @@ compileFile f = do
   stmts <- parseIO f (many $ parseStmt_ []) x
   maybe (return ()) (foldM (const handleStmt) ()) stmts
 
-handleStmt :: Stmt ITerm CTerm -> Repl ()
+handleStmt :: Stmt -> Repl ()
 handleStmt stmt = case stmt of
   Assume ass -> foldM (\_ (x, t) -> lpassume x t) () ass
   Let x e    -> checkEval x e
