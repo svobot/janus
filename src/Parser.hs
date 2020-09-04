@@ -2,18 +2,14 @@ module Parser where
 
 import           Control.Monad.Trans            ( liftIO )
 import           Data.List                      ( elemIndex )
+import           Data.Maybe                     ( fromMaybe )
 import           Text.Parsec
 import           Text.Parsec.String             ( GenParser )
 import           Text.Parsec.Token
 import           Text.Parsec.Language           ( haskellStyle )
 import           Types
 
-simplyTyped = makeTokenParser
-  (haskellStyle { identStart    = letter <|> char '_'
-                , reservedNames = ["let", "assume", "putStrLn"]
-                }
-  )
-
+lambdaPi :: TokenParser u
 lambdaPi = makeTokenParser
   (haskellStyle { identStart    = letter <|> char '_'
                 , reservedNames = ["forall", "let", "assume", "putStrLn", "out"]
@@ -22,26 +18,30 @@ lambdaPi = makeTokenParser
 
 type CharParser st = GenParser Char st
 
-data Stmt = Let String ITerm               --  let x = t
-                 | Assume [(String,CTerm)] --  assume x :: t, assume x :: *
+data Stmt = Let ZeroOneOmega String ITerm               --  let x = t
+                 | Assume [(ZeroOneOmega, String, CTerm)] --  assume x :: t, assume x :: *
                  | Eval ITerm
                  | PutStrLn String         --  lhs2TeX hacking, allow to print "magic" string
                  | Out String              --  more lhs2TeX hacking, allow to print to files
-  deriving (Show)
+  deriving (Show, Eq)
 
+parseIO :: String -> CharParser () a -> String -> Repl (Maybe a)
+parseIO f p x = case parse (whiteSpace lambdaPi *> p <* eof) f x of
+  Left  e -> liftIO $ print e >> return Nothing
+  Right r -> return (Just r)
 
 parseStmt :: [String] -> CharParser () Stmt
 parseStmt e =
   do
       reserved lambdaPi "let"
+      q <- optionMaybe parseRig
       x <- identifier lambdaPi
       reserved lambdaPi "="
-      t <- parseITerm 0 e
-      return (Let x t)
+      t <- parseApp e
+      return (Let (fromMaybe RigW q) x t)
     <|> do
           reserved lambdaPi "assume"
-          (xs, ts) <- parseBindings False []
-          return (Assume (reverse (zip xs ts)))
+          Assume . reverse <$> parseAssume
     <|> do
           reserved lambdaPi "putStrLn"
           x <- stringLiteral lambdaPi
@@ -50,107 +50,71 @@ parseStmt e =
           reserved lambdaPi "out"
           x <- option "" (stringLiteral lambdaPi)
           return (Out x)
-    <|> fmap Eval (parseITerm 0 e)
-
-parseBindings :: Bool -> [String] -> CharParser () ([String], [CTerm])
-parseBindings b e =
-  (let rec :: [String] -> [CTerm] -> CharParser () ([String], [CTerm])
-       rec e ts = do
-         (x, t) <- parens
-           lambdaPi
-           (do
-             x <- identifier lambdaPi
-             reserved lambdaPi "::"
-             t <- parseCTerm 0 (if b then e else [])
-             return (x, t)
-           )
-         rec (x : e) (t : ts) <|> return (x : e, t : ts)
-   in  rec e []
-    )
     <|> do
-          x <- identifier lambdaPi
-          reserved lambdaPi "::"
-          t <- parseCTerm 0 e
-          return (x : e, [t])
+          i <- parseApp e
+          return $ Eval i
 
-parseITerm :: Int -> [String] -> CharParser () ITerm
-parseITerm 0 e =
-  do
-      reserved lambdaPi "forall"
-      (fe, t : ts) <- parseBindings True e
-      reserved lambdaPi "."
-      t' <- parseCTerm 0 fe
-      return (foldl (\p t -> Pi t (Inf p)) (Pi t t') ts)
-    <|> try
-          (do
-            t <- parseITerm 1 e
-            rest (Inf t) <|> return t
-          )
-    <|> do
-          t <- parens lambdaPi (parseLam e)
-          rest t
- where
-  rest t = do
-    reserved lambdaPi "->"
-    t' <- parseCTerm 0 ([] : e)
-    return (Pi t t')
-parseITerm 1 e =
+parseRig :: CharParser () ZeroOneOmega
+parseRig = choice
+  [ Rig0 <$ reserved lambdaPi "0"
+  , Rig1 <$ reserved lambdaPi "1"
+  , RigW <$ reserved lambdaPi "w"
+  ]
+
+parseITerm :: [String] -> CharParser () ITerm
+parseITerm e =
   try
       (do
-        t <- parseITerm 2 e
-        rest (Inf t) <|> return t
+        t <- parens lambdaPi $ parseCTerm e
+        reservedOp lambdaPi ":"
+        t' <- parseCTerm e
+        return (Ann t t')
       )
-    <|> do
-          t <- parens lambdaPi (parseLam e)
-          rest t
- where
-  rest t = do
-    reserved lambdaPi "::"
-    t' <- parseCTerm 0 e
-    return (Ann t t')
-parseITerm 2 e = do
-  t  <- parseITerm 3 e
-  ts <- many (parseCTerm 3 e)
-  return (foldl (:@:) t ts)
-parseITerm 3 e =
-  do
-      reserved lambdaPi "*"
-      return Star
-    <|> do
-          n <- natural lambdaPi
-          return (toNat n)
     <|> do
           x <- identifier lambdaPi
           case elemIndex x e of
             Just n  -> return (Bound n)
             Nothing -> return (Free (Global x))
-    <|> parens lambdaPi (parseITerm 0 e)
-parseITerm _ _ = error "TODO" --TODO fix?
+    <|> parens lambdaPi (parseApp e)
 
-toNat :: Integer -> ITerm
-toNat n = Ann (toNat' n) (Inf Nat)
+parseCTerm :: [String] -> CharParser () CTerm
+parseCTerm e = choice [parseStar, parsePi, parseLam e, Inf <$> parseITerm e]
  where
-  toNat' :: Integer -> CTerm
-  toNat' 0  = Zero
-  toNat' n' = Succ (toNat' (n' - 1))
-
-parseCTerm :: Int -> [String] -> CharParser () CTerm
-parseCTerm 0 e = parseLam e <|> fmap Inf (parseITerm 0 e)
-parseCTerm p e =
-  try (parens lambdaPi (parseLam e)) <|> fmap Inf (parseITerm p e)
+  parseStar = Star <$ reserved lambdaPi "*"
+  parsePi   = do
+    (e', (q, t)) <- parens lambdaPi $ parseBind e
+    reservedOp lambdaPi "->"
+    p <- parseCTerm (e' : e)
+    return (Pi q t p)
 
 parseLam :: [String] -> CharParser () CTerm
 parseLam e = do
   reservedOp lambdaPi "\\"
   xs <- many1 (identifier lambdaPi)
-  reservedOp lambdaPi "->"
-  t <- parseCTerm 0 (reverse xs ++ e)
-  --  reserved lambdaPi "."
+  reservedOp lambdaPi "."
+  t <- parseCTerm (reverse xs ++ e)
   return (iterate Lam t !! length xs)
 
-parseIO :: String -> CharParser () a -> String -> Repl (Maybe a)
-parseIO f p x =
-  case parse (whiteSpace simplyTyped >> p >>= \x -> eof >> return x) f x of
-    Left  e -> liftIO $ print e >> return Nothing
-    Right r -> return (Just r)
+parseApp :: [String] -> CharParser () ITerm
+parseApp e = do
+  t  <- parseITerm e
+  ts <- many $ parseCTerm e
+  return $ foldl (:@:) t ts
 
+parseBind :: [String] -> CharParser () (String, (ZeroOneOmega, CTerm))
+parseBind e = do
+  q <- optionMaybe parseRig
+  x <- identifier lambdaPi
+  reservedOp lambdaPi ":"
+  t <- parseCTerm e
+  return (x, (fromMaybe RigW q, t))
+
+parseAssume :: CharParser () [(ZeroOneOmega, String, CTerm)]
+parseAssume = snd <$> rec [] [] where
+  rec
+    :: [String]
+    -> [(ZeroOneOmega, String, CTerm)]
+    -> CharParser () ([String], [(ZeroOneOmega, String, CTerm)])
+  rec e bs = do
+    (x, (q, c)) <- parens lambdaPi $ parseBind []
+    rec (x : e) ((q, x, c) : bs) <|> return (x : e, (q, x, c) : bs)

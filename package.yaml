@@ -23,12 +23,14 @@ ghc-options: -Wall
 
 dependencies:
 - base >= 4.7 && < 5
+- containers
 - mtl
 - pretty
 - repline
 - process
 - parsec
 - extra
+- hspec
 
 library:
   source-dirs: src
@@ -54,3 +56,4 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - LambdaPi
+    - hspec

@@ -68,7 +68,7 @@ commandPrefix :: Char
 commandPrefix = ':'
 
 repl :: IO ()
-repl = flip evalStateT (True, [], lpve, lpte) $ evalRepl
+repl = flip evalStateT (True, [], [], []) $ evalRepl
   (const $ pure ">>> ")
   compilePhrase
   (options commands)
@@ -114,9 +114,9 @@ help _ = liftIO . putStr $ helpTxt commands
 
 typeOf :: Cmd Repl
 typeOf x = do
-  x'             <- parseIO "<interactive>" (parseITerm 0 []) x
+  x'             <- parseIO "<interactive>" (parseITerm []) x
   (_, _, ve, te) <- get
-  t              <- maybe (return Nothing) (iinfer ve te) x'
+  t              <- maybe (return Nothing) (iinfer (ve, te) Rig0) x'
   liftIO $ maybe (return ()) (putStrLn . render . itprint) t
 
 browse :: Cmd Repl
@@ -132,9 +132,9 @@ compileFile f = do
 
 handleStmt :: Stmt -> Repl ()
 handleStmt stmt = case stmt of
-  Assume ass -> foldM (\_ (x, t) -> lpassume x t) () ass
-  Let x e    -> checkEval x e
-  Eval     e -> checkEval it e
+  Assume ass -> foldM (\_ (q, x, t) -> lpassume q x t) () ass
+  Let q x e  -> checkEval q x e
+  Eval     e -> checkEval Rig1 it e
   PutStrLn x -> do
     liftIO $ putStrLn x
     return ()
@@ -142,42 +142,45 @@ handleStmt stmt = case stmt of
  where
   it = "it"
 
-  check :: ITerm -> ((Value, Value) -> Repl ()) -> Repl ()
-  check t kp = do
+  check :: ZeroOneOmega -> ITerm -> ((Value, Value) -> Repl ()) -> Repl ()
+  check q t kp = do
     --  typecheck and evaluate
     (_, _, ve, te) <- get
-    x              <- iinfer ve te t
+    x              <- iinfer (ve, te) q t
     case x of
       Nothing -> liftIO $ return ()
       Just y  -> do
         let v = iEval t (ve, [])
         kp (y, v)
 
-  checkEval :: String -> ITerm -> Repl ()
-  checkEval i t = check
+  checkEval :: ZeroOneOmega -> String -> ITerm -> Repl ()
+  checkEval q i t = check
+    q
     t
     (\(y, v) -> do
       --  ugly, but we have limited space in the paper
       --  usually, you'd want to have the bound identifier *and*
       --  the result of evaluation
-      let outtext = if i == it
+      let outtext = show q ++ " " ++ if i == it
             then render (itprint v <> text " :: " <> itprint y)
             else render (text i <> text " :: " <> itprint y)
       liftIO $ putStrLn outtext
       (_, out, _, _) <- get
       unless (null out) (liftIO $ writeFile out (process outtext))
       modify $ \(inter, _, ve, te) ->
-        (inter, "", (Global i, v) : ve, (Global i, y) : te)
+        (inter, "", (Global i, v) : ve, (Global i, (q, y)) : te)
     )
 
   process :: String -> String
   process = unlines . map ("< " ++) . lines
 
-  lpassume :: String -> CTerm -> Repl ()
-  lpassume x t = check
-    (Ann t (Inf Star))
+  lpassume :: ZeroOneOmega -> String -> CTerm -> Repl ()
+  lpassume q x t = check
+    q
+    (Ann t Star)
     (\(_, v) -> do
-      liftIO . putStrLn $ x ++ ": " ++ show v
-      modify $ \(inter, out, ve, te) -> (inter, out, ve, (Global x, v) : te)
+      liftIO . putStrLn $ show q ++ " " ++ x ++ ": " ++ show v
+      modify
+        $ \(inter, out, ve, te) -> (inter, out, ve, (Global x, (q, v)) : te)
       return ()
     )
