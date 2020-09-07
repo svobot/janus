@@ -21,8 +21,8 @@ data CTerm
 
 data ITerm
    =  Ann CTerm CTerm
-   |  Bound  Int
-   |  Free  Name
+   |  Bound Int
+   |  Free Name
    |  ITerm :@: CTerm
   deriving (Show, Eq)
 
@@ -82,9 +82,9 @@ vfree n = VNeutral (NFree n)
 
 cEval :: CTerm -> (NameEnv, Env) -> Value
 cEval (Inf ii)      d = iEval ii d
-cEval (Lam c )      d = VLam (\x -> cEval c (second ((:) x) d))
+cEval (Lam c )      d = VLam (\x -> cEval c $ second (x :) d)
 cEval Star          _ = VStar
-cEval (Pi p ty ty') d = VPi p (cEval ty d) (\x -> cEval ty' (second ((:) x) d))
+cEval (Pi p ty ty') d = VPi p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
 
 iEval :: ITerm -> (NameEnv, Env) -> Value
 iEval (Ann c _) d = cEval c d
@@ -110,10 +110,10 @@ quote0 :: Value -> CTerm
 quote0 = quote 0
 
 quote :: Int -> Value -> CTerm
-quote ii (VLam t) = Lam (quote (ii + 1) (t (vfree (Quote ii))))
+quote ii (VLam t) = Lam (quote (ii + 1) (t . vfree $ Quote ii))
 quote _  VStar    = Star
 quote ii (VPi p v f) =
-  Pi p (quote ii v) (quote (ii + 1) (f (vfree (Quote ii))))
+  Pi p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
 quote ii (VNeutral n) = Inf (neutralQuote ii n)
 
 neutralQuote :: Int -> Neutral -> ITerm

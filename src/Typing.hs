@@ -68,7 +68,7 @@ iType _ g r (Free x) = case lookup x (snd g) of
       )
     return (Map.singleton x q, ty)
   Nothing ->
-    throwError ("unknown identifier: " ++ render (iPrint 0 0 (Free x)))
+    throwError ("unknown identifier: " ++ render (iPrint 0 0 $ Free x))
 -- App:
 iType ii g r (e1 :@: e2) = do
   (qs1, si) <- iType ii g r e1
@@ -84,7 +84,7 @@ iType ii g r (e1 :@: e2) = do
           return $ Map.unionWith rigMult
                                  qs1
                                  (Map.map (rigMult $ p `rigMult` r') qs2)
-      return (qs, ty' (cEval e2 (fst g, [])))
+      return (qs, ty' $ cEval e2 (fst g, []))
     _ -> throwError "illegal application"
 iType _ _ _ _ = throwError "type mismatch (iType)"
 
@@ -97,10 +97,10 @@ cType ii g r (Inf e) v = do
     (throwError
       (  "type mismatch:\n"
       ++ "type inferred:  "
-      ++ render (cPrint 0 0 (quote0 v'))
+      ++ render (cPrint 0 0 $ quote0 v')
       ++ "\n"
       ++ "type expected:  "
-      ++ render (cPrint 0 0 (quote0 v))
+      ++ render (cPrint 0 0 $ quote0 v)
       ++ "\n"
       ++ "for expression: "
       ++ render (iPrint 0 0 e)
@@ -114,20 +114,21 @@ cType ii g r (Lam e) (VPi p ty ty') = do
   qs <- cType (ii + 1)
               local_g
               r
-              (cSubst 0 (Free (Local ii)) e)
-              (ty' (vfree (Local ii)))
+              (cSubst 0 (Free $ Local ii) e)
+              (ty' . vfree $ Local ii)
   let (q, qs') = splitLocal ii qs
   unless
     (q `rigLess` iiq)
     (throwError $ "unavailable resources (lam):\n" ++ rs qs (snd local_g))
   return qs'
+-- Star:
 cType _  _ _     Star            VStar = return Map.empty
 -- Fun:
 cType ii g Rig0' (Pi _ tyt tyt') VStar = do
   _ <- cType ii (second forget g) Rig0' tyt VStar
   let ty      = cEval tyt (fst g, [])
   let local_g = second (forget . ((Local ii, (Rig0, ty)) :)) g
-  qs <- cType (ii + 1) local_g Rig0' (cSubst 0 (Free (Local ii)) tyt') VStar
+  qs <- cType (ii + 1) local_g Rig0' (cSubst 0 (Free $ Local ii) tyt') VStar
   let (q, qs') = splitLocal ii qs
   unless
     (q `rigLess` Rig0)
