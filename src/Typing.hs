@@ -1,12 +1,15 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 module Typing where
 
 import           Control.Monad                  ( unless )
 import           Control.Monad.Except           ( throwError )
 import           Control.Monad.Trans            ( liftIO )
-import           Data.Bifunctor                 ( second )
+import           Data.Bifunctor                 ( first
+                                                , second
+                                                )
 import qualified Data.Map.Strict               as Map
+import           Data.Maybe                     ( fromMaybe )
 import           Types
 import           Printer
 import           Text.PrettyPrint               ( render )
@@ -60,7 +63,9 @@ iType _ g r (Free x) = case lookup x (snd g) of
     traceM
       (  "var "
       ++ show x
-      ++ ": "
+      ++ " "
+      ++ show ty
+      ++ " : "
       ++ show q
       ++ " in context, "
       ++ show r
@@ -81,7 +86,7 @@ iType ii g r (e1 :@: e2) = do
           return qs1
         else do
           qs2 <- cType ii g Rig1' e2 ty
-          return $ Map.unionWith rigMult
+          return $ Map.unionWith rigPlus
                                  qs1
                                  (Map.map (rigMult $ p `rigMult` r') qs2)
       return (qs, ty' $ cEval e2 (fst g, []))
@@ -137,12 +142,7 @@ cType ii g Rig0' (Pi _ tyt tyt') VStar = do
 cType _ _ _ _ _ = throwError "type mismatch (cType)"
 
 splitLocal :: Int -> Usage -> (ZeroOneOmega, Usage)
-splitLocal ii = Map.alterF
-  (\case
-    Nothing -> error $ show (Local ii) ++ " not found in the usages."
-    Just a  -> (a, Nothing)
-  )
-  (Local ii)
+splitLocal ii = first (fromMaybe Rig0) . Map.alterF (, Nothing) (Local ii) -- TODO: If a local variable was not used in the body, is it the same as assuming it was used Rig0 times? (i. e. used in erased context)
 
 fits :: Usage -> Context -> Bool
 fits qs ctx =
