@@ -176,11 +176,12 @@ handleStmt stmt = case stmt of
 
   lpassume :: ZeroOneOmega -> String -> CTerm -> Repl ()
   lpassume q x t = check
-    q
+    Rig0
     (Ann t Star)
     (\(_, v) -> do
-      liftIO . putStrLn $ show q ++ " " ++ x ++ ": " ++ show v
+      liftIO . putStrLn $ show q ++ " " ++ x ++ " : " ++ show v
       modify
         $ \(inter, out, ve, te) -> (inter, out, ve, (Global x, (q, v)) : te)
       return ()
     )
+
