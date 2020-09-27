@@ -114,7 +114,7 @@ help _ = liftIO . putStr $ helpTxt commands
 
 typeOf :: Cmd Repl
 typeOf x = do
-  x'             <- parseIO "<interactive>" (parseITerm []) x
+  x'             <- parseIO "<interactive>" (parseITerm OITerm []) x
   (_, _, ve, te) <- get
   t              <- maybe (return Nothing) (iinfer (ve, te) Rig0) x'
   liftIO $ maybe (return ()) (putStrLn . render . itprint) t

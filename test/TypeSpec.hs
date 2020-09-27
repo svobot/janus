@@ -7,35 +7,53 @@ import           Test.Hspec
 import           Typing
 import           Types
 import           Control.Monad                  ( foldM )
-import           Data.Bifunctor                 ( first
-                                                , second
-                                                )
 
 data SuccTest = SuccTest String (NameEnv, Context) ZeroOneOmega ITerm CTerm
 
 succTests :: [SuccTest]
 succTests =
   [ SuccTest
-      "Identity application"
-      ( []
-      , [ (Global "MyBool" , (Rig0, VStar))
-        , (Global "MyFalse", (Rig1, VNeutral . NFree $ Global "MyBool"))
-        ]
+    "Identity application"
+    ( []
+    , [ (Global "a", (Rig0, VStar))
+      , (Global "x", (Rig1, VNeutral . NFree $ Global "a"))
+      ]
+    )
+    Rig1
+    (   Ann
+        (Lam . Lam $ ib 0)
+        ( Pi Rig0 {- TODO: shold RigW work too? -}Star
+        $ Pi Rig1 (ib 0) (ib 1)
+        )
+    :@: ifg "a"
+    :@: ifg "x"
+    )
+    (ifg "a")
+  , SuccTest
+    " Dependent pair snd projection"
+    ( []
+    , [ (Global "a", (Rig0, VStar))
+      , (Global "x", (Rig1, VNeutral . NFree $ Global "a"))
+      ]
+    )
+    Rig1
+    (Ann
+      (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Rig0 Star (ib 0)))
+                (ib 0)
       )
-      Rig1
-      (   Ann (Lam . Lam . Inf $ Bound 0)
-              (Pi RigW Star $ Pi Rig1 (Inf $ Bound 0) (Inf $ Bound 1))
-      :@: (Inf . Free $ Global "MyBool")
-      :@: (Inf . Free $ Global "MyFalse")
-      )
-      (Inf . Free $ Global "MyBool")
+      (ifg "a")
+    )
+    (ifg "a")
   ]
+ where
+  fg  = Free . Global
+  ifg = Inf . fg
+  ib  = Inf . Bound
 
 succTestSpec :: SuccTest -> SpecWith ()
 succTestSpec (SuccTest d g q i t) =
   it d $ (quote0 <$> iType0 g q i) `shouldBe` Right t
 
 spec :: Spec
-spec = describe "Type-checker" $ do
-  foldM (const succTestSpec) () succTests
+spec = foldM (const succTestSpec) () succTests
 
