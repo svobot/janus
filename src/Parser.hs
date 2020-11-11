@@ -4,9 +4,9 @@ import           Control.Monad.Trans            ( liftIO )
 import           Data.List                      ( elemIndex )
 import           Data.Maybe                     ( fromMaybe )
 import           Text.Parsec
+import           Text.Parsec.Language           ( haskellStyle )
 import           Text.Parsec.String             ( GenParser )
 import           Text.Parsec.Token
-import           Text.Parsec.Language           ( haskellStyle )
 import           Types
 
 lambdaPi :: TokenParser u
@@ -27,11 +27,12 @@ lambdaPi = makeTokenParser
 type CharParser st = GenParser Char st
 data Origin = OAnn | OApp | OITerm | OCTerm | OStale deriving (Eq)
 
-data Stmt = Let ZeroOneOmega String ITerm               --  let x = t
-          | Assume [(ZeroOneOmega, String, CTerm)] --  assume x :: t, assume x :: *
-          | Eval ITerm
-          | PutStrLn String         --  lhs2TeX hacking, allow to print "magic" string
-          | Out String              --  more lhs2TeX hacking, allow to print to files
+data Stmt
+  = Let ZeroOneOmega String ITerm          --  let x = t
+  | Assume [(ZeroOneOmega, String, CTerm)] --  assume x :: t, assume x :: *
+  | Eval ITerm
+  | PutStrLn String --  lhs2TeX hacking, allow to print "magic" string
+  | Out String      --  more lhs2TeX hacking, allow to print to files
   deriving (Show, Eq)
 
 parseIO :: String -> CharParser () a -> String -> Repl (Maybe a)
@@ -67,13 +68,43 @@ parseITerm b e =
   choice
     $  [ try ann | b /= OAnn && b /= OApp ]
     ++ [ try $ parseApp e | b /= OApp ]
-    ++ [var, parens lambdaPi $ parseITerm OITerm e]
+    ++ [ try parsePairElim
+       , parseUnitElim
+       , var
+       , parens lambdaPi $ parseITerm OITerm e
+       ]
  where
   ann =
     Ann
       <$> parseCTerm (if b == OCTerm then OStale else OAnn) e
       <*  reservedOp lambdaPi ":"
       <*> parseCTerm OAnn e
+  parsePairElim = do
+    reserved lambdaPi "let"
+    z <- identifier lambdaPi
+    reservedOp lambdaPi "@"
+    x <- identifier lambdaPi
+    reservedOp lambdaPi ","
+    y <- identifier lambdaPi
+    reservedOp lambdaPi "="
+    m <- parseITerm OITerm e
+    reserved lambdaPi "in"
+    n <- parseCTerm OCTerm ([y, x] ++ e)
+    reservedOp lambdaPi ":"
+    t <- parseCTerm OCTerm (z : e)
+    return $ PairElim m n t
+  parseUnitElim = do
+    reserved lambdaPi "let"
+    x <- identifier lambdaPi
+    reservedOp lambdaPi "@"
+    _ <- parseUnit
+    reservedOp lambdaPi "="
+    m <- parseITerm OITerm e
+    reserved lambdaPi "in"
+    n <- parseCTerm OCTerm e
+    reservedOp lambdaPi ":"
+    t <- parseCTerm OCTerm (x : e)
+    return $ UnitElim m n t
   var = do
     x <- identifier lambdaPi
     case elemIndex x e of
@@ -88,10 +119,8 @@ parseCTerm b e =
        , try parsePi
        , try parsePair
        , try parseTensPr
-       , try parsePairElim
        , try parseUnit
        , parseUnitType
-       , parseUnitElim
        , parens lambdaPi $ parseCTerm OCTerm e
        ]
     ++ [ Inf <$> parseITerm b e | b /= OStale ]
@@ -113,26 +142,10 @@ parseCTerm b e =
     reservedOp lambdaPi "*"
     p <- parseCTerm OCTerm (e' : e)
     return $ TensPr q t p
-  parsePairElim = do
-    reserved lambdaPi "let"
-    x <- identifier lambdaPi
-    reservedOp lambdaPi ","
-    y <- identifier lambdaPi
-    reservedOp lambdaPi "="
-    m <- parseITerm OITerm e
-    reserved lambdaPi "in"
-    n <- parseCTerm OCTerm ([y, x] ++ e)
-    return $ PairElim m n
-  parseUnit     = Unit <$ reservedOp lambdaPi "(" <* reservedOp lambdaPi ")"
   parseUnitType = UnitType <$ reserved lambdaPi "Unit"
-  parseUnitElim = do
-    reserved lambdaPi "let"
-    _ <- parseUnit
-    reserved lambdaPi "="
-    m <- parseITerm OITerm e
-    reserved lambdaPi "in"
-    n <- parseCTerm OCTerm e
-    return $ UnitElim m n
+
+parseUnit :: CharParser () CTerm
+parseUnit = Unit <$ reservedOp lambdaPi "(" <* reservedOp lambdaPi ")"
 
 parseLam :: [String] -> CharParser () CTerm
 parseLam e = do

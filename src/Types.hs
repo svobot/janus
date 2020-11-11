@@ -19,10 +19,8 @@ data CTerm
    |  Pi ZeroOneOmega CTerm CTerm
    |  Pair CTerm CTerm
    |  TensPr ZeroOneOmega CTerm CTerm
-   |  PairElim ITerm CTerm
    |  Unit
    |  UnitType
-   |  UnitElim ITerm CTerm
   deriving (Show, Eq)
 
 data ITerm
@@ -30,10 +28,12 @@ data ITerm
    |  Bound Int
    |  Free Name
    |  ITerm :@: CTerm
+   |  PairElim ITerm CTerm CTerm
+   |  UnitElim ITerm CTerm CTerm
   deriving (Show, Eq)
 
 data Value
-   =  VLam  (Value -> Value)
+   =  VLam (Value -> Value)
    |  VStar
    |  VPi ZeroOneOmega Value (Value -> Value)
    |  VNeutral Neutral
@@ -48,8 +48,8 @@ instance Show Value where
 data Neutral
    =  NFree  Name
    |  NApp  Neutral Value
-   |  NPairElim Neutral Value (Value -> Value -> Value)
-   |  NUnitElim Neutral Value Value
+   |  NPairElim Neutral (Value -> Value -> Value) (Value -> Value)
+   |  NUnitElim Neutral Value (Value -> Value)
 
 type Result a = Either String a
 
@@ -100,34 +100,38 @@ cEval (Pi p ty ty') d = VPi p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
 cEval (Pair c c'  ) d = VPair (cEval c d) (cEval c' d)
 cEval (TensPr p ty ty') d =
   VTensPr p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
-cEval (PairElim i c) d = case iEval i d of
-  (VPair x y ) -> cEval c (second ([y, x] ++) d)
-  (VNeutral n) -> VNeutral $ NPairElim
-    n
-    (vfree $ Global "NatPairEl")
-    (\x y -> cEval c $ second ([y, x] ++) d)
-  _ -> error "internal" -- TODO: Fail gracefully?
-cEval Unit           _ = VUnit
-cEval UnitType       _ = VUnitType
-cEval (UnitElim i c) d = case iEval i d of
-  VUnit -> cEval c (second (VUnit :) d)
-  (VNeutral n) ->
-    VNeutral $ NUnitElim n (vfree $ Global "NatUnitEl") (cEval c d)
-  _ -> error "internal" -- TODO: Fail gracefully?
+cEval Unit     _ = VUnit
+cEval UnitType _ = VUnitType
 
 iEval :: ITerm -> (NameEnv, Env) -> Value
 iEval (Ann c _) d = cEval c d
 iEval (Free x ) d = case lookup x (fst d) of
   Nothing -> vfree x
   Just v  -> v
-iEval (Bound ii) d = snd d !! ii
-iEval (i :@: c ) d = vapp (iEval i d) (cEval c d)
+iEval (Bound ii       ) d = snd d !! ii
+iEval (i :@: c        ) d = vapp (iEval i d) (cEval c d)
+iEval (PairElim i c c') d = case iEval i d of
+  (VPair x y ) -> cEval c (second ([y, x] ++) d)
+  (VNeutral n) -> VNeutral $ NPairElim
+    n
+    (\x y -> cEval c $ second ([y, x] ++) d)
+    (\z -> cEval c' $ second (z :) d)
+  _ -> error "internal" -- TODO: Fail gracefully?
+iEval (UnitElim i c c') d = case iEval i d of
+  VUnit -> cEval c (second (VUnit :) d)
+  (VNeutral n) ->
+    VNeutral $ NUnitElim n (cEval c d) (\x -> cEval c' $ second (x :) d)
+  _ -> error "internal" -- TODO: Fail gracefully?
 
 iSubst :: Int -> ITerm -> ITerm -> ITerm
 iSubst ii i' (Ann c c') = Ann (cSubst ii i' c) (cSubst ii i' c')
 iSubst ii i' (Bound j ) = if ii == j then i' else Bound j
 iSubst _  _  (Free  y ) = Free y
 iSubst ii i' (i :@: c ) = iSubst ii i' i :@: cSubst ii i' c
+iSubst ii r (PairElim i c c') =
+  PairElim (iSubst ii r i) (cSubst (ii + 2) r c) (cSubst (ii + 1) r c')
+iSubst ii r (UnitElim i c c') =
+  UnitElim (iSubst ii r i) (cSubst ii r c) (cSubst (ii + 1) r c')
 
 cSubst :: Int -> ITerm -> CTerm -> CTerm
 cSubst ii i' (Inf i)       = Inf (iSubst ii i' i)
@@ -137,10 +141,8 @@ cSubst ii r  (Pi p ty ty') = Pi p (cSubst ii r ty) (cSubst (ii + 1) r ty')
 cSubst ii r  (Pair c c'  ) = Pair (cSubst ii r c) (cSubst ii r c')
 cSubst ii r (TensPr p ty ty') =
   TensPr p (cSubst ii r ty) (cSubst (ii + 1) r ty')
-cSubst ii r (PairElim i c) = PairElim (iSubst ii r i) (cSubst (ii + 2) r c)
-cSubst _  _ Unit           = Unit
-cSubst _  _ UnitType       = UnitType
-cSubst ii r (UnitElim i c) = UnitElim (iSubst ii r i) (cSubst ii r c)
+cSubst _ _ Unit     = Unit
+cSubst _ _ UnitType = UnitType
 
 quote0 :: Value -> CTerm
 quote0 = quote 0
@@ -158,15 +160,16 @@ quote _ VUnit     = Unit
 quote _ VUnitType = UnitType
 
 neutralQuote :: Int -> Neutral -> ITerm
-neutralQuote ii (NFree v        ) = boundfree ii v
-neutralQuote ii (NApp n v       ) = neutralQuote ii n :@: quote ii v
-neutralQuote ii (NPairElim n t v) = Ann
-  (PairElim (neutralQuote ii n)
-            (quote (ii + 2) $ v (vfree $ Quote ii) (vfree $ Quote (ii + 1)))
-  )
-  (quote ii t)
-neutralQuote ii (NUnitElim n t v) =
-  Ann (UnitElim (neutralQuote ii n) (quote ii v)) (quote ii t)
+neutralQuote ii (NFree v         ) = boundfree ii v
+neutralQuote ii (NApp n v        ) = neutralQuote ii n :@: quote ii v
+neutralQuote ii (NPairElim n v v') = PairElim
+  (neutralQuote ii n)
+  (quote (ii + 2) $ v (vfree $ Quote ii) (vfree $ Quote (ii + 1)))
+  (quote (ii + 1) (v' . vfree $ Quote ii))
+neutralQuote ii (NUnitElim n v v') = UnitElim
+  (neutralQuote ii n)
+  (quote ii v)
+  (quote (ii + 1) (v' . vfree $ Quote ii))
 
 boundfree :: Int -> Name -> ITerm
 boundfree ii (Quote k) = Bound ((ii - k - 1) `max` 0)

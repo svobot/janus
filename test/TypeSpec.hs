@@ -3,10 +3,10 @@ module TypeSpec
   )
 where
 
-import           Test.Hspec
-import           Typing
-import           Types
 import           Control.Monad                  ( foldM )
+import           Test.Hspec
+import           Types
+import           Typing
 
 data SuccTest = SuccTest String (NameEnv, Context) ZeroOneOmega ITerm CTerm
 
@@ -20,11 +20,7 @@ succTests =
       ]
     )
     Rig1
-    (   Ann
-        (Lam . Lam $ ib 0)
-        ( Pi Rig0 {- TODO: shold RigW work too? -}Star
-        $ Pi Rig1 (ib 0) (ib 1)
-        )
+    (   Ann (Lam . Lam $ ib 0) (Pi Rig0 Star $ Pi Rig1 (ib 0) (ib 1))
     :@: ifg "a"
     :@: ifg "x"
     )
@@ -33,15 +29,14 @@ succTests =
     " Dependent pair snd projection"
     ( []
     , [ (Global "a", (Rig0, VStar))
-      , (Global "x", (Rig1, VNeutral . NFree $ Global "a"))
+      , (Global "x", (Rig0, VNeutral . NFree $ Global "a"))
       ]
     )
-    Rig1
-    (Ann
-      (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Rig0 Star (ib 0)))
-                (ib 0)
-      )
-      (ifg "a")
+    Rig0
+    -- TODO: Should work too?: (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Rig0 Star (ib 0)))
+    (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Rig0 Star (ifg "a")))
+              (ib 0)
+              (ifg "a")
     )
     (ifg "a")
   ]

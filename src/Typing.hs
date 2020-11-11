@@ -3,25 +3,22 @@
 module Typing where
 
 import           Control.Monad                  ( unless )
-import           Control.Monad.Except           ( throwError )
+import           Control.Monad.Except           ( throwError
+                                                , when
+                                                )
 import           Control.Monad.Trans            ( liftIO )
 import           Data.Bifunctor                 ( first
                                                 , second
                                                 )
 import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
-import           Types
 import           Printer
 import           Text.PrettyPrint               ( render )
+import           Types
 
 import           Debug.Trace                    ( traceM )
 
 data ZeroOne = Rig0' | Rig1' deriving (Eq)
-
-restrict :: ZeroOneOmega -> ZeroOne
-restrict Rig0 = Rig0'
-restrict Rig1 = Rig1'
-restrict RigW = Rig1'
 
 extend :: ZeroOne -> ZeroOneOmega
 extend Rig0' = Rig0
@@ -43,6 +40,11 @@ iType0 g r t = do
          (throwError $ "unavailable resources:\n" ++ err qs (snd g))
   return tp
  where
+  restrict :: ZeroOneOmega -> ZeroOne
+  restrict Rig0 = Rig0'
+  restrict Rig1 = Rig1'
+  restrict RigW = Rig1'
+
   fits :: Usage -> Context -> Bool
   fits qs ctx =
     all
@@ -62,7 +64,7 @@ iType ii g r (Ann e tyt) = do
 -- Var:
 iType _ g r (Free x) = case lookup x (snd g) of
   Just (q, ty) -> do
-    traceM
+    when (q /= extend r) $ traceM
       (  "VAR "
       ++ show x
       ++ " : "
@@ -92,6 +94,57 @@ iType ii g r (e1 :@: e2) = do
                                  (Map.map (rigMult $ p `rigMult` r') qs2)
       return (qs, ty' $ cEval e2 (fst g, []))
     _ -> throwError "illegal application"
+-- PairElim:
+iType ii g r (PairElim l i t) = do
+  (qs1, lty) <- iType ii g r l
+  case lty of
+    z@(VTensPr p ty ty') -> do
+      let r' = extend r
+      let local_g = second
+            ([ (Local ii      , (p `rigMult` r', ty))
+             , (Local (ii + 1), (r', ty' . vfree $ Local ii))
+             ] ++
+            )
+            g
+      let
+        txy = cSubst
+          0
+          (Ann (Pair (Inf . Free $ Local ii) (Inf . Free $ Local (ii + 1)))
+               (quote0 z)
+          )
+          t
+      qs3 <- cType (ii + 2) (second forget local_g) Rig0' txy VStar
+      let txyVal = cEval txy (fst local_g, [])
+      qs2 <- cType
+        (ii + 2)
+        local_g
+        r
+        (cSubst 1 (Free $ Local ii) . cSubst 0 (Free $ Local (ii + 1)) $ i)
+        txyVal
+      let qs = Map.unionsWith rigPlus [qs1, qs2, qs3]
+      qs' <- checkLocal "pairElim, Local ii"
+                        ii
+                        qs
+                        (p `rigMult` r')
+                        (snd local_g)
+      qs'' <- checkLocal "pairElim, Local ii+1" (ii + 1) qs' r' (snd local_g)
+      let tl = cEval (cSubst 0 l t) (fst local_g, [])
+      return (qs'', tl)
+    _ -> throwError "illegal pair elimination"
+-- UnitElim:
+iType ii g r (UnitElim l i t) = do
+  (qs1, lty) <- iType ii g r l
+  case lty of
+    VUnitType -> do
+      let local_g = second (forget . ((Local ii, (Rig0, VUnitType)) :)) g
+      let tu      = cSubst 0 (Ann Unit UnitType) t
+      qs3 <- cType (ii + 1) local_g Rig0' tu VStar
+      let tuVal = cEval tu (fst g, [])
+      qs2 <- cType ii g r i tuVal
+      let qs = Map.unionsWith rigPlus [qs1, qs2, qs3]
+      let tl = cEval (cSubst 0 l t) (fst g, [])
+      return (qs, tl)
+    _ -> throwError "illegal unit elimination"
 iType _ _ _ _ = throwError "type mismatch (iType)"
 
 cType :: Int -> (NameEnv, Context) -> ZeroOne -> CTerm -> Type -> Result Usage
@@ -155,41 +208,11 @@ cType ii g Rig0' (TensPr _ tyt tyt') VStar = do
   let local_g = second (forget . ((Local ii, (Rig0, ty)) :)) g
   qs <- cType (ii + 1) local_g Rig0' (cSubst 0 (Free $ Local ii) tyt') VStar
   checkLocal "tensPr" ii qs Rig0 (snd local_g)
--- PairElim:
-cType ii g r (PairElim e1 e2) v = do
-  (qs1, si) <- iType ii g r e1
-  case si of
-    VTensPr p ty ty' -> do
-      let (VPair p1 _) = iEval e1 (fst g, [])
-      let r'           = extend r
-      let local_g = second
-            ([(Local ii, (p `rigMult` r', ty)), (Local (ii + 1), (r', ty' p1))] ++
-            )
-            g
-      qs2 <- cType
-        (ii + 2)
-        local_g
-        r
-        (cSubst 1 (Free $ Local ii) . cSubst 0 (Free $ Local (ii + 1)) $ e2)
-        v
-      let qs = Map.unionWith rigPlus qs1 qs2
-      qs' <- checkLocal "pairElim, Local ii"
-                        ii
-                        qs
-                        (p `rigMult` r')
-                        (snd local_g)
-      checkLocal "pairElim, Local ii+1" (ii + 1) qs' r' (snd local_g)
-    _ -> throwError "illegal pair elimination"
-cType _  _ _ Unit             VUnitType = return Map.empty
-cType _  _ _ UnitType         VStar     = return Map.empty
-cType ii g r (UnitElim e1 e2) v         = do
-  (qs1, si) <- iType ii g r e1
-  case si of
-    VUnitType -> do
-      qs2 <- cType ii g r e2 v
-      return $ Map.unionWith rigPlus qs1 qs2
-    _ -> throwError "illegal unit elimination"
-cType _ _ _ _ _ = throwError "type mismatch (cType)"
+-- Unit:
+cType _ _ _ Unit     VUnitType = return Map.empty
+-- UnitType:
+cType _ _ _ UnitType VStar     = return Map.empty
+cType _ _ _ _        _         = throwError "type mismatch (cType)"
 
 checkLocal :: String -> Int -> Usage -> ZeroOneOmega -> Context -> Result Usage
 checkLocal d ii qs r ctx = do

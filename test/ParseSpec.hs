@@ -3,11 +3,11 @@ module ParseSpec
   )
 where
 
-import           Test.Hspec
-import           Parser
-import           Types
-import           Text.Parsec                    ( parse )
 import           Control.Monad                  ( foldM )
+import           Parser
+import           Test.Hspec
+import           Text.Parsec                    ( parse )
+import           Types
 
 data SuccTest = SuccTest String String Stmt
 
@@ -24,16 +24,14 @@ succTests =
              "assume (0 a : *) (1 x : a)"
              (Assume [(Rig0, "a", Star), (Rig1, "x", ifg "a")])
   , SuccTest "Free pair eleminator"
-             "let x, y = z in y : a"
-             (Eval $ Ann (PairElim (fg "z") (ib 0)) (ifg "a"))
+             "let w @ x, y = z in y : a"
+             (Eval $ PairElim (fg "z") (ib 0) (ifg "a"))
   , SuccTest
     "Annotated pair elimination"
-    "let x', y' = (x,y) : (0 x : a) * x in y' : d"
-    (Eval $ Ann
-      (PairElim
-        (Ann (Pair (ifg "x") (ifg "y")) (TensPr Rig0 (ifg "a") (ib 0)))
-        (ib 0)
-      )
+    "let w @ x', y' = (x,y) : (0 x : a) * x in y' : d"
+    (Eval $ PairElim
+      (Ann (Pair (ifg "x") (ifg "y")) (TensPr Rig0 (ifg "a") (ib 0)))
+      (ib 0)
       (ifg "d")
     )
   , SuccTest
@@ -43,11 +41,31 @@ succTests =
                 (TensPr Rig0 (ifg "a") (ib 0))
     )
   , SuccTest "Annotated unit elimination"
-             "let () = () : Unit in () : Unit"
-             (Eval $ Ann (UnitElim (Ann Unit UnitType) Unit) UnitType)
+             "let x @ () = () : Unit in () : Unit"
+             (Eval $ UnitElim (Ann Unit UnitType) Unit UnitType)
   , SuccTest "Annotated function application"
              "f x : a"
              (Eval $ Ann (Inf $ fg "f" :@: ifg "x") (ifg "a"))
+  , SuccTest
+    "Fst Eliminator"
+    "let 0 fst = (\\ a b p. let z @ x,y = p in x : a) : (0 a: *) -> (0 b : (0 a' : a) -> *) -> (0 p : (0 x : a) * b x) -> a"
+    (Let Rig0 "fst" $ Ann
+      (Lam
+        (Lam (Lam (Inf (PairElim (Bound 0) (Inf (Bound 1)) (Inf (Bound 3))))))
+      )
+      (Pi
+        Rig0
+        Star
+        (Pi
+          Rig0
+          (Pi Rig0 (Inf (Bound 0)) Star)
+          (Pi Rig0
+              (TensPr Rig0 (Inf (Bound 1)) (Inf (Bound 1 :@: Inf (Bound 0))))
+              (Inf (Bound 2))
+          )
+        )
+      )
+    )
   ]
  where
   fg  = Free . Global
