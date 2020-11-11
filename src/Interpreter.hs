@@ -48,7 +48,7 @@ defaultMatcher = [(":load", fileCompleter)]
 byWord :: (Monad m, MonadState IState m) => WordCompleter m
 byWord n = do
   (_, _, _, te) <- get
-  let scope = [ s | Global s <- reverse . nub $ map fst te ]
+  let scope = [ s | Global s <- reverse . nub $ map bndName te ]
   let cmds =
         map (commandPrefix :) $ concatMap (\(CmdInfo cs _ _ _) -> cs) commands
   return . filter (isPrefixOf n) $ cmds ++ scope
@@ -122,7 +122,7 @@ typeOf x = do
 browse :: Cmd Repl
 browse _ = do
   (_, _, _, te) <- get
-  liftIO . putStr $ unlines [ s | Global s <- reverse . nub $ map fst te ]
+  liftIO . putStr $ unlines [ s | Global s <- reverse . nub $ map bndName te ]
 
 compileFile :: Cmd Repl
 compileFile f = do
@@ -168,7 +168,7 @@ handleStmt stmt = case stmt of
       (_, out, _, _) <- get
       unless (null out) (liftIO $ writeFile out (process outtext))
       modify $ \(inter, _, ve, te) ->
-        (inter, "", (Global i, v) : ve, (Global i, (q, y)) : te)
+        (inter, "", (Global i, v) : ve, Binding (Global i) q y : te)
     )
 
   process :: String -> String
@@ -180,8 +180,8 @@ handleStmt stmt = case stmt of
     (Ann t Star)
     (\(_, v) -> do
       liftIO . putStrLn $ show q ++ " " ++ x ++ " : " ++ show v
-      modify
-        $ \(inter, out, ve, te) -> (inter, out, ve, (Global x, (q, v)) : te)
+      modify $ \(inter, out, ve, te) ->
+        (inter, out, ve, Binding (Global x) q v : te)
       return ()
     )
 

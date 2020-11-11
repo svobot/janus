@@ -2,19 +2,19 @@ module Types where
 
 import           Control.Monad.State.Lazy       ( StateT )
 import           Data.Bifunctor                 ( second )
-import           System.Console.Repline
+import           System.Console.Repline         ( HaskelineT )
 
 type Repl a = HaskelineT (StateT IState IO) a
 
 data Name
-   =  Global  String
-   |  Local   Int
-   |  Quote   Int
+   =  Global String
+   |  Local Int
+   |  Quote Int
   deriving (Show, Eq, Ord)
 
 data CTerm
-   =  Inf  ITerm
-   |  Lam  CTerm
+   =  Inf ITerm
+   |  Lam CTerm
    |  Star
    |  Pi ZeroOneOmega CTerm CTerm
    |  Pair CTerm CTerm
@@ -46,8 +46,8 @@ instance Show Value where
   show = show . quote0
 
 data Neutral
-   =  NFree  Name
-   |  NApp  Neutral Value
+   =  NFree Name
+   |  NApp Neutral Value
    |  NPairElim Neutral (Value -> Value -> Value) (Value -> Value)
    |  NUnitElim Neutral Value (Value -> Value)
 
@@ -81,7 +81,17 @@ rigLess x    y    = x == y
 
 type Type = Value
 type Env = [Value]
-type Context = [(Name, (ZeroOneOmega, Type))]
+
+data Binding = Binding
+  { bndName  :: Name
+  , bndUsage :: ZeroOneOmega
+  , bndType  :: Type
+  }
+
+instance Show Binding where
+  show (Binding n u t) = show u <> " " <> show n <> " : " <> show t
+
+type Context = [Binding]
 type NameEnv = [(Name, Value)]
 type IState = (Bool, String, NameEnv, Context)
 
@@ -176,5 +186,5 @@ boundfree ii (Quote k) = Bound ((ii - k - 1) `max` 0)
 boundfree _  x         = Free x
 
 forget :: Context -> Context
-forget = map (\(n, (_, t)) -> (n, (Rig0, t)))
+forget = map (\b -> b { bndUsage = Rig0 })
 

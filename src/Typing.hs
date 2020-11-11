@@ -10,6 +10,7 @@ import           Control.Monad.Trans            ( liftIO )
 import           Data.Bifunctor                 ( first
                                                 , second
                                                 )
+import           Data.List                      ( find )
 import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
 import           Printer
@@ -48,9 +49,9 @@ iType0 g r t = do
   fits :: Usage -> Context -> Bool
   fits qs ctx =
     all
-        (\(n, q) -> case lookup n ctx of
-          Just (q', _) -> q `rigLess` q'
-          Nothing      -> False
+        (\(n, q) -> case find ((== n) . bndName) ctx of
+          Just b  -> q `rigLess` (bndUsage b)
+          Nothing -> False
         )
       $ Map.toList qs
 
@@ -62,8 +63,8 @@ iType ii g r (Ann e tyt) = do
   qs <- cType ii g r e ty
   return (qs, ty)
 -- Var:
-iType _ g r (Free x) = case lookup x (snd g) of
-  Just (q, ty) -> do
+iType _ g r (Free x) = case find ((== x) . bndName) (snd g) of
+  Just (Binding _ q ty) -> do
     when (q /= extend r) $ traceM
       (  "VAR "
       ++ show x
@@ -101,8 +102,8 @@ iType ii g r (PairElim l i t) = do
     z@(VTensPr p ty ty') -> do
       let r' = extend r
       let local_g = second
-            ([ (Local ii      , (p `rigMult` r', ty))
-             , (Local (ii + 1), (r', ty' . vfree $ Local ii))
+            ([ Binding (Local ii)       (p `rigMult` r') ty
+             , Binding (Local $ ii + 1) r' (ty' . vfree $ Local ii)
              ] ++
             )
             g
@@ -136,7 +137,7 @@ iType ii g r (UnitElim l i t) = do
   (qs1, lty) <- iType ii g r l
   case lty of
     VUnitType -> do
-      let local_g = second (forget . ((Local ii, (Rig0, VUnitType)) :)) g
+      let local_g = second (forget . (Binding (Local ii) Rig0 VUnitType :)) g
       let tu      = cSubst 0 (Ann Unit UnitType) t
       qs3 <- cType (ii + 1) local_g Rig0' tu VStar
       let tuVal = cEval tu (fst g, [])
@@ -168,7 +169,7 @@ cType ii g r (Inf e) v = do
 -- Lam:
 cType ii g r (Lam e) (VPi p ty ty') = do
   let iiq     = p `rigMult` extend r
-  let local_g = second ((Local ii, (iiq, ty)) :) g
+  let local_g = second (Binding (Local ii) iiq ty :) g
   qs <- cType (ii + 1)
               local_g
               r
@@ -181,7 +182,7 @@ cType _  _ _     Star            VStar = return Map.empty
 cType ii g Rig0' (Pi _ tyt tyt') VStar = do
   _ <- cType ii (second forget g) Rig0' tyt VStar
   let ty      = cEval tyt (fst g, [])
-  let local_g = second (forget . ((Local ii, (Rig0, ty)) :)) g
+  let local_g = second (forget . (Binding (Local ii) Rig0 ty :)) g
   qs <- cType (ii + 1) local_g Rig0' (cSubst 0 (Free $ Local ii) tyt') VStar
   checkLocal "fun" ii qs Rig0 (snd local_g)
 -- Pair:
@@ -205,7 +206,7 @@ cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
 cType ii g Rig0' (TensPr _ tyt tyt') VStar = do
   _ <- cType ii (second forget g) Rig0' tyt VStar
   let ty      = cEval tyt (fst g, [])
-  let local_g = second (forget . ((Local ii, (Rig0, ty)) :)) g
+  let local_g = second (forget . (Binding (Local ii) Rig0 ty :)) g
   qs <- cType (ii + 1) local_g Rig0' (cSubst 0 (Free $ Local ii) tyt') VStar
   checkLocal "tensPr" ii qs Rig0 (snd local_g)
 -- Unit:

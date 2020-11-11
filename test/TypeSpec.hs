@@ -15,8 +15,8 @@ succTests =
   [ SuccTest
     "Identity application"
     ( []
-    , [ (Global "a", (Rig0, VStar))
-      , (Global "x", (Rig1, VNeutral . NFree $ Global "a"))
+    , [ Binding (Global "a") Rig0 VStar
+      , Binding (Global "x") Rig1 (VNeutral . NFree $ Global "a")
       ]
     )
     Rig1
@@ -28,8 +28,8 @@ succTests =
   , SuccTest
     " Dependent pair snd projection"
     ( []
-    , [ (Global "a", (Rig0, VStar))
-      , (Global "x", (Rig0, VNeutral . NFree $ Global "a"))
+    , [ Binding (Global "a") Rig0 VStar
+      , Binding (Global "x") Rig0 (VNeutral . NFree $ Global "a")
       ]
     )
     Rig0
