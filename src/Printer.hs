@@ -33,23 +33,36 @@ cPrint :: Int -> Int -> CTerm -> Doc
 cPrint p ii (Inf i) = iPrint p ii i
 cPrint p ii (Lam c) = parensIf
   (p > 0)
-  (text "\\ " <> text (vars !! ii) <> text " -> " <> cPrint 0 (ii + 1) c)
+  (text "\\ " <> text (vars !! ii) <> text ". " <> cPrint 0 (ii + 1) c)
 cPrint _ _ Star = text "*"
 cPrint p ii (Pi q d (Pi q' d' r)) =
   parensIf (p > 0) (nestedForall (ii + 2) [(q', ii + 1, d'), (q, ii, d)] r)
 cPrint p ii (Pi q d r) = parensIf
   (p > 0)
   (sep
-    [ text "forall "
+    [ text "("
     <> text (show q)
     <> text " "
     <> text (vars !! ii)
-    <> text " :: "
+    <> text " : "
     <> cPrint 0 ii d
-    <> text " ."
+    <> text ") -> "
     , cPrint 0 (ii + 1) r
     ]
   )
+cPrint p ii (Pair c c') =
+  text "(" <> cPrint p ii c <> text ", " <> cPrint p ii c'
+cPrint _p ii (TensPr q c c') =
+  text "("
+    <> text (show q)
+    <> text " "
+    <> text (vars !! ii)
+    <> text " : "
+    <> cPrint 0 ii c
+    <> text ") * "
+    <> cPrint 0 (ii + 1) c'
+cPrint _p _ii Unit     = text "()"
+cPrint _p _ii UnitType = text "Unit"
 
 nestedForall :: Int -> [(ZeroOneOmega, Int, CTerm)] -> CTerm -> Doc
 nestedForall ii ds (Pi q d r) = nestedForall (ii + 1) ((q, ii, d) : ds) r
@@ -72,3 +85,4 @@ nestedForall ii ds x          = sep
 
 itprint :: Value -> Doc
 itprint = text . show . quote0
+
