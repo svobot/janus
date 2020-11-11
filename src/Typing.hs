@@ -13,6 +13,7 @@ import           Data.Bifunctor                 ( first
 import           Data.List                      ( find )
 import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
+import qualified Data.Semiring                 as S
 import           Printer
 import           Text.PrettyPrint               ( render )
 import           Types
@@ -21,27 +22,27 @@ import           Debug.Trace                    ( traceM )
 
 data ZeroOne = Rig0' | Rig1' deriving (Eq)
 
-extend :: ZeroOne -> ZeroOneOmega
+extend :: ZeroOne -> ZeroOneMany
 extend Rig0' = Rig0
 extend Rig1' = Rig1
 
-type Usage = Map.Map Name ZeroOneOmega
+type Usage = Map.Map Name ZeroOneMany
 
-iinfer :: (NameEnv, Context) -> ZeroOneOmega -> ITerm -> Repl (Maybe Type)
+iinfer :: (NameEnv, Context) -> ZeroOneMany -> ITerm -> Repl (Maybe Type)
 iinfer g r t = case iType0 g r t of
   Left  e -> liftIO $ putStrLn e >> return Nothing
   Right v -> return (Just v)
 
-iType0 :: (NameEnv, Context) -> ZeroOneOmega -> ITerm -> Result Type
+iType0 :: (NameEnv, Context) -> ZeroOneMany -> ITerm -> Result Type
 iType0 g r t = do
   let r' = restrict r
   (qs', tp) <- iType 0 g r' t
-  let qs = Map.map (rigMult r) qs'
+  let qs = Map.map (r S.*) qs'
   unless (qs `fits` snd g)
          (throwError $ "unavailable resources:\n" ++ err qs (snd g))
   return tp
  where
-  restrict :: ZeroOneOmega -> ZeroOne
+  restrict :: ZeroOneMany -> ZeroOne
   restrict Rig0 = Rig0'
   restrict Rig1 = Rig1'
   restrict RigW = Rig1'
@@ -84,15 +85,13 @@ iType ii g r (e1 :@: e2) = do
   case si of
     VPi p ty ty' -> do
       let r' = extend r
-      qs <- if p `rigMult` r' == Rig0
+      qs <- if p S.* r' == Rig0
         then do
           _ <- cType ii g Rig0' e2 ty
           return qs1
         else do
           qs2 <- cType ii g Rig1' e2 ty
-          return $ Map.unionWith rigPlus
-                                 qs1
-                                 (Map.map (rigMult $ p `rigMult` r') qs2)
+          return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
       return (qs, ty' $ cEval e2 (fst g, []))
     _ -> throwError "illegal application"
 -- PairElim:
@@ -102,8 +101,8 @@ iType ii g r (PairElim l i t) = do
     z@(VTensPr p ty ty') -> do
       let r' = extend r
       let local_g = second
-            ([ Binding (Local ii)       (p `rigMult` r') ty
-             , Binding (Local $ ii + 1) r' (ty' . vfree $ Local ii)
+            ([ Binding (Local ii)       (p S.* r') ty
+             , Binding (Local $ ii + 1) r'         (ty' . vfree $ Local ii)
              ] ++
             )
             g
@@ -122,12 +121,8 @@ iType ii g r (PairElim l i t) = do
         r
         (cSubst 1 (Free $ Local ii) . cSubst 0 (Free $ Local (ii + 1)) $ i)
         txyVal
-      let qs = Map.unionsWith rigPlus [qs1, qs2, qs3]
-      qs' <- checkLocal "pairElim, Local ii"
-                        ii
-                        qs
-                        (p `rigMult` r')
-                        (snd local_g)
+      let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
+      qs'  <- checkLocal "pairElim, Local ii" ii qs (p S.* r') (snd local_g)
       qs'' <- checkLocal "pairElim, Local ii+1" (ii + 1) qs' r' (snd local_g)
       let tl = cEval (cSubst 0 l t) (fst local_g, [])
       return (qs'', tl)
@@ -142,7 +137,7 @@ iType ii g r (UnitElim l i t) = do
       qs3 <- cType (ii + 1) local_g Rig0' tu VStar
       let tuVal = cEval tu (fst g, [])
       qs2 <- cType ii g r i tuVal
-      let qs = Map.unionsWith rigPlus [qs1, qs2, qs3]
+      let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
       let tl = cEval (cSubst 0 l t) (fst g, [])
       return (qs, tl)
     _ -> throwError "illegal unit elimination"
@@ -168,7 +163,7 @@ cType ii g r (Inf e) v = do
   return qs
 -- Lam:
 cType ii g r (Lam e) (VPi p ty ty') = do
-  let iiq     = p `rigMult` extend r
+  let iiq     = p S.* extend r
   let local_g = second (Binding (Local ii) iiq ty :) g
   qs <- cType (ii + 1)
               local_g
@@ -188,15 +183,14 @@ cType ii g Rig0' (Pi _ tyt tyt') VStar = do
 -- Pair:
 cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
   let r' = extend r
-  qs <- if p `rigMult` r' == Rig0
+  qs <- if p S.* r' == Rig0
     then do
       _ <- cType ii g Rig0' e1 ty
       rest
     else do
       qs1 <- cType ii g Rig1' e1 ty
       qs2 <- rest
-      return
-        $ Map.unionWith rigPlus qs2 (Map.map (rigMult $ p `rigMult` r') qs1)
+      return $ Map.unionWith (S.+) qs2 (Map.map (p S.* r' S.*) qs1)
   checkLocal "pair" ii qs p (snd g)
  where
   rest = do
@@ -215,7 +209,7 @@ cType _ _ _ Unit     VUnitType = return Map.empty
 cType _ _ _ UnitType VStar     = return Map.empty
 cType _ _ _ _        _         = throwError "type mismatch (cType)"
 
-checkLocal :: String -> Int -> Usage -> ZeroOneOmega -> Context -> Result Usage
+checkLocal :: String -> Int -> Usage -> ZeroOneMany -> Context -> Result Usage
 checkLocal d ii qs r ctx = do
   let (q, qs') = splitLocal ii qs
   unless
@@ -235,7 +229,7 @@ checkLocal d ii qs r ctx = do
     )
   return qs'
  where
-  splitLocal :: Int -> Usage -> (ZeroOneOmega, Usage)
+  splitLocal :: Int -> Usage -> (ZeroOneMany, Usage)
   splitLocal ii' = first (fromMaybe Rig0) . Map.alterF (, Nothing) (Local ii')
 
 err :: Usage -> Context -> String

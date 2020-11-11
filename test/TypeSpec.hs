@@ -8,7 +8,7 @@ import           Test.Hspec
 import           Types
 import           Typing
 
-data SuccTest = SuccTest String (NameEnv, Context) ZeroOneOmega ITerm CTerm
+data SuccTest = SuccTest String (NameEnv, Context) ZeroOneMany ITerm CTerm
 
 succTests :: [SuccTest]
 succTests =
@@ -26,7 +26,7 @@ succTests =
     )
     (ifg "a")
   , SuccTest
-    " Dependent pair snd projection"
+    "Dependent pair snd projection"
     ( []
     , [ Binding (Global "a") Rig0 VStar
       , Binding (Global "x") Rig0 (VNeutral . NFree $ Global "a")

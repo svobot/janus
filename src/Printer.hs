@@ -64,7 +64,7 @@ cPrint _p ii (TensPr q c c') =
 cPrint _p _ii Unit     = text "()"
 cPrint _p _ii UnitType = text "Unit"
 
-nestedForall :: Int -> [(ZeroOneOmega, Int, CTerm)] -> CTerm -> Doc
+nestedForall :: Int -> [(ZeroOneMany, Int, CTerm)] -> CTerm -> Doc
 nestedForall ii ds (Pi q d r) = nestedForall (ii + 1) ((q, ii, d) : ds) r
 nestedForall ii ds x          = sep
   [ text "forall "

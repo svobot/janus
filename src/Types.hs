@@ -2,6 +2,7 @@ module Types where
 
 import           Control.Monad.State.Lazy       ( StateT )
 import           Data.Bifunctor                 ( second )
+import qualified Data.Semiring                 as S
 import           System.Console.Repline         ( HaskelineT )
 
 type Repl a = HaskelineT (StateT IState IO) a
@@ -16,9 +17,9 @@ data CTerm
    =  Inf ITerm
    |  Lam CTerm
    |  Star
-   |  Pi ZeroOneOmega CTerm CTerm
+   |  Pi ZeroOneMany CTerm CTerm
    |  Pair CTerm CTerm
-   |  TensPr ZeroOneOmega CTerm CTerm
+   |  TensPr ZeroOneMany CTerm CTerm
    |  Unit
    |  UnitType
   deriving (Show, Eq)
@@ -35,10 +36,10 @@ data ITerm
 data Value
    =  VLam (Value -> Value)
    |  VStar
-   |  VPi ZeroOneOmega Value (Value -> Value)
+   |  VPi ZeroOneMany Value (Value -> Value)
    |  VNeutral Neutral
    |  VPair Value Value
-   |  VTensPr ZeroOneOmega Value (Value -> Value)
+   |  VTensPr ZeroOneMany Value (Value -> Value)
    |  VUnit
    |  VUnitType
 
@@ -53,28 +54,30 @@ data Neutral
 
 type Result a = Either String a
 
-data ZeroOneOmega = Rig0 | Rig1 | RigW deriving (Eq)
+data ZeroOneMany = Rig0 | Rig1 | RigW deriving (Eq)
 
-instance Show ZeroOneOmega where
+instance S.Semiring ZeroOneMany where
+  plus Rig0 a    = a
+  plus a    Rig0 = a
+  plus Rig1 _    = RigW
+  plus _    Rig1 = RigW
+  plus RigW RigW = RigW
+
+  times Rig0 _    = Rig0
+  times _    Rig0 = Rig0
+  times Rig1 a    = a
+  times a    Rig1 = a
+  times RigW RigW = RigW
+
+  zero = Rig0
+  one  = Rig1
+
+instance Show ZeroOneMany where
   show Rig0 = "0"
   show Rig1 = "1"
   show RigW = "w"
 
-rigPlus :: ZeroOneOmega -> ZeroOneOmega -> ZeroOneOmega
-rigPlus Rig0 a    = a
-rigPlus a    Rig0 = a
-rigPlus Rig1 _    = RigW
-rigPlus _    Rig1 = RigW
-rigPlus RigW RigW = RigW
-
-rigMult :: ZeroOneOmega -> ZeroOneOmega -> ZeroOneOmega
-rigMult Rig0 _    = Rig0
-rigMult _    Rig0 = Rig0
-rigMult Rig1 a    = a
-rigMult a    Rig1 = a
-rigMult RigW RigW = RigW
-
-rigLess :: ZeroOneOmega -> ZeroOneOmega -> Bool
+rigLess :: ZeroOneMany -> ZeroOneMany -> Bool
 rigLess Rig0 RigW = True
 rigLess Rig1 RigW = True
 rigLess x    y    = x == y
@@ -84,7 +87,7 @@ type Env = [Value]
 
 data Binding = Binding
   { bndName  :: Name
-  , bndUsage :: ZeroOneOmega
+  , bndUsage :: ZeroOneMany
   , bndType  :: Type
   }
 

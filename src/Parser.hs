@@ -28,8 +28,8 @@ type CharParser st = GenParser Char st
 data Origin = OAnn | OApp | OITerm | OCTerm | OStale deriving (Eq)
 
 data Stmt
-  = Let ZeroOneOmega String ITerm          --  let x = t
-  | Assume [(ZeroOneOmega, String, CTerm)] --  assume x :: t, assume x :: *
+  = Let ZeroOneMany String ITerm          --  let x = t
+  | Assume [(ZeroOneMany, String, CTerm)] --  assume x :: t, assume x :: *
   | Eval ITerm
   | PutStrLn String --  lhs2TeX hacking, allow to print "magic" string
   | Out String      --  more lhs2TeX hacking, allow to print to files
@@ -56,7 +56,7 @@ parseStmt e = choice [try define, assume, putstr, out, eval]
   out  = Out <$> (reserved lambdaPi "out" *> option "" (stringLiteral lambdaPi))
   eval = Eval <$> parseITerm OITerm e
 
-parseRig :: CharParser () ZeroOneOmega
+parseRig :: CharParser () ZeroOneMany
 parseRig = choice
   [ Rig0 <$ reserved lambdaPi "0"
   , Rig1 <$ reserved lambdaPi "1"
@@ -158,7 +158,7 @@ parseLam e = do
 parseApp :: [String] -> CharParser () ITerm
 parseApp e = foldl (:@:) <$> parseITerm OApp e <*> many1 (parseCTerm OApp e)
 
-parseBind :: [String] -> CharParser () (String, (ZeroOneOmega, CTerm))
+parseBind :: [String] -> CharParser () (String, (ZeroOneMany, CTerm))
 parseBind e = do
   q <- optionMaybe parseRig
   x <- identifier lambdaPi
@@ -166,12 +166,12 @@ parseBind e = do
   t <- parseCTerm OCTerm e
   return (x, (fromMaybe RigW q, t))
 
-parseAssume :: CharParser () [(ZeroOneOmega, String, CTerm)]
+parseAssume :: CharParser () [(ZeroOneMany, String, CTerm)]
 parseAssume = snd <$> rec [] [] where
   rec
     :: [String]
-    -> [(ZeroOneOmega, String, CTerm)]
-    -> CharParser () ([String], [(ZeroOneOmega, String, CTerm)])
+    -> [(ZeroOneMany, String, CTerm)]
+    -> CharParser () ([String], [(ZeroOneMany, String, CTerm)])
   rec e bs = do
     (x, (q, c)) <- parens lambdaPi $ parseBind []
     rec (x : e) ((q, x, c) : bs) <|> return (x : e, (q, x, c) : bs)

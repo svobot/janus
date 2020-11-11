@@ -142,7 +142,7 @@ handleStmt stmt = case stmt of
  where
   it = "it"
 
-  check :: ZeroOneOmega -> ITerm -> ((Value, Value) -> Repl ()) -> Repl ()
+  check :: ZeroOneMany -> ITerm -> ((Value, Value) -> Repl ()) -> Repl ()
   check q t kp = do
     --  typecheck and evaluate
     (_, _, ve, te) <- get
@@ -153,7 +153,7 @@ handleStmt stmt = case stmt of
         let v = iEval t (ve, [])
         kp (y, v)
 
-  checkEval :: ZeroOneOmega -> String -> ITerm -> Repl ()
+  checkEval :: ZeroOneMany -> String -> ITerm -> Repl ()
   checkEval q i t = check
     q
     t
@@ -174,7 +174,7 @@ handleStmt stmt = case stmt of
   process :: String -> String
   process = unlines . map ("< " ++) . lines
 
-  lpassume :: ZeroOneOmega -> String -> CTerm -> Repl ()
+  lpassume :: ZeroOneMany -> String -> CTerm -> Repl ()
   lpassume q x t = check
     Rig0
     (Ann t Star)
