@@ -23,8 +23,8 @@ import           Debug.Trace                    ( traceM )
 data ZeroOne = Rig0' | Rig1' deriving (Eq)
 
 extend :: ZeroOne -> ZeroOneMany
-extend Rig0' = Rig0
-extend Rig1' = Rig1
+extend Rig0' = Zero
+extend Rig1' = One
 
 type Usage = Map.Map Name ZeroOneMany
 
@@ -43,15 +43,15 @@ iType0 g r t = do
   return tp
  where
   restrict :: ZeroOneMany -> ZeroOne
-  restrict Rig0 = Rig0'
-  restrict Rig1 = Rig1'
-  restrict RigW = Rig1'
+  restrict Zero = Rig0'
+  restrict One  = Rig1'
+  restrict Many = Rig1'
 
   fits :: Usage -> Context -> Bool
   fits qs ctx =
     all
         (\(n, q) -> case find ((== n) . bndName) ctx of
-          Just b  -> q `rigLess` (bndUsage b)
+          Just b  -> q <: bndUsage b
           Nothing -> False
         )
       $ Map.toList qs
@@ -85,7 +85,7 @@ iType ii g r (e1 :@: e2) = do
   case si of
     VPi p ty ty' -> do
       let r' = extend r
-      qs <- if p S.* r' == Rig0
+      qs <- if p S.* r' == Zero
         then do
           _ <- cType ii g Rig0' e2 ty
           return qs1
@@ -132,7 +132,7 @@ iType ii g r (UnitElim l i t) = do
   (qs1, lty) <- iType ii g r l
   case lty of
     VUnitType -> do
-      let local_g = second (forget . (Binding (Local ii) Rig0 VUnitType :)) g
+      let local_g = second (forget . (Binding (Local ii) Zero VUnitType :)) g
       let tu      = cSubst 0 (Ann Unit UnitType) t
       qs3 <- cType (ii + 1) local_g Rig0' tu VStar
       let tuVal = cEval tu (fst g, [])
@@ -177,13 +177,13 @@ cType _  _ _     Star            VStar = return Map.empty
 cType ii g Rig0' (Pi _ tyt tyt') VStar = do
   _ <- cType ii (second forget g) Rig0' tyt VStar
   let ty      = cEval tyt (fst g, [])
-  let local_g = second (forget . (Binding (Local ii) Rig0 ty :)) g
+  let local_g = second (forget . (Binding (Local ii) Zero ty :)) g
   qs <- cType (ii + 1) local_g Rig0' (cSubst 0 (Free $ Local ii) tyt') VStar
-  checkLocal "fun" ii qs Rig0 (snd local_g)
+  checkLocal "fun" ii qs Zero (snd local_g)
 -- Pair:
 cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
   let r' = extend r
-  qs <- if p S.* r' == Rig0
+  qs <- if p S.* r' == Zero
     then do
       _ <- cType ii g Rig0' e1 ty
       rest
@@ -200,9 +200,9 @@ cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
 cType ii g Rig0' (TensPr _ tyt tyt') VStar = do
   _ <- cType ii (second forget g) Rig0' tyt VStar
   let ty      = cEval tyt (fst g, [])
-  let local_g = second (forget . (Binding (Local ii) Rig0 ty :)) g
+  let local_g = second (forget . (Binding (Local ii) Zero ty :)) g
   qs <- cType (ii + 1) local_g Rig0' (cSubst 0 (Free $ Local ii) tyt') VStar
-  checkLocal "tensPr" ii qs Rig0 (snd local_g)
+  checkLocal "tensPr" ii qs Zero (snd local_g)
 -- Unit:
 cType _ _ _ Unit     VUnitType = return Map.empty
 -- UnitType:
@@ -213,7 +213,7 @@ checkLocal :: String -> Int -> Usage -> ZeroOneMany -> Context -> Result Usage
 checkLocal d ii qs r ctx = do
   let (q, qs') = splitLocal ii qs
   unless
-    (q `rigLess` r)
+    (q <: r)
     (  throwError
     $  "unavailable resources ("
     ++ d
@@ -230,7 +230,7 @@ checkLocal d ii qs r ctx = do
   return qs'
  where
   splitLocal :: Int -> Usage -> (ZeroOneMany, Usage)
-  splitLocal ii' = first (fromMaybe Rig0) . Map.alterF (, Nothing) (Local ii')
+  splitLocal ii' = first (fromMaybe Zero) . Map.alterF (, Nothing) (Local ii')
 
 err :: Usage -> Context -> String
 err qs ctx =

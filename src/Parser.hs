@@ -49,7 +49,7 @@ parseStmt e = choice [try define, assume, putstr, out, eval]
     x <- identifier lambdaPi
     reserved lambdaPi "="
     t <- parseITerm OITerm e
-    return (Let (fromMaybe RigW q) x t)
+    return (Let (fromMaybe Many q) x t)
   assume = Assume . reverse <$> (reserved lambdaPi "assume" *> parseAssume)
   putstr =
     PutStrLn <$> (reserved lambdaPi "putStrLn" *> stringLiteral lambdaPi)
@@ -58,9 +58,9 @@ parseStmt e = choice [try define, assume, putstr, out, eval]
 
 parseRig :: CharParser () ZeroOneMany
 parseRig = choice
-  [ Rig0 <$ reserved lambdaPi "0"
-  , Rig1 <$ reserved lambdaPi "1"
-  , RigW <$ reserved lambdaPi "w"
+  [ Zero <$ reserved lambdaPi "0"
+  , One <$ reserved lambdaPi "1"
+  , Many <$ reserved lambdaPi "w"
   ]
 
 parseITerm :: Origin -> [String] -> CharParser () ITerm
@@ -164,7 +164,7 @@ parseBind e = do
   x <- identifier lambdaPi
   reservedOp lambdaPi ":"
   t <- parseCTerm OCTerm e
-  return (x, (fromMaybe RigW q, t))
+  return (x, (fromMaybe Many q, t))
 
 parseAssume :: CharParser () [(ZeroOneMany, String, CTerm)]
 parseAssume = snd <$> rec [] [] where

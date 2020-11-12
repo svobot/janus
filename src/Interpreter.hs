@@ -116,7 +116,7 @@ typeOf :: Cmd Repl
 typeOf x = do
   x'             <- parseIO "<interactive>" (parseITerm OITerm []) x
   (_, _, ve, te) <- get
-  t              <- maybe (return Nothing) (iinfer (ve, te) Rig0) x'
+  t              <- maybe (return Nothing) (iinfer (ve, te) Zero) x'
   liftIO $ maybe (return ()) (putStrLn . render . itprint) t
 
 browse :: Cmd Repl
@@ -134,7 +134,7 @@ handleStmt :: Stmt -> Repl ()
 handleStmt stmt = case stmt of
   Assume ass -> foldM (\_ (q, x, t) -> lpassume q x t) () ass
   Let q x e  -> checkEval q x e
-  Eval     e -> checkEval Rig1 it e
+  Eval     e -> checkEval One it e
   PutStrLn x -> do
     liftIO $ putStrLn x
     return ()
@@ -176,7 +176,7 @@ handleStmt stmt = case stmt of
 
   lpassume :: ZeroOneMany -> String -> CTerm -> Repl ()
   lpassume q x t = check
-    Rig0
+    Zero
     (Ann t Star)
     (\(_, v) -> do
       liftIO . putStrLn $ show q ++ " " ++ x ++ " : " ++ show v

@@ -54,33 +54,33 @@ data Neutral
 
 type Result a = Either String a
 
-data ZeroOneMany = Rig0 | Rig1 | RigW deriving (Eq)
+data ZeroOneMany = Zero | One | Many deriving (Eq)
 
 instance S.Semiring ZeroOneMany where
-  plus Rig0 a    = a
-  plus a    Rig0 = a
-  plus Rig1 _    = RigW
-  plus _    Rig1 = RigW
-  plus RigW RigW = RigW
+  plus Zero a    = a
+  plus a    Zero = a
+  plus One  _    = Many
+  plus _    One  = Many
+  plus Many Many = Many
 
-  times Rig0 _    = Rig0
-  times _    Rig0 = Rig0
-  times Rig1 a    = a
-  times a    Rig1 = a
-  times RigW RigW = RigW
+  times Zero _    = Zero
+  times _    Zero = Zero
+  times One  a    = a
+  times a    One  = a
+  times Many Many = Many
 
-  zero = Rig0
-  one  = Rig1
+  zero = Zero
+  one  = One
 
 instance Show ZeroOneMany where
-  show Rig0 = "0"
-  show Rig1 = "1"
-  show RigW = "w"
+  show Zero = "0"
+  show One  = "1"
+  show Many = "w"
 
-rigLess :: ZeroOneMany -> ZeroOneMany -> Bool
-rigLess Rig0 RigW = True
-rigLess Rig1 RigW = True
-rigLess x    y    = x == y
+(<:) :: ZeroOneMany -> ZeroOneMany -> Bool
+Zero <: Many = True
+One  <: Many = True
+x    <: y    = x == y
 
 type Type = Value
 type Env = [Value]
@@ -189,5 +189,5 @@ boundfree ii (Quote k) = Bound ((ii - k - 1) `max` 0)
 boundfree _  x         = Free x
 
 forget :: Context -> Context
-forget = map (\b -> b { bndUsage = Rig0 })
+forget = map (\b -> b { bndUsage = Zero })
 

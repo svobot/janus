@@ -15,12 +15,12 @@ succTests =
   [ SuccTest
     "Identity application"
     ( []
-    , [ Binding (Global "a") Rig0 VStar
-      , Binding (Global "x") Rig1 (VNeutral . NFree $ Global "a")
+    , [ Binding (Global "a") Zero VStar
+      , Binding (Global "x") One  (VNeutral . NFree $ Global "a")
       ]
     )
-    Rig1
-    (   Ann (Lam . Lam $ ib 0) (Pi Rig0 Star $ Pi Rig1 (ib 0) (ib 1))
+    One
+    (   Ann (Lam . Lam $ ib 0) (Pi Zero Star $ Pi One (ib 0) (ib 1))
     :@: ifg "a"
     :@: ifg "x"
     )
@@ -28,13 +28,13 @@ succTests =
   , SuccTest
     "Dependent pair snd projection"
     ( []
-    , [ Binding (Global "a") Rig0 VStar
-      , Binding (Global "x") Rig0 (VNeutral . NFree $ Global "a")
+    , [ Binding (Global "a") Zero VStar
+      , Binding (Global "x") Zero (VNeutral . NFree $ Global "a")
       ]
     )
-    Rig0
-    -- TODO: Should work too?: (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Rig0 Star (ib 0)))
-    (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Rig0 Star (ifg "a")))
+    Zero
+    -- TODO: Should work too?: (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Zero Star (ib 0)))
+    (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Zero Star (ifg "a")))
               (ib 0)
               (ifg "a")
     )
