@@ -2,10 +2,11 @@ module Types where
 
 import           Control.Monad.State.Lazy       ( StateT )
 import           Data.Bifunctor                 ( second )
-import qualified Data.Semiring                 as S
+import           Rig
 import           System.Console.Repline         ( HaskelineT )
 
 type Repl a = HaskelineT (StateT IState IO) a
+type IState = (Bool, String, NameEnv, Context)
 
 data Name
    =  Global String
@@ -52,51 +53,20 @@ data Neutral
    |  NPairElim Neutral (Value -> Value -> Value) (Value -> Value)
    |  NUnitElim Neutral Value (Value -> Value)
 
-type Result a = Either String a
-
-data ZeroOneMany = Zero | One | Many deriving (Eq)
-
-instance S.Semiring ZeroOneMany where
-  plus Zero a    = a
-  plus a    Zero = a
-  plus One  _    = Many
-  plus _    One  = Many
-  plus Many Many = Many
-
-  times Zero _    = Zero
-  times _    Zero = Zero
-  times One  a    = a
-  times a    One  = a
-  times Many Many = Many
-
-  zero = Zero
-  one  = One
-
-instance Show ZeroOneMany where
-  show Zero = "0"
-  show One  = "1"
-  show Many = "w"
-
-(<:) :: ZeroOneMany -> ZeroOneMany -> Bool
-Zero <: Many = True
-One  <: Many = True
-x    <: y    = x == y
-
-type Type = Value
-type Env = [Value]
-
-data Binding = Binding
+data Binding s = Binding
   { bndName  :: Name
-  , bndUsage :: ZeroOneMany
+  , bndUsage :: s
   , bndType  :: Type
   }
 
-instance Show Binding where
+instance Show s => Show (Binding s) where
   show (Binding n u t) = show u <> " " <> show n <> " : " <> show t
 
-type Context = [Binding]
+type Result a = Either String a
+type Type = Value
+type Context = [Binding ZeroOneMany]
 type NameEnv = [(Name, Value)]
-type IState = (Bool, String, NameEnv, Context)
+type Env = [Value]
 
 vapp :: Value -> Value -> Value
 vapp (VLam     f) v = f v

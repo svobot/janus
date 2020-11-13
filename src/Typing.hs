@@ -17,14 +17,9 @@ import qualified Data.Semiring                 as S
 import           Printer
 import           Text.PrettyPrint               ( render )
 import           Types
+import           Rig
 
 import           Debug.Trace                    ( traceM )
-
-data ZeroOne = Rig0' | Rig1' deriving (Eq)
-
-extend :: ZeroOne -> ZeroOneMany
-extend Rig0' = Zero
-extend Rig1' = One
 
 type Usage = Map.Map Name ZeroOneMany
 
@@ -43,9 +38,9 @@ iType0 g r t = do
   return tp
  where
   restrict :: ZeroOneMany -> ZeroOne
-  restrict Zero = Rig0'
-  restrict One  = Rig1'
-  restrict Many = Rig1'
+  restrict Zero = Zero'
+  restrict One  = One'
+  restrict Many = One'
 
   fits :: Usage -> Context -> Bool
   fits qs ctx =
@@ -59,7 +54,7 @@ iType0 g r t = do
 iType :: Int -> (NameEnv, Context) -> ZeroOne -> ITerm -> Result (Usage, Type)
 -- Cut:
 iType ii g r (Ann e tyt) = do
-  _ <- cType ii (second forget g) Rig0' tyt VStar
+  _ <- cType ii (second forget g) Zero' tyt VStar
   let ty = cEval tyt (fst g, [])
   qs <- cType ii g r e ty
   return (qs, ty)
@@ -74,7 +69,7 @@ iType _ g r (Free x) = case find ((== x) . bndName) (snd g) of
       ++ "\n  context: "
       ++ show q
       ++ "\n     used: "
-      ++ show (extend r)
+      ++ show (extend r :: ZeroOneMany)
       )
     return (Map.singleton x $ extend r, ty)
   Nothing ->
@@ -87,10 +82,10 @@ iType ii g r (e1 :@: e2) = do
       let r' = extend r
       qs <- if p S.* r' == Zero
         then do
-          _ <- cType ii g Rig0' e2 ty
+          _ <- cType ii g Zero' e2 ty
           return qs1
         else do
-          qs2 <- cType ii g Rig1' e2 ty
+          qs2 <- cType ii g One' e2 ty
           return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
       return (qs, ty' $ cEval e2 (fst g, []))
     _ -> throwError "illegal application"
@@ -113,7 +108,7 @@ iType ii g r (PairElim l i t) = do
                (quote0 z)
           )
           t
-      qs3 <- cType (ii + 2) (second forget local_g) Rig0' txy VStar
+      qs3 <- cType (ii + 2) (second forget local_g) Zero' txy VStar
       let txyVal = cEval txy (fst local_g, [])
       qs2 <- cType
         (ii + 2)
@@ -134,7 +129,7 @@ iType ii g r (UnitElim l i t) = do
     VUnitType -> do
       let local_g = second (forget . (Binding (Local ii) Zero VUnitType :)) g
       let tu      = cSubst 0 (Ann Unit UnitType) t
-      qs3 <- cType (ii + 1) local_g Rig0' tu VStar
+      qs3 <- cType (ii + 1) local_g Zero' tu VStar
       let tuVal = cEval tu (fst g, [])
       qs2 <- cType ii g r i tuVal
       let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
@@ -174,21 +169,21 @@ cType ii g r (Lam e) (VPi p ty ty') = do
 -- Star:
 cType _  _ _     Star            VStar = return Map.empty
 -- Fun:
-cType ii g Rig0' (Pi _ tyt tyt') VStar = do
-  _ <- cType ii (second forget g) Rig0' tyt VStar
+cType ii g Zero' (Pi _ tyt tyt') VStar = do
+  _ <- cType ii (second forget g) Zero' tyt VStar
   let ty      = cEval tyt (fst g, [])
   let local_g = second (forget . (Binding (Local ii) Zero ty :)) g
-  qs <- cType (ii + 1) local_g Rig0' (cSubst 0 (Free $ Local ii) tyt') VStar
+  qs <- cType (ii + 1) local_g Zero' (cSubst 0 (Free $ Local ii) tyt') VStar
   checkLocal "fun" ii qs Zero (snd local_g)
 -- Pair:
 cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
   let r' = extend r
   qs <- if p S.* r' == Zero
     then do
-      _ <- cType ii g Rig0' e1 ty
+      _ <- cType ii g Zero' e1 ty
       rest
     else do
-      qs1 <- cType ii g Rig1' e1 ty
+      qs1 <- cType ii g One' e1 ty
       qs2 <- rest
       return $ Map.unionWith (S.+) qs2 (Map.map (p S.* r' S.*) qs1)
   checkLocal "pair" ii qs p (snd g)
@@ -197,11 +192,11 @@ cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
     let e1v = cEval e1 (fst g, [])
     cType ii g r e2 (ty' e1v)
 -- TensPr:
-cType ii g Rig0' (TensPr _ tyt tyt') VStar = do
-  _ <- cType ii (second forget g) Rig0' tyt VStar
+cType ii g Zero' (TensPr _ tyt tyt') VStar = do
+  _ <- cType ii (second forget g) Zero' tyt VStar
   let ty      = cEval tyt (fst g, [])
   let local_g = second (forget . (Binding (Local ii) Zero ty :)) g
-  qs <- cType (ii + 1) local_g Rig0' (cSubst 0 (Free $ Local ii) tyt') VStar
+  qs <- cType (ii + 1) local_g Zero' (cSubst 0 (Free $ Local ii) tyt') VStar
   checkLocal "tensPr" ii qs Zero (snd local_g)
 -- Unit:
 cType _ _ _ Unit     VUnitType = return Map.empty

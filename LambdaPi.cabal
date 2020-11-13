@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: fd18a3638419ab17e9cc6706018d8520ff94241388e3fa93b3875639b9833855
+-- hash: 37bdef9032d30f5fdb13c685194c3c053e1b29f2839971061eb1530aca8d3e02
 
 name:           LambdaPi
 version:        0.1.0.0
@@ -30,6 +30,7 @@ library
       Interpreter
       Parser
       Printer
+      Rig
       Scope
       Types
       Typing

@@ -8,6 +8,7 @@ import           Parser
 import           Test.Hspec
 import           Text.Parsec                    ( parse )
 import           Types
+import           Rig
 
 data SuccTest = SuccTest String String Stmt
 

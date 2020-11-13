@@ -8,6 +8,7 @@ import           Text.PrettyPrint               ( text
 import qualified Text.PrettyPrint              as PP
                                                 ( parens )
 import           Types
+import           Rig                            ( ZeroOneMany )
 
 vars :: [String]
 vars =

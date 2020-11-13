@@ -31,6 +31,7 @@ import           Text.PrettyPrint               ( render
                                                 )
 import           Types
 import           Typing
+import           Rig
 
 data CommandInfo = CmdInfo [String] String String (Cmd Repl)
 

@@ -8,6 +8,7 @@ import           Text.Parsec.Language           ( haskellStyle )
 import           Text.Parsec.String             ( GenParser )
 import           Text.Parsec.Token
 import           Types
+import           Rig                            ( ZeroOneMany(..) )
 
 lambdaPi :: TokenParser u
 lambdaPi = makeTokenParser
