@@ -91,51 +91,61 @@ iType ii g r (e1 :@: e2) = do
     _ -> throwError "illegal application"
 -- PairElim:
 iType ii g r (PairElim l i t) = do
-  (qs1, lty) <- iType ii g r l
-  case lty of
-    z@(VTensPr p ty ty') -> do
-      let r' = extend r
-      let local_g = second
-            ([ Binding (Local ii)       (p S.* r') ty
-             , Binding (Local $ ii + 1) r'         (ty' . vfree $ Local ii)
-             ] ++
-            )
-            g
+  (qs1, lTy) <- iType ii g r l
+  case lTy of
+    zTy@(VTensPr p xTy yTy) -> do
+      qs3 <- cTypeAnn (Binding (Local ii) Zero zTy)
+      let r'  = extend r
+      let x   = Binding (Local ii) (p S.* r') xTy
+      let y = Binding (Local $ ii + 1) r' (yTy . vfree $ Local ii)
+      let gxy = second ([x, y] ++) g
       let
-        txy = cSubst
-          0
-          (Ann (Pair (Inf . Free $ Local ii) (Inf . Free $ Local (ii + 1)))
-               (quote0 z)
+        txy = cEval
+          (cSubst
+            0
+            (Ann (Pair (Inf . Free $ bndName x) (Inf . Free $ bndName y))
+                 (quote0 zTy)
+            )
+            t
           )
-          t
-      qs3 <- cType (ii + 2) (second forget local_g) Zero' txy VStar
-      let txyVal = cEval txy (fst local_g, [])
-      qs2 <- cType
-        (ii + 2)
-        local_g
-        r
-        (cSubst 1 (Free $ Local ii) . cSubst 0 (Free $ Local (ii + 1)) $ i)
-        txyVal
-      let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
-      qs'  <- checkLocal "pairElim, Local ii" ii qs (p S.* r') (snd local_g)
-      qs'' <- checkLocal "pairElim, Local ii+1" (ii + 1) qs' r' (snd local_g)
-      let tl = cEval (cSubst 0 l t) (fst local_g, [])
-      return (qs'', tl)
+          (fst gxy, [])
+      qs2 <- cTypeIn
+        gxy
+        (cSubst 1 (Free $ bndName x) . cSubst 0 (Free $ bndName y) $ i)
+        txy
+      qs <-
+        pure (Map.unionsWith (S.+) [qs1, qs2, qs3])
+        >>= checkLocal "pairElim, Local ii"   ii       (p S.* r') (snd gxy)
+        >>= checkLocal "pairElim, Local ii+1" (ii + 1) r'         (snd gxy)
+      let tl = cEval (cSubst 0 l t) (fst gxy, [])
+      return (qs, tl)
     _ -> throwError "illegal pair elimination"
+ where
+  cTypeAnn z = cType (ii + 1)
+                     (second (forget . (z :)) g)
+                     Zero'
+                     (cSubst 0 (Free $ bndName z) t)
+                     VStar
+  cTypeIn gxy ixy txy = cType (ii + 2) gxy r ixy txy
 -- UnitElim:
 iType ii g r (UnitElim l i t) = do
-  (qs1, lty) <- iType ii g r l
-  case lty of
-    VUnitType -> do
-      let local_g = second (forget . (Binding (Local ii) Zero VUnitType :)) g
-      let tu      = cSubst 0 (Ann Unit UnitType) t
-      qs3 <- cType (ii + 1) local_g Zero' tu VStar
-      let tuVal = cEval tu (fst g, [])
-      qs2 <- cType ii g r i tuVal
+  (qs1, lTy) <- iType ii g r l
+  case lTy of
+    xTy@VUnitType -> do
+      qs3 <- cTypeAnn (Binding (Local ii) Zero xTy)
+      let tu = cEval (cSubst 0 (Ann Unit UnitType) t) (fst g, [])
+      qs2 <- cTypeIn tu
       let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
       let tl = cEval (cSubst 0 l t) (fst g, [])
       return (qs, tl)
     _ -> throwError "illegal unit elimination"
+ where
+  cTypeAnn x = cType (ii + 1)
+                     (second (forget . (x :)) g)
+                     Zero'
+                     (cSubst 0 (Free $ bndName x) t)
+                     VStar
+  cTypeIn tu = cType ii g r i tu
 iType _ _ _ _ = throwError "type mismatch (iType)"
 
 cType :: Int -> (NameEnv, Context) -> ZeroOne -> CTerm -> Type -> Result Usage
@@ -165,7 +175,7 @@ cType ii g r (Lam e) (VPi p ty ty') = do
               r
               (cSubst 0 (Free $ Local ii) e)
               (ty' . vfree $ Local ii)
-  checkLocal "lam" ii qs iiq (snd local_g)
+  checkLocal "lam" ii iiq (snd local_g) qs
 -- Star:
 cType _  _ _     Star            VStar = return Map.empty
 -- Fun:
@@ -174,7 +184,7 @@ cType ii g Zero' (Pi _ tyt tyt') VStar = do
   let ty      = cEval tyt (fst g, [])
   let local_g = second (forget . (Binding (Local ii) Zero ty :)) g
   qs <- cType (ii + 1) local_g Zero' (cSubst 0 (Free $ Local ii) tyt') VStar
-  checkLocal "fun" ii qs Zero (snd local_g)
+  checkLocal "fun" ii Zero (snd local_g) qs
 -- Pair:
 cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
   let r' = extend r
@@ -186,7 +196,7 @@ cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
       qs1 <- cType ii g One' e1 ty
       qs2 <- rest
       return $ Map.unionWith (S.+) qs2 (Map.map (p S.* r' S.*) qs1)
-  checkLocal "pair" ii qs p (snd g)
+  checkLocal "pair" ii p (snd g) qs
  where
   rest = do
     let e1v = cEval e1 (fst g, [])
@@ -197,15 +207,15 @@ cType ii g Zero' (TensPr _ tyt tyt') VStar = do
   let ty      = cEval tyt (fst g, [])
   let local_g = second (forget . (Binding (Local ii) Zero ty :)) g
   qs <- cType (ii + 1) local_g Zero' (cSubst 0 (Free $ Local ii) tyt') VStar
-  checkLocal "tensPr" ii qs Zero (snd local_g)
+  checkLocal "tensPr" ii Zero (snd local_g) qs
 -- Unit:
 cType _ _ _ Unit     VUnitType = return Map.empty
 -- UnitType:
 cType _ _ _ UnitType VStar     = return Map.empty
 cType _ _ _ _        _         = throwError "type mismatch (cType)"
 
-checkLocal :: String -> Int -> Usage -> ZeroOneMany -> Context -> Result Usage
-checkLocal d ii qs r ctx = do
+checkLocal :: String -> Int -> ZeroOneMany -> Context -> Usage -> Result Usage
+checkLocal d ii r ctx qs = do
   let (q, qs') = splitLocal ii qs
   unless
     (q <: r)
