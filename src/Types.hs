@@ -20,7 +20,7 @@ data CTerm
    |  Star
    |  Pi ZeroOneMany CTerm CTerm
    |  Pair CTerm CTerm
-   |  TensPr ZeroOneMany CTerm CTerm
+   |  Tensor ZeroOneMany CTerm CTerm
    |  Unit
    |  UnitType
   deriving (Show, Eq)
@@ -40,7 +40,7 @@ data Value
    |  VPi ZeroOneMany Value (Value -> Value)
    |  VNeutral Neutral
    |  VPair Value Value
-   |  VTensPr ZeroOneMany Value (Value -> Value)
+   |  VTensor ZeroOneMany Value (Value -> Value)
    |  VUnit
    |  VUnitType
 
@@ -81,8 +81,8 @@ cEval (Lam c )      d = VLam (\x -> cEval c $ second (x :) d)
 cEval Star          _ = VStar
 cEval (Pi p ty ty') d = VPi p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
 cEval (Pair c c'  ) d = VPair (cEval c d) (cEval c' d)
-cEval (TensPr p ty ty') d =
-  VTensPr p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
+cEval (Tensor p ty ty') d =
+  VTensor p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
 cEval Unit     _ = VUnit
 cEval UnitType _ = VUnitType
 
@@ -122,8 +122,8 @@ cSubst ii i' (Lam c)       = Lam (cSubst (ii + 1) i' c)
 cSubst _  _  Star          = Star
 cSubst ii r  (Pi p ty ty') = Pi p (cSubst ii r ty) (cSubst (ii + 1) r ty')
 cSubst ii r  (Pair c c'  ) = Pair (cSubst ii r c) (cSubst ii r c')
-cSubst ii r (TensPr p ty ty') =
-  TensPr p (cSubst ii r ty) (cSubst (ii + 1) r ty')
+cSubst ii r (Tensor p ty ty') =
+  Tensor p (cSubst ii r ty) (cSubst (ii + 1) r ty')
 cSubst _ _ Unit     = Unit
 cSubst _ _ UnitType = UnitType
 
@@ -137,8 +137,8 @@ quote ii (VPi p v f) =
   Pi p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
 quote ii (VNeutral n) = Inf $ neutralQuote ii n
 quote ii (VPair v v') = Pair (quote ii v) (quote ii v')
-quote ii (VTensPr p v f) =
-  TensPr p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
+quote ii (VTensor p v f) =
+  Tensor p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
 quote _ VUnit     = Unit
 quote _ VUnitType = UnitType
 

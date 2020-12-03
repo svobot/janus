@@ -93,7 +93,7 @@ iType ii g r (e1 :@: e2) = do
 iType ii g r (PairElim l i t) = do
   (qs1, lTy) <- iType ii g r l
   case lTy of
-    zTy@(VTensPr p xTy yTy) -> do
+    zTy@(VTensor p xTy yTy) -> do
       qs3 <- cTypeAnn (Binding (Local ii) Zero zTy)
       let r'  = extend r
       let x   = Binding (Local ii) (p S.* r') xTy
@@ -186,7 +186,7 @@ cType ii g Zero' (Pi _ tyt tyt') VStar = do
   qs <- cType (ii + 1) local_g Zero' (cSubst 0 (Free $ Local ii) tyt') VStar
   checkLocal "fun" ii Zero (snd local_g) qs
 -- Pair:
-cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
+cType ii g r (Pair e1 e2) (VTensor p ty ty') = do
   let r' = extend r
   qs <- if p S.* r' == Zero
     then do
@@ -202,7 +202,7 @@ cType ii g r (Pair e1 e2) (VTensPr p ty ty') = do
     let e1v = cEval e1 (fst g, [])
     cType ii g r e2 (ty' e1v)
 -- TensPr:
-cType ii g Zero' (TensPr _ tyt tyt') VStar = do
+cType ii g Zero' (Tensor _ tyt tyt') VStar = do
   _ <- cType ii (second forget g) Zero' tyt VStar
   let ty      = cEval tyt (fst g, [])
   let local_g = second (forget . (Binding (Local ii) Zero ty :)) g

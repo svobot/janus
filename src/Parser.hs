@@ -142,7 +142,7 @@ parseCTerm b e =
     (e', (q, t)) <- parens lambdaPi $ parseBind e
     reservedOp lambdaPi "*"
     p <- parseCTerm OCTerm (e' : e)
-    return $ TensPr q t p
+    return $ Tensor q t p
   parseUnitType = UnitType <$ reserved lambdaPi "Unit"
 
 parseUnit :: CharParser () CTerm

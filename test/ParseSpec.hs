@@ -31,7 +31,7 @@ succTests =
     "Annotated pair elimination"
     "let w @ x', y' = (x,y) : (0 x : a) * x in y' : d"
     (Eval $ PairElim
-      (Ann (Pair (ifg "x") (ifg "y")) (TensPr Zero (ifg "a") (ib 0)))
+      (Ann (Pair (ifg "x") (ifg "y")) (Tensor Zero (ifg "a") (ib 0)))
       (ib 0)
       (ifg "d")
     )
@@ -39,7 +39,7 @@ succTests =
     "Complex pair"
     "(x, f y z) : (0 x : a) * x"
     (Eval $ Ann (Pair (ifg "x") (Inf $ fg "f" :@: ifg "y" :@: ifg "z"))
-                (TensPr Zero (ifg "a") (ib 0))
+                (Tensor Zero (ifg "a") (ib 0))
     )
   , SuccTest "Annotated unit elimination"
              "let x @ () = () : Unit in () : Unit"
@@ -57,7 +57,7 @@ succTests =
         Star
         (Pi Zero
             (Pi Zero (ib 0) Star)
-            (Pi Zero (TensPr Zero (ib 1) (Inf (Bound 1 :@: ib 0))) (ib 2))
+            (Pi Zero (Tensor Zero (ib 1) (Inf (Bound 1 :@: ib 0))) (ib 2))
         )
       )
     )

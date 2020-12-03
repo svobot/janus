@@ -35,7 +35,7 @@ succTests =
     )
     Zero
     -- TODO: Should work too?: (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Zero Star (ib 0)))
-    (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Zero Star (ifg "a")))
+    (PairElim (Ann (Pair (ifg "a") (ifg "x")) (Tensor Zero Star (ifg "a")))
               (ib 0)
               (ifg "a")
     )

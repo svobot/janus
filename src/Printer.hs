@@ -53,7 +53,7 @@ cPrint p ii (Pi q d r) = parensIf
   )
 cPrint p ii (Pair c c') =
   text "(" <> cPrint p ii c <> text ", " <> cPrint p ii c'
-cPrint _p ii (TensPr q c c') =
+cPrint _p ii (Tensor q c c') =
   text "("
     <> text (show q)
     <> text " "
