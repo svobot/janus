@@ -168,23 +168,23 @@ cType ii g r (Inf e) v = do
   return qs
 -- Lam:
 cType ii g r (Lam e) (VPi p ty ty') = do
-  let iiq     = p S.* extend r
-  let local_g = second (Binding (Local ii) iiq ty :) g
+  let x       = Binding (Local ii) (p S.* extend r) ty
+  let local_g = second (x :) g
   qs <- cType (ii + 1)
               local_g
               r
-              (cSubst 0 (Free $ Local ii) e)
-              (ty' . vfree $ Local ii)
-  checkLocal "lam" ii iiq (snd local_g) qs
+              (cSubst 0 (Free $ bndName x) e)
+              (ty' . vfree $ bndName x)
+  checkLocal "lam" ii (bndUsage x) (snd local_g) qs
 -- Star:
-cType _  _ _     Star            VStar = return Map.empty
+cType _  _ _       Star            VStar = return Map.empty
 -- Fun:
-cType ii g Zero' (Pi _ tyt tyt') VStar = do
-  _ <- cType ii (second forget g) Zero' tyt VStar
-  let ty      = cEval tyt (fst g, [])
-  let local_g = second (forget . (Binding (Local ii) Zero ty :)) g
-  qs <- cType (ii + 1) local_g Zero' (cSubst 0 (Free $ Local ii) tyt') VStar
-  checkLocal "fun" ii Zero (snd local_g) qs
+cType ii g r@Zero' (Pi _ tyt tyt') VStar = do
+  _ <- cType ii (second forget g) r tyt VStar
+  let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
+  let local_g = second (forget . (x :)) g
+  qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
+  checkLocal "fun" ii (bndUsage x) (snd local_g) qs
 -- Pair:
 cType ii g r (Pair e1 e2) (VTensor p ty ty') = do
   let r' = extend r
@@ -202,12 +202,12 @@ cType ii g r (Pair e1 e2) (VTensor p ty ty') = do
     let e1v = cEval e1 (fst g, [])
     cType ii g r e2 (ty' e1v)
 -- TensPr:
-cType ii g Zero' (Tensor _ tyt tyt') VStar = do
-  _ <- cType ii (second forget g) Zero' tyt VStar
-  let ty      = cEval tyt (fst g, [])
-  let local_g = second (forget . (Binding (Local ii) Zero ty :)) g
-  qs <- cType (ii + 1) local_g Zero' (cSubst 0 (Free $ Local ii) tyt') VStar
-  checkLocal "tensPr" ii Zero (snd local_g) qs
+cType ii g r@Zero' (Tensor _ tyt tyt') VStar = do
+  _ <- cType ii (second forget g) r tyt VStar
+  let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
+  let local_g = second (forget . (x :)) g
+  qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
+  checkLocal "tensPr" ii (bndUsage x) (snd local_g) qs
 -- Unit:
 cType _ _ _ Unit     VUnitType = return Map.empty
 -- UnitType:
