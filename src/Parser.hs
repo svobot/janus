@@ -3,12 +3,12 @@ module Parser where
 import           Control.Monad.Trans            ( liftIO )
 import           Data.List                      ( elemIndex )
 import           Data.Maybe                     ( fromMaybe )
+import           Rig                            ( ZeroOneMany(..) )
 import           Text.Parsec
 import           Text.Parsec.Language           ( haskellStyle )
 import           Text.Parsec.String             ( GenParser )
 import           Text.Parsec.Token
 import           Types
-import           Rig                            ( ZeroOneMany(..) )
 
 lambdaPi :: TokenParser u
 lambdaPi = makeTokenParser
@@ -20,7 +20,10 @@ lambdaPi = makeTokenParser
                       , "putStrLn"
                       , "out"
                       , "in"
-                      , "Unit"
+                      , "MUnit"
+                      , "Fst"
+                      , "Snd"
+                      , "AUnit"
                       ]
     }
   )
@@ -71,6 +74,8 @@ parseITerm b e =
     ++ [ try $ parseApp e | b /= OApp ]
     ++ [ try parsePairElim
        , parseUnitElim
+       , parseFst
+       , parseSnd
        , var
        , parens lambdaPi $ parseITerm OITerm e
        ]
@@ -105,7 +110,15 @@ parseITerm b e =
     n <- parseCTerm OCTerm e
     reservedOp lambdaPi ":"
     t <- parseCTerm OCTerm (x : e)
-    return $ UnitElim m n t
+    return $ MUnitElim m n t
+  parseFst = do
+    reserved lambdaPi "Fst"
+    i <- parseITerm OITerm e
+    return $ Fst i
+  parseSnd = do
+    reserved lambdaPi "Snd"
+    i <- parseITerm OITerm e
+    return $ Snd i
   var = do
     x <- identifier lambdaPi
     case elemIndex x e of
@@ -119,9 +132,13 @@ parseCTerm b e =
        , parseStar
        , try parsePi
        , try parsePair
-       , try parseTensPr
+       , try parseTensor
        , try parseUnit
        , parseUnitType
+       , try parseAngles
+       , try parseWith
+       , parseAddUnit
+       , parseTop
        , parens lambdaPi $ parseCTerm OCTerm e
        ]
     ++ [ Inf <$> parseITerm b e | b /= OStale ]
@@ -138,15 +155,33 @@ parseCTerm b e =
       <$> parseCTerm OCTerm e
       <*  reservedOp lambdaPi ","
       <*> parseCTerm OCTerm e
-  parseTensPr = do
+  parseTensor = do
     (e', (q, t)) <- parens lambdaPi $ parseBind e
     reservedOp lambdaPi "*"
     p <- parseCTerm OCTerm (e' : e)
     return $ Tensor q t p
-  parseUnitType = UnitType <$ reserved lambdaPi "Unit"
+  parseUnitType = MUnitType <$ reserved lambdaPi "MUnit"
+  parseAngles =
+    angles lambdaPi
+      $   Angles
+      <$> parseCTerm OCTerm e
+      <*  reservedOp lambdaPi ","
+      <*> parseCTerm OCTerm e
+  parseWith = do
+    (x, t) <-
+      parens lambdaPi
+      $   (,)
+      <$> identifier lambdaPi
+      <*  reservedOp lambdaPi ":"
+      <*> parseCTerm OCTerm e
+    reservedOp lambdaPi "&"
+    p <- parseCTerm OCTerm (x : e)
+    return $ With t p
+  parseAddUnit = AUnit <$ reservedOp lambdaPi "<>"
+  parseTop     = AUnitType <$ reserved lambdaPi "AUnit"
 
 parseUnit :: CharParser () CTerm
-parseUnit = Unit <$ reservedOp lambdaPi "(" <* reservedOp lambdaPi ")"
+parseUnit = MUnit <$ reservedOp lambdaPi "(" <* reservedOp lambdaPi ")"
 
 parseLam :: [String] -> CharParser () CTerm
 parseLam e = do

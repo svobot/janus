@@ -1,14 +1,13 @@
 module ParseSpec
   ( spec
-  )
-where
+  ) where
 
 import           Control.Monad                  ( foldM )
 import           Parser
+import           Rig
 import           Test.Hspec
 import           Text.Parsec                    ( parse )
 import           Types
-import           Rig
 
 data SuccTest = SuccTest String String Stmt
 
@@ -42,8 +41,8 @@ succTests =
                 (Tensor Zero (ifg "a") (ib 0))
     )
   , SuccTest "Annotated unit elimination"
-             "let x @ () = () : Unit in () : Unit"
-             (Eval $ UnitElim (Ann Unit UnitType) Unit UnitType)
+             "let x @ () = () : MUnit in () : MUnit"
+             (Eval $ MUnitElim (Ann MUnit MUnitType) MUnit MUnitType)
   , SuccTest "Annotated function application"
              "f x : a"
              (Eval $ Ann (Inf $ fg "f" :@: ifg "x") (ifg "a"))

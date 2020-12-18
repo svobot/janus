@@ -21,8 +21,12 @@ data CTerm
    |  Pi ZeroOneMany CTerm CTerm
    |  Pair CTerm CTerm
    |  Tensor ZeroOneMany CTerm CTerm
-   |  Unit
-   |  UnitType
+   |  MUnit
+   |  MUnitType
+   |  Angles CTerm CTerm
+   |  With CTerm CTerm
+   |  AUnit
+   |  AUnitType
   deriving (Show, Eq)
 
 data ITerm
@@ -31,7 +35,9 @@ data ITerm
    |  Free Name
    |  ITerm :@: CTerm
    |  PairElim ITerm CTerm CTerm
-   |  UnitElim ITerm CTerm CTerm
+   |  MUnitElim ITerm CTerm CTerm
+   |  Fst ITerm
+   |  Snd ITerm
   deriving (Show, Eq)
 
 data Value
@@ -41,8 +47,12 @@ data Value
    |  VNeutral Neutral
    |  VPair Value Value
    |  VTensor ZeroOneMany Value (Value -> Value)
-   |  VUnit
-   |  VUnitType
+   |  VMUnit
+   |  VMUnitType
+   |  VAngles Value Value
+   |  VWith Value (Value -> Value)
+   |  VAUnit
+   |  VAUnitType
 
 instance Show Value where
   show = show . quote0
@@ -51,7 +61,9 @@ data Neutral
    =  NFree Name
    |  NApp Neutral Value
    |  NPairElim Neutral (Value -> Value -> Value) (Value -> Value)
-   |  NUnitElim Neutral Value (Value -> Value)
+   |  NMUnitElim Neutral Value (Value -> Value)
+   |  NFst Neutral
+   |  NSnd Neutral
 
 data Binding s = Binding
   { bndName  :: Name
@@ -83,8 +95,12 @@ cEval (Pi p ty ty') d = VPi p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
 cEval (Pair c c'  ) d = VPair (cEval c d) (cEval c' d)
 cEval (Tensor p ty ty') d =
   VTensor p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
-cEval Unit     _ = VUnit
-cEval UnitType _ = VUnitType
+cEval MUnit           _ = VMUnit
+cEval MUnitType       _ = VMUnitType
+cEval (Angles c  c' ) d = VAngles (cEval c d) (cEval c' d)
+cEval (With   ty ty') d = VWith (cEval ty d) (\x -> cEval ty' $ second (x :) d)
+cEval AUnit           _ = VAUnit
+cEval AUnitType       _ = VAUnitType
 
 iEval :: ITerm -> (NameEnv, Env) -> Value
 iEval (Ann c _) d = cEval c d
@@ -100,11 +116,19 @@ iEval (PairElim i c c') d = case iEval i d of
     (\x y -> cEval c $ second ([y, x] ++) d)
     (\z -> cEval c' $ second (z :) d)
   _ -> error "internal" -- TODO: Fail gracefully?
-iEval (UnitElim i c c') d = case iEval i d of
-  VUnit -> cEval c (second (VUnit :) d)
+iEval (MUnitElim i c c') d = case iEval i d of
+  VMUnit -> cEval c (second (VMUnit :) d)
   (VNeutral n) ->
-    VNeutral $ NUnitElim n (cEval c d) (\x -> cEval c' $ second (x :) d)
+    VNeutral $ NMUnitElim n (cEval c d) (\x -> cEval c' $ second (x :) d)
   _ -> error "internal" -- TODO: Fail gracefully?
+iEval (Fst i) d = case iEval i d of
+  (VAngles x _) -> x
+  (VNeutral n ) -> VNeutral $ NFst n
+  _             -> error "internal"
+iEval (Snd i) d = case iEval i d of
+  (VAngles _ y) -> y
+  (VNeutral n ) -> VNeutral $ NSnd n
+  _             -> error "internal"
 
 iSubst :: Int -> ITerm -> ITerm -> ITerm
 iSubst ii i' (Ann c c') = Ann (cSubst ii i' c) (cSubst ii i' c')
@@ -113,8 +137,10 @@ iSubst _  _  (Free  y ) = Free y
 iSubst ii i' (i :@: c ) = iSubst ii i' i :@: cSubst ii i' c
 iSubst ii r (PairElim i c c') =
   PairElim (iSubst ii r i) (cSubst (ii + 2) r c) (cSubst (ii + 1) r c')
-iSubst ii r (UnitElim i c c') =
-  UnitElim (iSubst ii r i) (cSubst ii r c) (cSubst (ii + 1) r c')
+iSubst ii r (MUnitElim i c c') =
+  MUnitElim (iSubst ii r i) (cSubst ii r c) (cSubst (ii + 1) r c')
+iSubst ii r (Fst i) = Fst (iSubst ii r i)
+iSubst ii r (Snd i) = Snd (iSubst ii r i)
 
 cSubst :: Int -> ITerm -> CTerm -> CTerm
 cSubst ii i' (Inf i)       = Inf (iSubst ii i' i)
@@ -124,8 +150,12 @@ cSubst ii r  (Pi p ty ty') = Pi p (cSubst ii r ty) (cSubst (ii + 1) r ty')
 cSubst ii r  (Pair c c'  ) = Pair (cSubst ii r c) (cSubst ii r c')
 cSubst ii r (Tensor p ty ty') =
   Tensor p (cSubst ii r ty) (cSubst (ii + 1) r ty')
-cSubst _ _ Unit     = Unit
-cSubst _ _ UnitType = UnitType
+cSubst _  _ MUnit           = MUnit
+cSubst _  _ MUnitType       = MUnitType
+cSubst ii r (Angles c  c' ) = Angles (cSubst ii r c) (cSubst ii r c')
+cSubst ii r (With   ty ty') = With (cSubst ii r ty) (cSubst (ii + 1) r ty')
+cSubst _  _ AUnit           = AUnit
+cSubst _  _ AUnitType       = AUnitType
 
 quote0 :: Value -> CTerm
 quote0 = quote 0
@@ -139,8 +169,13 @@ quote ii (VNeutral n) = Inf $ neutralQuote ii n
 quote ii (VPair v v') = Pair (quote ii v) (quote ii v')
 quote ii (VTensor p v f) =
   Tensor p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
-quote _ VUnit     = Unit
-quote _ VUnitType = UnitType
+quote _  VMUnit         = MUnit
+quote _  VMUnitType     = MUnitType
+quote ii (VAngles v v') = Angles (quote ii v) (quote ii v')
+quote ii (VWith v f) =
+  With (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
+quote _ VAUnit     = AUnit
+quote _ VAUnitType = AUnitType
 
 neutralQuote :: Int -> Neutral -> ITerm
 neutralQuote ii (NFree v         ) = boundfree ii v
@@ -149,10 +184,12 @@ neutralQuote ii (NPairElim n v v') = PairElim
   (neutralQuote ii n)
   (quote (ii + 2) $ v (vfree $ Quote ii) (vfree $ Quote (ii + 1)))
   (quote (ii + 1) (v' . vfree $ Quote ii))
-neutralQuote ii (NUnitElim n v v') = UnitElim
+neutralQuote ii (NMUnitElim n v v') = MUnitElim
   (neutralQuote ii n)
   (quote ii v)
   (quote (ii + 1) (v' . vfree $ Quote ii))
+neutralQuote ii (NFst n) = Fst (neutralQuote ii n)
+neutralQuote ii (NSnd n) = Snd (neutralQuote ii n)
 
 boundfree :: Int -> Name -> ITerm
 boundfree ii (Quote k) = Bound ((ii - k - 1) `max` 0)

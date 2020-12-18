@@ -1,13 +1,12 @@
 module TypeSpec
   ( spec
-  )
-where
+  ) where
 
 import           Control.Monad                  ( foldM )
+import           Rig
 import           Test.Hspec
 import           Types
 import           Typing
-import           Rig
 
 data SuccTest = SuccTest String (NameEnv, Context) ZeroOneMany ITerm CTerm
 

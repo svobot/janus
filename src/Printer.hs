@@ -1,14 +1,14 @@
 module Printer where
 
-import           Text.PrettyPrint               ( text
-                                                , sep
+import           Rig                            ( ZeroOneMany )
+import           Text.PrettyPrint               ( Doc
                                                 , nest
-                                                , Doc
+                                                , sep
+                                                , text
                                                 )
 import qualified Text.PrettyPrint              as PP
                                                 ( parens )
 import           Types
-import           Rig                            ( ZeroOneMany )
 
 vars :: [String]
 vars =
@@ -62,8 +62,8 @@ cPrint _p ii (Tensor q c c') =
     <> cPrint 0 ii c
     <> text ") * "
     <> cPrint 0 (ii + 1) c'
-cPrint _p _ii Unit     = text "()"
-cPrint _p _ii UnitType = text "Unit"
+cPrint _p _ii MUnit     = text "()"
+cPrint _p _ii MUnitType = text "MUnit"
 
 nestedForall :: Int -> [(ZeroOneMany, Int, CTerm)] -> CTerm -> Doc
 nestedForall ii ds (Pi q d r) = nestedForall (ii + 1) ((q, ii, d) : ds) r

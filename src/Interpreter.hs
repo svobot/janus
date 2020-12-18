@@ -4,25 +4,25 @@
 
 module Interpreter
   ( repl
-  )
-where
+  ) where
 
 import           Control.Monad                  ( unless )
-import           Control.Monad.State.Lazy       ( evalStateT
+import           Control.Monad.State.Lazy       ( MonadIO
+                                                , MonadState
+                                                , evalStateT
                                                 , foldM
                                                 , get
                                                 , modify
-                                                , MonadIO
-                                                , MonadState
                                                 )
 import           Control.Monad.Trans            ( liftIO )
-import           Data.List                      ( isPrefixOf
-                                                , intercalate
+import           Data.List                      ( intercalate
+                                                , isPrefixOf
                                                 , nub
                                                 )
 import           Data.List.Extra                ( trim )
 import           Parser
 import           Printer
+import           Rig
 import           Scope
 import           System.Console.Repline  hiding ( options )
 import           Text.Parsec                    ( many )
@@ -31,7 +31,6 @@ import           Text.PrettyPrint               ( render
                                                 )
 import           Types
 import           Typing
-import           Rig
 
 data CommandInfo = CmdInfo [String] String String (Cmd Repl)
 

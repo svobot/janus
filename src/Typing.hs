@@ -15,9 +15,9 @@ import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
 import qualified Data.Semiring                 as S
 import           Printer
+import           Rig
 import           Text.PrettyPrint               ( render )
 import           Types
-import           Rig
 
 import           Debug.Trace                    ( traceM )
 
@@ -128,12 +128,12 @@ iType ii g r (PairElim l i t) = do
                      VStar
   cTypeIn gxy ixy txy = cType (ii + 2) gxy r ixy txy
 -- UnitElim:
-iType ii g r (UnitElim l i t) = do
+iType ii g r (MUnitElim l i t) = do
   (qs1, lTy) <- iType ii g r l
   case lTy of
-    xTy@VUnitType -> do
+    xTy@VMUnitType -> do
       qs3 <- cTypeAnn (Binding (Local ii) Zero xTy)
-      let tu = cEval (cSubst 0 (Ann Unit UnitType) t) (fst g, [])
+      let tu = cEval (cSubst 0 (Ann MUnit MUnitType) t) (fst g, [])
       qs2 <- cTypeIn tu
       let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
       let tl = cEval (cSubst 0 l t) (fst g, [])
@@ -146,6 +146,18 @@ iType ii g r (UnitElim l i t) = do
                      (cSubst 0 (Free $ bndName x) t)
                      VStar
   cTypeIn tu = cType ii g r i tu
+-- Fst:
+iType ii g r (Fst i) = do
+  (qs, ty) <- iType ii g r i
+  case ty of
+    (VWith s _) -> return (qs, s)
+    _           -> throwError "illegal fst elimination"
+-- Snd:
+iType ii g r (Snd i) = do
+  (qs, ty) <- iType ii g r i
+  case ty of
+    (VWith _ t) -> return (qs, t . vfree $ Local ii)
+    _           -> throwError "illegal fst elimination"
 iType _ _ _ _ = throwError "type mismatch (iType)"
 
 cType :: Int -> (NameEnv, Context) -> ZeroOne -> CTerm -> Type -> Result Usage
@@ -188,7 +200,7 @@ cType ii g r@Zero' (Pi _ tyt tyt') VStar = do
 -- Pair:
 cType ii g r (Pair e1 e2) (VTensor p ty ty') = do
   let r' = extend r
-  qs <- if p S.* r' == Zero
+  if p S.* r' == Zero
     then do
       _ <- cType ii g Zero' e1 ty
       rest
@@ -196,23 +208,43 @@ cType ii g r (Pair e1 e2) (VTensor p ty ty') = do
       qs1 <- cType ii g One' e1 ty
       qs2 <- rest
       return $ Map.unionWith (S.+) qs2 (Map.map (p S.* r' S.*) qs1)
-  checkLocal "pair" ii p (snd g) qs
  where
   rest = do
     let e1v = cEval e1 (fst g, [])
     cType ii g r e2 (ty' e1v)
--- TensPr:
+-- Tensor:
 cType ii g r@Zero' (Tensor _ tyt tyt') VStar = do
   _ <- cType ii (second forget g) r tyt VStar
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
   qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
-  checkLocal "tensPr" ii (bndUsage x) (snd local_g) qs
+  checkLocal "tensor" ii (bndUsage x) (snd local_g) qs
 -- Unit:
-cType _ _ _ Unit     VUnitType = return Map.empty
+cType _  _ _ MUnit          VMUnitType     = return Map.empty
 -- UnitType:
-cType _ _ _ UnitType VStar     = return Map.empty
-cType _ _ _ _        _         = throwError "type mismatch (cType)"
+cType _  _ _ MUnitType      VStar          = return Map.empty
+-- Angles:
+cType ii g r (Angles e1 e2) (VWith ty ty') = do
+  qs1 <- cType ii g r e1 ty
+  let e1v = cEval e1 (fst g, [])
+  qs2 <- cType ii g r e2 (ty' e1v)
+  return $ Map.unionWith combine qs1 qs2
+ where
+  combine Zero Zero = Zero
+  combine One  One  = One
+  combine _    _    = Many
+-- With:
+cType ii g r@Zero' (With tyt tyt') VStar = do
+  _ <- cType ii (second forget g) r tyt VStar
+  let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
+  let local_g = second (forget . (x :)) g
+  qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
+  checkLocal "with" ii (bndUsage x) (snd local_g) qs
+-- AUnit:
+cType _ _ _ AUnit     VAUnitType = return Map.empty
+-- AUnitType:
+cType _ _ _ AUnitType VStar      = return Map.empty
+cType _ _ _ _         _          = throwError "type mismatch (cType)"
 
 checkLocal :: String -> Int -> ZeroOneMany -> Context -> Usage -> Result Usage
 checkLocal d ii r ctx qs = do
