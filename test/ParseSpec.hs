@@ -22,7 +22,7 @@ succTests =
     (Eval $ Ann (Lam (Lam (ib 0))) (Pi Zero Star (Pi One (ib 0) (ib 1))))
   , SuccTest "Dependent assumption"
              "assume (0 a : *) (1 x : a)"
-             (Assume [(Zero, "a", Star), (One, "x", ifg "a")])
+             (Assume [Binding "a" Zero Star, Binding "x" One (ifg "a")])
   , SuccTest "Free pair eleminator"
              "let w @ x, y = z in y : a"
              (Eval $ PairElim (fg "z") (ib 0) (ifg "a"))
@@ -67,8 +67,7 @@ succTests =
   ib  = Inf . Bound
 
 succTestSpec :: SuccTest -> SpecWith ()
-succTestSpec (SuccTest d i r) =
-  it d $ parse (parseStmt []) "test" i `shouldBe` Right r
+succTestSpec (SuccTest d i r) = it d $ parse (stmt []) i i `shouldBe` Right r
 
 spec :: Spec
 spec = foldM (const succTestSpec) () succTests

@@ -1,4 +1,11 @@
-module Parser where
+module Parser
+  ( Binding
+  , Origin(OITerm)
+  , parseIO
+  , iTerm
+  , stmt
+  , Stmt(..)
+  ) where
 
 import           Control.Monad.Trans            ( liftIO )
 import           Data.List                      ( elemIndex )
@@ -7,208 +14,197 @@ import           Rig                            ( ZeroOneMany(..) )
 import           Text.Parsec
 import           Text.Parsec.Language           ( haskellStyle )
 import           Text.Parsec.String             ( GenParser )
-import           Text.Parsec.Token
-import           Types
+import qualified Text.Parsec.Token             as P
+import           Types                   hiding ( Binding )
+import qualified Types                         as T
+                                                ( Binding(..) )
 
-lambdaPi :: TokenParser u
-lambdaPi = makeTokenParser
+lambdaPi :: P.TokenParser u
+lambdaPi = P.makeTokenParser
   (haskellStyle
-    { identStart    = letter <|> char '_'
-    , reservedNames = [ "forall"
-                      , "let"
-                      , "assume"
-                      , "putStrLn"
-                      , "out"
-                      , "in"
-                      , "MUnit"
-                      , "Fst"
-                      , "Snd"
-                      , "AUnit"
-                      ]
+    { P.identStart    = letter <|> char '_'
+    , P.reservedNames = [ "forall"
+                        , "let"
+                        , "assume"
+                        , "putStrLn"
+                        , "out"
+                        , "in"
+                        , "MUnit"
+                        , "Fst"
+                        , "Snd"
+                        , "AUnit"
+                        ]
     }
   )
 
+identifier :: CharParser () String
+identifier = P.identifier lambdaPi
+
+reserved :: String -> CharParser st ()
+reserved = P.reserved lambdaPi
+
+reservedOp :: String -> CharParser st ()
+reservedOp = P.reservedOp lambdaPi
+
 type CharParser st = GenParser Char st
 data Origin = OAnn | OApp | OITerm | OCTerm | OStale deriving (Eq)
+type Binding = T.Binding String ZeroOneMany CTerm
 
 data Stmt
-  = Let ZeroOneMany String ITerm          --  let x = t
-  | Assume [(ZeroOneMany, String, CTerm)] --  assume x :: t, assume x :: *
+  = Let ZeroOneMany String ITerm --  let x = t
+  | Assume [Binding]             --  assume x :: t, assume x :: *
   | Eval ITerm
   | PutStrLn String --  lhs2TeX hacking, allow to print "magic" string
   | Out String      --  more lhs2TeX hacking, allow to print to files
   deriving (Show, Eq)
 
 parseIO :: String -> CharParser () a -> String -> Repl (Maybe a)
-parseIO f p x = case parse (whiteSpace lambdaPi *> p <* eof) f x of
+parseIO f p x = case parse (P.whiteSpace lambdaPi *> p <* eof) f x of
   Left  e -> liftIO $ print e >> return Nothing
   Right r -> return (Just r)
 
-parseStmt :: [String] -> CharParser () Stmt
-parseStmt e = choice [try define, assume, putstr, out, eval]
+stmt :: [String] -> CharParser () Stmt
+stmt e = choice [define, assume', putstr, out, eval]
  where
-  define = do
-    reserved lambdaPi "let"
-    q <- optionMaybe parseRig
-    x <- identifier lambdaPi
-    reserved lambdaPi "="
-    t <- parseITerm OITerm e
-    return (Let (fromMaybe Many q) x t)
-  assume = Assume . reverse <$> (reserved lambdaPi "assume" *> parseAssume)
-  putstr =
-    PutStrLn <$> (reserved lambdaPi "putStrLn" *> stringLiteral lambdaPi)
-  out  = Out <$> (reserved lambdaPi "out" *> option "" (stringLiteral lambdaPi))
-  eval = Eval <$> parseITerm OITerm e
+  define =
+    try
+        (   Let
+        .   fromMaybe Many
+        <$> (reserved "let" *> optionMaybe rig)
+        <*> (identifier <* reserved "=")
+        )
+      <*> iTerm OITerm e
+  assume' = Assume . reverse <$> (reserved "assume" *> assume)
+  putstr  = PutStrLn <$> (reserved "putStrLn" *> P.stringLiteral lambdaPi)
+  out     = Out <$> (reserved "out" *> option "" (P.stringLiteral lambdaPi))
+  eval    = Eval <$> iTerm OITerm e
 
-parseRig :: CharParser () ZeroOneMany
-parseRig = choice
-  [ Zero <$ reserved lambdaPi "0"
-  , One <$ reserved lambdaPi "1"
-  , Many <$ reserved lambdaPi "w"
-  ]
+rig :: CharParser () ZeroOneMany
+rig = choice [Zero <$ reserved "0", One <$ reserved "1", Many <$ reserved "w"]
 
-parseITerm :: Origin -> [String] -> CharParser () ITerm
-parseITerm b e =
+iTerm :: Origin -> [String] -> CharParser () ITerm
+iTerm b e =
   choice
     $  [ try ann | b /= OAnn && b /= OApp ]
-    ++ [ try $ parseApp e | b /= OApp ]
-    ++ [ try parsePairElim
-       , parseUnitElim
-       , parseFst
-       , parseSnd
+    ++ [ try $ app e | b /= OApp ]
+    ++ [ pairElim
+       , mUnitElim
+       , fstElim
+       , sndElim
        , var
-       , parens lambdaPi $ parseITerm OITerm e
+       , P.parens lambdaPi $ iTerm OITerm e
        ]
  where
   ann =
     Ann
-      <$> parseCTerm (if b == OCTerm then OStale else OAnn) e
-      <*  reservedOp lambdaPi ":"
-      <*> parseCTerm OAnn e
-  parsePairElim = do
-    reserved lambdaPi "let"
-    z <- identifier lambdaPi
-    reservedOp lambdaPi "@"
-    x <- identifier lambdaPi
-    reservedOp lambdaPi ","
-    y <- identifier lambdaPi
-    reservedOp lambdaPi "="
-    m <- parseITerm OITerm e
-    reserved lambdaPi "in"
-    n <- parseCTerm OCTerm ([y, x] ++ e)
-    reservedOp lambdaPi ":"
-    t <- parseCTerm OCTerm (z : e)
+      <$> cTerm (if b == OCTerm then OStale else OAnn) e
+      <*  reservedOp ":"
+      <*> cTerm OAnn e
+  pairElim = do
+    (z, x, y) <-
+      try
+      $   (,,)
+      <$> (reserved "let" *> identifier)
+      <*> (reservedOp "@" *> identifier)
+      <*> (reservedOp "," *> identifier)
+      <*  reservedOp "="
+    m <- iTerm OITerm e
+    reserved "in"
+    n <- cTerm OCTerm ([y, x] ++ e)
+    reservedOp ":"
+    t <- cTerm OCTerm (z : e)
     return $ PairElim m n t
-  parseUnitElim = do
-    reserved lambdaPi "let"
-    x <- identifier lambdaPi
-    reservedOp lambdaPi "@"
-    _ <- parseUnit
-    reservedOp lambdaPi "="
-    m <- parseITerm OITerm e
-    reserved lambdaPi "in"
-    n <- parseCTerm OCTerm e
-    reservedOp lambdaPi ":"
-    t <- parseCTerm OCTerm (x : e)
-    return $ MUnitElim m n t
-  parseFst = do
-    reserved lambdaPi "Fst"
-    i <- parseITerm OITerm e
-    return $ Fst i
-  parseSnd = do
-    reserved lambdaPi "Snd"
-    i <- parseITerm OITerm e
-    return $ Snd i
-  var = do
-    x <- identifier lambdaPi
-    case elemIndex x e of
-      Just n  -> return (Bound n)
-      Nothing -> return (Free $ Global x)
+  mUnitElim = do
+    reserved "let"
+    x <- identifier
+    MUnitElim
+      <$> (reservedOp "@" *> mUnit *> reservedOp "=" *> iTerm OITerm e)
+      <*  reserved "in"
+      <*> (cTerm OCTerm e <* reservedOp ":")
+      <*> cTerm OCTerm (x : e)
+  fstElim = Fst <$> (reserved "Fst" *> iTerm OITerm e)
+  sndElim = Snd <$> (reserved "Snd" *> iTerm OITerm e)
+  var     = (\x -> maybe (Free $ Global x) Bound $ elemIndex x e) <$> identifier
 
-parseCTerm :: Origin -> [String] -> CharParser () CTerm
-parseCTerm b e =
+cTerm :: Origin -> [String] -> CharParser () CTerm
+cTerm b e =
   choice
     $  [ parseLam e
-       , parseStar
-       , try parsePi
-       , try parsePair
-       , try parseTensor
-       , try parseUnit
-       , parseUnitType
-       , try parseAngles
-       , try parseWith
-       , parseAddUnit
-       , parseTop
-       , parens lambdaPi $ parseCTerm OCTerm e
+       , star
+       , fun
+       , try pair
+       , tensor
+       , mUnit
+       , mUnitType
+       , try angles
+       , with
+       , aUnit
+       , aUnitType
+       , P.parens lambdaPi $ cTerm OCTerm e
        ]
-    ++ [ Inf <$> parseITerm b e | b /= OStale ]
+    ++ [ Inf <$> iTerm b e | b /= OStale ]
  where
-  parseStar = Star <$ reserved lambdaPi "*"
-  parsePi   = do
-    (e', (q, t)) <- parens lambdaPi $ parseBind e
-    reservedOp lambdaPi "->"
-    p <- parseCTerm OCTerm (e' : e)
+  star = Star <$ reserved "*"
+  fun  = do
+    T.Binding e' q t <- try $ bind e <* reservedOp "->"
+    p                <- cTerm OCTerm (e' : e)
     return (Pi q t p)
-  parsePair =
-    parens lambdaPi
+  pair =
+    P.parens lambdaPi
       $   Pair
-      <$> parseCTerm OCTerm e
-      <*  reservedOp lambdaPi ","
-      <*> parseCTerm OCTerm e
-  parseTensor = do
-    (e', (q, t)) <- parens lambdaPi $ parseBind e
-    reservedOp lambdaPi "*"
-    p <- parseCTerm OCTerm (e' : e)
-    return $ Tensor q t p
-  parseUnitType = MUnitType <$ reserved lambdaPi "MUnit"
-  parseAngles =
-    angles lambdaPi
+      <$> cTerm OCTerm e
+      <*  reservedOp ","
+      <*> cTerm OCTerm e
+  tensor = do
+    T.Binding e' q t <- try $ bind e <* reservedOp "*"
+    p                <- cTerm OCTerm (e' : e)
+    return (Tensor q t p)
+  mUnitType = MUnitType <$ reserved "MUnit"
+  angles =
+    P.angles lambdaPi
       $   Angles
-      <$> parseCTerm OCTerm e
-      <*  reservedOp lambdaPi ","
-      <*> parseCTerm OCTerm e
-  parseWith = do
+      <$> cTerm OCTerm e
+      <*  reservedOp ","
+      <*> cTerm OCTerm e
+  with = do
     (x, t) <-
-      parens lambdaPi
-      $   (,)
-      <$> identifier lambdaPi
-      <*  reservedOp lambdaPi ":"
-      <*> parseCTerm OCTerm e
-    reservedOp lambdaPi "&"
-    p <- parseCTerm OCTerm (x : e)
+      try
+      $  P.parens lambdaPi
+                  ((,) <$> identifier <* reservedOp ":" <*> cTerm OCTerm e)
+      <* reservedOp "&"
+    p <- cTerm OCTerm (x : e)
     return $ With t p
-  parseAddUnit = AUnit <$ reservedOp lambdaPi "<>"
-  parseTop     = AUnitType <$ reserved lambdaPi "AUnit"
+  aUnit     = AUnit <$ reservedOp "<>"
+  aUnitType = AUnitType <$ reserved "AUnit"
 
-parseUnit :: CharParser () CTerm
-parseUnit = MUnit <$ reservedOp lambdaPi "(" <* reservedOp lambdaPi ")"
+mUnit :: CharParser () CTerm
+mUnit = MUnit <$ reservedOp "()"
 
 parseLam :: [String] -> CharParser () CTerm
 parseLam e = do
-  reservedOp lambdaPi "\\"
-  xs <- many1 (identifier lambdaPi)
-  reservedOp lambdaPi "."
-  t <- parseCTerm OCTerm (reverse xs ++ e)
+  reservedOp "\\"
+  xs <- many1 identifier
+  reservedOp "."
+  t <- cTerm OCTerm (reverse xs ++ e)
   return (iterate Lam t !! length xs)
 
-parseApp :: [String] -> CharParser () ITerm
-parseApp e = foldl (:@:) <$> parseITerm OApp e <*> many1 (parseCTerm OApp e)
+app :: [String] -> CharParser () ITerm
+app e = foldl (:@:) <$> iTerm OApp e <*> many1 (cTerm OApp e)
 
-parseBind :: [String] -> CharParser () (String, (ZeroOneMany, CTerm))
-parseBind e = do
-  q <- optionMaybe parseRig
-  x <- identifier lambdaPi
-  reservedOp lambdaPi ":"
-  t <- parseCTerm OCTerm e
-  return (x, (fromMaybe Many q, t))
+bind :: [String] -> CharParser () Binding
+bind e =
+  P.parens lambdaPi
+    $   flip T.Binding
+    .   fromMaybe Many
+    <$> optionMaybe rig
+    <*> identifier
+    <*  reservedOp ":"
+    <*> cTerm OCTerm e
 
-parseAssume :: CharParser () [(ZeroOneMany, String, CTerm)]
-parseAssume = snd <$> rec [] [] where
-  rec
-    :: [String]
-    -> [(ZeroOneMany, String, CTerm)]
-    -> CharParser () ([String], [(ZeroOneMany, String, CTerm)])
-  rec e bs = do
-    (x, (q, c)) <- parens lambdaPi $ parseBind []
-    rec (x : e) ((q, x, c) : bs) <|> return (x : e, (q, x, c) : bs)
+assume :: CharParser () [Binding]
+assume = snd <$> go [] [] where
+  go :: [String] -> [Binding] -> CharParser () ([String], [Binding])
+  go e bs = do
+    b <- bind []
+    go (bndName b : e) (b : bs) <|> return (bndName b : e, b : bs)
 

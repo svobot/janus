@@ -65,18 +65,19 @@ data Neutral
    |  NFst Neutral
    |  NSnd Neutral
 
-data Binding s = Binding
-  { bndName  :: Name
-  , bndUsage :: s
-  , bndType  :: Type
+data Binding n u t = Binding
+  { bndName  :: n
+  , bndUsage :: u
+  , bndType  :: t
   }
+  deriving Eq
 
-instance Show s => Show (Binding s) where
+instance (Show n, Show u, Show t) => Show (Binding n u t) where
   show (Binding n u t) = show u <> " " <> show n <> " : " <> show t
 
 type Result a = Either String a
 type Type = Value
-type Context = [Binding ZeroOneMany]
+type Context = [Binding Name ZeroOneMany Type]
 type NameEnv = [(Name, Value)]
 type Env = [Value]
 

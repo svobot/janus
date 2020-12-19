@@ -20,7 +20,8 @@ import           Data.List                      ( intercalate
                                                 , nub
                                                 )
 import           Data.List.Extra                ( trim )
-import           Parser
+import           Parser                         ( Stmt(..) )
+import qualified Parser                        as Parse
 import           Printer
 import           Rig
 import           Scope
@@ -37,7 +38,7 @@ data CommandInfo = CmdInfo [String] String String (Cmd Repl)
 -- Evaluation : handle each line user inputs
 compilePhrase :: Cmd Repl
 compilePhrase x = do
-  x' <- parseIO "<interactive>" (parseStmt []) x
+  x' <- Parse.parseIO "<interactive>" (Parse.stmt []) x
   maybe (return ()) handleStmt x'
 
 -- Prefix tab completeter
@@ -114,9 +115,9 @@ help _ = liftIO . putStr $ helpTxt commands
 
 typeOf :: Cmd Repl
 typeOf x = do
-  x'             <- parseIO "<interactive>" (parseITerm OITerm []) x
+  x' <- Parse.parseIO "<interactive>" (Parse.iTerm Parse.OITerm []) x
   (_, _, ve, te) <- get
-  t              <- maybe (return Nothing) (iinfer (ve, te) Zero) x'
+  t <- maybe (return Nothing) (iinfer (ve, te) Zero) x'
   liftIO $ maybe (return ()) (putStrLn . render . itprint) t
 
 browse :: Cmd Repl
@@ -127,12 +128,12 @@ browse _ = do
 compileFile :: Cmd Repl
 compileFile f = do
   x     <- liftIO . readFile $ trim f
-  stmts <- parseIO f (many $ parseStmt []) x
+  stmts <- Parse.parseIO f (many $ Parse.stmt []) x
   maybe (return ()) (foldM (const handleStmt) ()) stmts
 
 handleStmt :: Stmt -> Repl ()
 handleStmt stmt = case stmt of
-  Assume ass -> foldM (\_ (q, x, t) -> lpassume q x t) () ass
+  Assume ass -> foldM (const lpassume) () ass
   Let q x e  -> checkEval q x e
   Eval     e -> checkEval One it e
   PutStrLn x -> do
@@ -174,8 +175,8 @@ handleStmt stmt = case stmt of
   process :: String -> String
   process = unlines . map ("< " ++) . lines
 
-  lpassume :: ZeroOneMany -> String -> CTerm -> Repl ()
-  lpassume q x t = check
+  lpassume :: Parse.Binding -> Repl ()
+  lpassume (Binding x q t) = check
     Zero
     (Ann t Star)
     (\(_, v) -> do
