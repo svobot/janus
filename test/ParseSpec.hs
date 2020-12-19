@@ -60,6 +60,18 @@ succTests =
         )
       )
     )
+  , SuccTest
+    "Additive pair"
+    "let 1 x = <y, f z> : (x : *) & *"
+    ( Let One "x"
+    $ Ann (Angles (ifg "y") (Inf (fg "f" :@: ifg "z"))) (With Star Star)
+    )
+  , SuccTest
+    "Nested pairs"
+    "(<>, ((*, *))) : (0 x : AUnit) * (0 y : *) * *"
+    (Eval $ Ann (Pair AUnit (Pair Star Star))
+                (Tensor Zero AUnitType (Tensor Zero Star Star))
+    )
   ]
  where
   fg  = Free . Global
