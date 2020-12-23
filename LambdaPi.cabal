@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 37bdef9032d30f5fdb13c685194c3c053e1b29f2839971061eb1530aca8d3e02
+-- hash: 6edb3e9967415e0a27d4917ec16ba014fa632487093bae7214034b23ffeb902c
 
 name:           LambdaPi
 version:        0.1.0.0
@@ -42,12 +42,10 @@ library
   build-depends:
       base >=4.7 && <5
     , containers
-    , extra
     , hspec
     , mtl
     , parsec
     , pretty
-    , process
     , repline
     , semirings
   default-language: Haskell2010
@@ -63,12 +61,10 @@ executable LambdaPi-exe
       LambdaPi
     , base >=4.7 && <5
     , containers
-    , extra
     , hspec
     , mtl
     , parsec
     , pretty
-    , process
     , repline
     , semirings
   default-language: Haskell2010
@@ -87,12 +83,10 @@ test-suite LambdaPi-test
       LambdaPi
     , base >=4.7 && <5
     , containers
-    , extra
     , hspec
     , mtl
     , parsec
     , pretty
-    , process
     , repline
     , semirings
   default-language: Haskell2010

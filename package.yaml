@@ -27,9 +27,7 @@ dependencies:
 - mtl
 - pretty
 - repline
-- process
 - parsec
-- extra
 - hspec
 - semirings
 

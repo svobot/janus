@@ -15,11 +15,12 @@ import           Control.Monad.State.Lazy       ( MonadIO
                                                 , modify
                                                 )
 import           Control.Monad.Trans            ( liftIO )
-import           Data.List                      ( intercalate
+import           Data.Char                      ( isSpace )
+import           Data.List                      ( dropWhileEnd
+                                                , intercalate
                                                 , isPrefixOf
                                                 , nub
                                                 )
-import           Data.List.Extra                ( trim )
 import           Parser                         ( Stmt(..) )
 import qualified Parser                        as Parse
 import           Printer
@@ -127,7 +128,7 @@ browse _ = do
 
 compileFile :: Cmd Repl
 compileFile f = do
-  x     <- liftIO . readFile $ trim f
+  x     <- liftIO . readFile . dropWhile isSpace . dropWhileEnd isSpace $ f
   stmts <- Parse.parseIO f (many $ Parse.stmt []) x
   maybe (return ()) (foldM (const handleStmt) ()) stmts
 
