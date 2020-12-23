@@ -118,7 +118,7 @@ typeOf x = do
   x' <- Parse.parseIO "<interactive>" (Parse.iTerm Parse.OITerm []) x
   (_, _, ve, te) <- get
   t <- maybe (return Nothing) (iinfer (ve, te) Zero) x'
-  liftIO $ maybe (return ()) (putStrLn . render . itprint) t
+  liftIO $ maybe (return ()) (putStrLn . render . vPrint) t
 
 browse :: Cmd Repl
 browse _ = do
@@ -162,9 +162,12 @@ handleStmt stmt = case stmt of
       --  ugly, but we have limited space in the paper
       --  usually, you'd want to have the bound identifier *and*
       --  the result of evaluation
-      let outtext = show q ++ " " ++ if i == it
-            then render (itprint v <> text " :: " <> itprint y)
-            else render (text i <> text " :: " <> itprint y)
+      let
+        outtext = if i == it
+          then render
+            (text (show q) <> text " " <> vPrint v <> text " : " <> vPrint y)
+          else render
+            (text (show q) <> text " " <> text i <> text " : " <> vPrint y)
       liftIO $ putStrLn outtext
       (_, out, _, _) <- get
       unless (null out) (liftIO $ writeFile out (process outtext))
