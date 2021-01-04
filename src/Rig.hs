@@ -2,7 +2,7 @@ module Rig where
 
 import qualified Data.Semiring                 as S
 
-data ZeroOneMany = Zero | One | Many deriving (Eq)
+data ZeroOneMany = Zero | One | Many deriving (Show, Eq)
 
 instance S.Semiring ZeroOneMany where
   plus Zero a    = a
@@ -19,11 +19,6 @@ instance S.Semiring ZeroOneMany where
 
   zero = Zero
   one  = One
-
-instance Show ZeroOneMany where
-  show Zero = "0"
-  show One  = "1"
-  show Many = "w"
 
 (<:) :: ZeroOneMany -> ZeroOneMany -> Bool
 Zero <: Many = True

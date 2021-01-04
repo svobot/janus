@@ -1,10 +1,11 @@
 module Printer
-  ( iPrint
-  , cPrint
+  ( cPrint
+  , iPrint
+  , rPrint
   , vPrint
   ) where
 
-import           Rig                            ( ZeroOneMany )
+import           Rig                            ( ZeroOneMany(..) )
 import           Text.PrettyPrint               ( Doc
                                                 , nest
                                                 , sep
@@ -69,7 +70,7 @@ cPrint p ii (Pi q d r) = parensIf
   (p > 0)
   (sep
     [ text "("
-    <> text (show q)
+    <> rPrint q
     <> text " "
     <> text (vars !! ii)
     <> text " : "
@@ -84,7 +85,7 @@ cPrint p ii (Tensor q c c') = parensIf
   (p > 0)
   (sep
     [ text "("
-    <> text (show q)
+    <> rPrint q
     <> text " "
     <> text (vars !! ii)
     <> text " : "
@@ -113,7 +114,7 @@ nestedForall ii ds x          = sep
   [ text "forall "
   <> sep
        [ PP.parens
-         $  text (show q)
+         $  rPrint q
          <> text " "
          <> text (vars !! n)
          <> text " : "
@@ -127,3 +128,7 @@ nestedForall ii ds x          = sep
 vPrint :: Value -> Doc
 vPrint = cPrint 0 0 . quote0
 
+rPrint :: ZeroOneMany -> Doc
+rPrint Zero = text "0"
+rPrint One  = text "1"
+rPrint Many = text "w"

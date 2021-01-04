@@ -163,12 +163,11 @@ handleStmt stmt = case stmt of
       --  ugly, but we have limited space in the paper
       --  usually, you'd want to have the bound identifier *and*
       --  the result of evaluation
-      let
-        outtext = if i == it
-          then render
-            (text (show q) <> text " " <> vPrint v <> text " : " <> vPrint y)
-          else render
-            (text (show q) <> text " " <> text i <> text " : " <> vPrint y)
+      let outtext = if i == it
+            then render
+              (rPrint q <> text " " <> vPrint v <> text " :1 " <> vPrint y)
+            else render
+              (rPrint q <> text " " <> text i <> text " :2 " <> vPrint y)
       liftIO $ putStrLn outtext
       (_, out, _, _) <- get
       unless (null out) (liftIO $ writeFile out (process outtext))
