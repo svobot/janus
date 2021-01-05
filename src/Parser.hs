@@ -1,10 +1,11 @@
 module Parser
   ( Binding
   , Origin(OITerm)
-  , parseIO
-  , iTerm
-  , stmt
   , Stmt(..)
+  , file
+  , iTerm
+  , parseIO
+  , stmt
   ) where
 
 import           Control.Monad.Trans            ( liftIO )
@@ -78,6 +79,9 @@ stmt e = choice [define, assume', putstr, out, eval]
   putstr  = PutStrLn <$> (reserved "putStrLn" *> P.stringLiteral lambdaPi)
   out     = Out <$> (reserved "out" *> option "" (P.stringLiteral lambdaPi))
   eval    = Eval <$> iTerm OITerm e
+
+file :: String -> String -> Repl (Maybe [Stmt])
+file name = parseIO name (many $ stmt [])
 
 rig :: CharParser () ZeroOneMany
 rig = choice [Zero <$ reserved "0", One <$ reserved "1", Many <$ reserved "w"]

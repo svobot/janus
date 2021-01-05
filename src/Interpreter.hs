@@ -1,20 +1,19 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LiberalTypeSynonyms #-}
-{-# LANGUAGE TupleSections #-}
 
 module Interpreter
   ( repl
   ) where
 
-import           Control.Monad                  ( unless )
-import           Control.Monad.State.Lazy       ( MonadIO
+import           Control.Monad.State            ( MonadIO
                                                 , MonadState
                                                 , evalStateT
                                                 , foldM
                                                 , get
+                                                , liftIO
                                                 , modify
+                                                , unless
                                                 )
-import           Control.Monad.Trans            ( liftIO )
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhileEnd
                                                 , intercalate
@@ -27,14 +26,18 @@ import           Printer
 import           Rig
 import           Scope
 import           System.Console.Repline  hiding ( options )
-import           Text.Parsec                    ( many )
 import           Text.PrettyPrint               ( render
                                                 , text
                                                 )
 import           Types
 import           Typing
 
-data CommandInfo = CmdInfo [String] String String (Cmd Repl)
+data CmdInfo = CmdInfo
+  { cmdNames  :: [String]
+  , cmdArgs   :: Maybe String
+  , cmdDesc   :: String
+  , cmdAction :: Cmd Repl
+  }
 
 -- Evaluation : handle each line user inputs
 compilePhrase :: Cmd Repl
@@ -43,20 +46,31 @@ compilePhrase x = do
   maybe (return ()) handleStmt x'
 
 -- Prefix tab completeter
-defaultMatcher :: MonadIO m => [(String, CompletionFunc m)]
-defaultMatcher = [(":load", fileCompleter)]
+defaultMatcher
+  :: (MonadIO m, MonadState IState m) => [(String, CompletionFunc m)]
+defaultMatcher =
+  [ (commandPrefix : "load ", fileCompleter)
+  , (commandPrefix : "l "   , fileCompleter)
+  , ([commandPrefix]        , wordCompleter commandCompleter)
+  ]
+
+commandCompleter :: Monad m => WordCompleter m
+commandCompleter n =
+  return
+    . filter (n `isPrefixOf`)
+    . map (commandPrefix :)
+    . concatMap cmdNames
+    $ commands
 
 -- Default tab completer
 byWord :: (Monad m, MonadState IState m) => WordCompleter m
 byWord n = do
   (_, _, _, te) <- get
   let scope = [ s | Global s <- reverse . nub $ map bndName te ]
-  let cmds =
-        map (commandPrefix :) $ concatMap (\(CmdInfo cs _ _ _) -> cs) commands
-  return . filter (isPrefixOf n) $ cmds ++ scope
+  return . filter (n `isPrefixOf`) $ scope
 
-options :: [CommandInfo] -> [(String, Cmd Repl)]
-options = concatMap (\(CmdInfo cmds _ _ c) -> map (, c) cmds)
+options :: [CmdInfo] -> [(String, Cmd Repl)]
+options = concatMap $ traverse (,) <$> cmdNames <*> cmdAction
 
 ini :: Repl ()
 ini = liftIO $ putStrLn "Interpreter for Lambda-Pi.\nType :? for help."
@@ -76,43 +90,39 @@ repl = flip evalStateT (True, [], [], []) $ evalRepl
   (options commands)
   (Just commandPrefix)
   Nothing
-  (Prefix (wordCompleter byWord) defaultMatcher)
+  (Combine (Prefix (wordCompleter byWord) defaultMatcher)
+           (Word commandCompleter)
+  )
   ini
   final
 
 -- Commands
-commands :: [CommandInfo]
+commands :: [CmdInfo]
 commands =
-  [ CmdInfo ["type"]      "<expr>" "print type of expression"      typeOf
-  , CmdInfo ["browse"]    ""       "browse names in scope"         browse
-  , CmdInfo ["load"]      "<file>" "load program from file"        compileFile
-  , CmdInfo ["quit"]      ""       "exit interpreter"              (const abort)
-  , CmdInfo ["help", "?"] ""       "display this list of commands" help
+  [ CmdInfo ["type"] (Just "<expr>") "print type of expression" typeOf
+  , CmdInfo ["browse"] Nothing "browse names in scope" browse
+  , CmdInfo ["load"] (Just "<file>") "load program from file" compileFile
+  , CmdInfo ["quit"] Nothing "exit interpreter" (const abort)
+  , CmdInfo ["help", "?"] Nothing "display this list of commands" help
   ]
 
 help :: Cmd Repl
-help _ = liftIO . putStr $ helpTxt commands
+help _ = liftIO $ do
+  putStrLn
+    "List of commands:  Any command may be abbreviated to its unique prefix.\n"
+  putStr $ intercalate "\n" helpLines
  where
-  helpTxt :: [CommandInfo] -> String
-  helpTxt cs =
-    "List of commands:  Any command may be abbreviated to its unique prefix.\n\n"
-      ++ "<expr>                  evaluate expression\n"
-      ++ "let <var> = <expr>      define variable\n"
-      ++ "assume <var> :: <expr>  assume variable\n\n"
-      ++ unlines
-           (map
-             (\(CmdInfo cmds a d _) ->
-               let
-                 ct = intercalate
-                   ", "
-                   (map
-                     ((++ if null a then "" else " " ++ a) . (commandPrefix :))
-                     cmds
-                   )
-               in  ct ++ replicate ((24 - length ct) `max` 2) ' ' ++ d
-             )
-             cs
-           )
+  aliases args =
+    intercalate ", " . map ((++ maybe "" (' ' :) args) . (commandPrefix :))
+  cols =
+    [ ("<expr>"               , "evaluate expression")
+      , ("let <var> = <expr>"   , "define variable")
+      , ("assume <var> : <expr>", "assume variable\n")
+      ]
+      ++ map ((,) <$> (aliases <$> cmdArgs <*> cmdNames) <*> cmdDesc) commands
+  spaces colWidth cmd = replicate (colWidth + 2 - length cmd) ' '
+  fmt w (c, desc) = c <> spaces w c <> desc
+  helpLines = map (fmt . maximum $ map (length . fst) cols) cols
 
 typeOf :: Cmd Repl
 typeOf x = do
@@ -129,7 +139,7 @@ browse _ = do
 compileFile :: Cmd Repl
 compileFile f = do
   x     <- liftIO . readFile . dropWhile isSpace . dropWhileEnd isSpace $ f
-  stmts <- Parse.parseIO f (many $ Parse.stmt []) x
+  stmts <- Parse.file f x
   maybe (return ()) (foldM (const handleStmt) ()) stmts
 
 handleStmt :: Stmt -> Repl ()

@@ -1,6 +1,6 @@
 module Types where
 
-import           Control.Monad.State.Lazy       ( StateT )
+import           Control.Monad.State            ( StateT )
 import           Data.Bifunctor                 ( second )
 import           Rig
 import           System.Console.Repline         ( HaskelineT )
