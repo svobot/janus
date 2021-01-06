@@ -1,18 +1,23 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LiberalTypeSynonyms #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Interpreter
   ( repl
   ) where
 
+import           Control.Exception              ( IOException
+                                                , try
+                                                )
 import           Control.Monad.State            ( MonadIO
                                                 , MonadState
                                                 , evalStateT
-                                                , foldM
                                                 , get
                                                 , liftIO
                                                 , modify
                                                 , unless
+                                                , void
                                                 )
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhileEnd
@@ -129,7 +134,7 @@ typeOf x = do
   x' <- Parse.parseIO "<interactive>" (Parse.iTerm Parse.OITerm []) x
   (_, _, ve, te) <- get
   t <- maybe (return Nothing) (iinfer (ve, te) Zero) x'
-  liftIO $ maybe (return ()) (putStrLn . render . vPrint) t
+  liftIO $ mapM_ (putStrLn . render . vPrint) t
 
 browse :: Cmd Repl
 browse _ = do
@@ -138,19 +143,23 @@ browse _ = do
 
 compileFile :: Cmd Repl
 compileFile f = do
-  x     <- liftIO . readFile . dropWhile isSpace . dropWhileEnd isSpace $ f
-  stmts <- Parse.file f x
-  maybe (return ()) (foldM (const handleStmt) ()) stmts
+  x' <-
+    liftIO
+    . ((try @IOException) . readFile)
+    . dropWhile isSpace
+    . dropWhileEnd isSpace
+    $ f
+  case x' of
+    Left  e -> void (liftIO $ print e)
+    Right x -> Parse.file f x >>= mapM_ (mapM_ handleStmt)
 
 handleStmt :: Stmt -> Repl ()
 handleStmt stmt = case stmt of
-  Assume ass -> foldM (const lpassume) () ass
+  Assume ass -> mapM_ lpassume ass
   Let q x e  -> checkEval q x e
   Eval     e -> checkEval One it e
-  PutStrLn x -> do
-    liftIO $ putStrLn x
-    return ()
-  Out f -> modify $ \(inter, _, ve, te) -> (inter, f, ve, te)
+  PutStrLn x -> void (liftIO $ putStrLn x)
+  Out      f -> modify $ \(inter, _, ve, te) -> (inter, f, ve, te)
  where
   it = "it"
 
@@ -159,11 +168,7 @@ handleStmt stmt = case stmt of
     --  typecheck and evaluate
     (_, _, ve, te) <- get
     x              <- iinfer (ve, te) q t
-    case x of
-      Nothing -> liftIO $ return ()
-      Just y  -> do
-        let v = iEval t (ve, [])
-        kp (y, v)
+    mapM_ (kp . (, iEval t (ve, []))) x
 
   checkEval :: ZeroOneMany -> String -> ITerm -> Repl ()
   checkEval q i t = check
