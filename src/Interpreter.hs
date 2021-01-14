@@ -31,9 +31,6 @@ import           Printer
 import           Rig
 import           Scope
 import           System.Console.Repline  hiding ( options )
-import           Text.PrettyPrint               ( render
-                                                , text
-                                                )
 import           Types
 import           Typing
 
@@ -134,7 +131,7 @@ typeOf x = do
   x' <- Parse.parseIO "<interactive>" (Parse.iTerm Parse.OITerm []) x
   (_, _, ve, te) <- get
   t <- maybe (return Nothing) (iinfer (ve, te) Zero) x'
-  liftIO $ mapM_ (putStrLn . render . vPrint) t
+  liftIO $ mapM_ (putStrLn . render . pretty) t
 
 browse :: Cmd Repl
 browse _ = do
@@ -156,51 +153,48 @@ compileFile f = do
 handleStmt :: Stmt -> Repl ()
 handleStmt stmt = case stmt of
   Assume ass -> mapM_ lpassume ass
-  Let q x e  -> checkEval q x e
-  Eval     e -> checkEval One it e
+  Let q x e  -> checkEval q (Just x) e
+  Eval     e -> checkEval One Nothing e
   PutStrLn x -> void (liftIO $ putStrLn x)
   Out      f -> modify $ \(inter, _, ve, te) -> (inter, f, ve, te)
  where
-  it = "it"
-
-  check :: ZeroOneMany -> ITerm -> ((Value, Value) -> Repl ()) -> Repl ()
+  check :: ZeroOneMany -> ITerm -> ((Value, Type) -> Repl ()) -> Repl ()
   check q t kp = do
     --  typecheck and evaluate
     (_, _, ve, te) <- get
     x              <- iinfer (ve, te) q t
-    mapM_ (kp . (, iEval t (ve, []))) x
+    mapM_ (kp . (iEval t (ve, []), )) x
 
-  checkEval :: ZeroOneMany -> String -> ITerm -> Repl ()
-  checkEval q i t = check
+  checkEval :: ZeroOneMany -> Maybe String -> ITerm -> Repl ()
+  checkEval q mi t = check
     q
     t
-    (\(y, v) -> do
-      --  ugly, but we have limited space in the paper
-      --  usually, you'd want to have the bound identifier *and*
-      --  the result of evaluation
-      let outtext = if i == it
-            then render
-              (rPrint q <> text " " <> vPrint v <> text " :1 " <> vPrint y)
-            else render
-              (rPrint q <> text " " <> text i <> text " :2 " <> vPrint y)
-      liftIO $ putStrLn outtext
+    (\(val, ty) -> do
+      let outtext = renderRes (Binding mi q ty) val
+      liftIO . putStrLn $ outtext
       (_, out, _, _) <- get
-      unless (null out) (liftIO $ writeFile out (process outtext))
-      modify $ \(inter, _, ve, te) ->
-        (inter, "", (Global i, v) : ve, Binding (Global i) q y : te)
+      unless
+        (null out)
+        (do
+          let process = unlines . map ("< " ++) . lines
+          liftIO . writeFile out $ process outtext
+          modify $ \(i, _, ve, te) -> (i, "", ve, te)
+        )
+      mapM_
+        (\i -> modify $ \(inter, o, ve, te) ->
+          (inter, o, (Global i, val) : ve, Binding (Global i) q ty : te)
+        )
+        mi
     )
-
-  process :: String -> String
-  process = unlines . map ("< " ++) . lines
 
   lpassume :: Parse.Binding -> Repl ()
   lpassume (Binding x q t) = check
     Zero
     (Ann t Star)
-    (\(_, v) -> do
-      liftIO . putStrLn $ show q ++ " " ++ x ++ " : " ++ show v
+    (\(val, _) -> do
+      liftIO . putStrLn $ renderRes (Binding Nothing q val) (vfree $ Global x)
       modify $ \(inter, out, ve, te) ->
-        (inter, out, ve, Binding (Global x) q v : te)
+        (inter, out, ve, Binding (Global x) q val : te)
       return ()
     )
 

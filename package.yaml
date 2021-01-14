@@ -25,7 +25,7 @@ dependencies:
 - base >= 4.7 && < 5
 - containers
 - mtl
-- pretty
+- prettyprinter
 - repline
 - parsec
 - hspec
@@ -33,6 +33,7 @@ dependencies:
 
 library:
   source-dirs: src
+  default-extensions: OverloadedStrings
 
 executables:
   LambdaPi-exe:

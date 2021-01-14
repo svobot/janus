@@ -16,7 +16,6 @@ import           Data.Maybe                     ( fromMaybe )
 import qualified Data.Semiring                 as S
 import           Printer
 import           Rig
-import           Text.PrettyPrint               ( render )
 import           Types
 
 import           Debug.Trace                    ( traceM )
@@ -72,8 +71,7 @@ iType _ g r (Free x) = case find ((== x) . bndName) (snd g) of
       ++ show (extend r :: ZeroOneMany)
       )
     return (Map.singleton x $ extend r, ty)
-  Nothing ->
-    throwError ("unknown identifier: " ++ render (iPrint 0 0 $ Free x))
+  Nothing -> throwError ("unknown identifier: " ++ render (pretty $ Free x))
 -- App:
 iType ii g r (e1 :@: e2) = do
   (qs1, si) <- iType ii g r e1
@@ -169,13 +167,13 @@ cType ii g r (Inf e) v = do
     (  throwError
     $  "type mismatch:\n"
     ++ "type inferred:  "
-    ++ render (cPrint 0 0 $ quote0 v')
+    ++ render (pretty $ quote0 v')
     ++ "\n"
     ++ "type expected:  "
-    ++ render (cPrint 0 0 $ quote0 v)
+    ++ render (pretty $ quote0 v)
     ++ "\n"
     ++ "for expression: "
-    ++ render (iPrint 0 0 e)
+    ++ render (pretty e)
     )
   return qs
 -- Lam:
