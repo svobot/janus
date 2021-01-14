@@ -52,9 +52,8 @@ instance Pretty ITerm where
 iPrint :: Int -> Int -> ITerm -> Doc ann
 iPrint p ii (Ann c ty) =
   parensIf (p > 1) (cPrint 2 ii c <+> ":" <+> cPrint 0 ii ty)
-iPrint _ ii (Bound k         ) = var (ii - k - 1)
-iPrint _ _  (Free  (Global s)) = pretty s
-iPrint _ _  (Free  x         ) = "[" <> pretty (show x) <> "]"
+iPrint _ ii (Bound k) = var (ii - k - 1)
+iPrint _ _  (Free  n) = pretty n
 iPrint p ii (i :@: c) =
   parensIf (p > 2) (align $ sep [iPrint 2 ii i, cPrint 3 ii c])
 iPrint p ii (PairElim l i t) = parensIf
@@ -141,3 +140,8 @@ instance Pretty ZeroOneMany where
   pretty Zero = "0"
   pretty One  = "1"
   pretty Many = "w"
+
+instance Pretty Name where
+  pretty (Global s) = pretty s
+  pretty x          = "[" <> pretty (show x) <> "]"
+

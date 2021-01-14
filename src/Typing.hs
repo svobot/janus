@@ -14,6 +14,7 @@ import           Data.List                      ( find )
 import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
 import qualified Data.Semiring                 as S
+import           Data.Text.Prettyprint.Doc
 import           Printer
 import           Rig
 import           Types
@@ -29,26 +30,15 @@ iinfer g r t = case iType0 g r t of
 
 iType0 :: (NameEnv, Context) -> ZeroOneMany -> ITerm -> Result Type
 iType0 g r t = do
-  let r' = restrict r
-  (qs', tp) <- iType 0 g r' t
-  let qs = Map.map (r S.*) qs'
-  unless (qs `fits` snd g)
-         (throwError $ "unavailable resources:\n" ++ err qs (snd g))
+  (qs, tp) <- first (Map.map (r S.*)) <$> iType 0 g (restrict r) t
+  mapM_ (throwError . render . ("Unavailable resources:" <>) . nest 2)
+    $ errs qs (snd g)
   return tp
  where
   restrict :: ZeroOneMany -> ZeroOne
   restrict Zero = Zero'
   restrict One  = One'
   restrict Many = One'
-
-  fits :: Usage -> Context -> Bool
-  fits qs ctx =
-    all
-        (\(n, q) -> case find ((== n) . bndName) ctx of
-          Just b  -> q <: bndUsage b
-          Nothing -> False
-        )
-      $ Map.toList qs
 
 iType :: Int -> (NameEnv, Context) -> ZeroOne -> ITerm -> Result (Usage, Type)
 -- Cut:
@@ -113,8 +103,8 @@ iType ii g r (PairElim l i t) = do
         txy
       qs <-
         pure (Map.unionsWith (S.+) [qs1, qs2, qs3])
-        >>= checkLocal "pairElim, Local ii"   ii       (p S.* r') (snd gxy)
-        >>= checkLocal "pairElim, Local ii+1" (ii + 1) r'         (snd gxy)
+        >>= checkVar "pairElim, Local ii"   (bndName x) (snd gxy)
+        >>= checkVar "pairElim, Local ii+1" (bndName y) (snd gxy)
       let tl = cEval (cSubst 0 l t) (fst gxy, [])
       return (qs, tl)
     _ -> throwError "illegal pair elimination"
@@ -185,7 +175,7 @@ cType ii g r (Lam e) (VPi p ty ty') = do
               r
               (cSubst 0 (Free $ bndName x) e)
               (ty' . vfree $ bndName x)
-  checkLocal "lam" ii (bndUsage x) (snd local_g) qs
+  checkVar "lam" (bndName x) (snd local_g) qs
 -- Star:
 cType _  _ _       Star            VStar = return Map.empty
 -- Fun:
@@ -194,7 +184,7 @@ cType ii g r@Zero' (Pi _ tyt tyt') VStar = do
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
   qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
-  checkLocal "fun" ii (bndUsage x) (snd local_g) qs
+  checkVar "fun" (bndName x) (snd local_g) qs
 -- Pair:
 cType ii g r (Pair e1 e2) (VTensor p ty ty') = do
   let r' = extend r
@@ -216,7 +206,7 @@ cType ii g r@Zero' (Tensor _ tyt tyt') VStar = do
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
   qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
-  checkLocal "tensor" ii (bndUsage x) (snd local_g) qs
+  checkVar "tensor" (bndName x) (snd local_g) qs
 -- Unit:
 cType _  _ _ MUnit          VMUnitType     = return Map.empty
 -- UnitType:
@@ -237,37 +227,47 @@ cType ii g r@Zero' (With tyt tyt') VStar = do
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
   qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
-  checkLocal "with" ii (bndUsage x) (snd local_g) qs
+  checkVar "with" (bndName x) (snd local_g) qs
 -- AUnit:
 cType _ _ _ AUnit     VAUnitType = return Map.empty
 -- AUnitType:
 cType _ _ _ AUnitType VStar      = return Map.empty
 cType _ _ _ _         _          = throwError "type mismatch (cType)"
 
-checkLocal :: String -> Int -> ZeroOneMany -> Context -> Usage -> Result Usage
-checkLocal d ii r ctx qs = do
-  let (q, qs') = splitLocal ii qs
-  unless
-    (q <: r)
-    (  throwError
-    $  "unavailable resources ("
-    ++ d
-    ++ "):\n"
-    ++ "  for variable Local "
-    ++ show ii
-    ++ " : used: "
-    ++ show q
-    ++ ", available: "
-    ++ show r
-    ++ "\n"
-    ++ err qs ctx
+checkVar :: String -> Name -> Context -> Usage -> Result Usage
+checkVar loc n ctx qs = do
+  let (q, qs') = splitVar n qs
+  mapM_
+    ( throwError
+    . render
+    . (("Unavailable resources (" <> pretty loc <> "):") <>)
+    . nest 2
     )
+    (errs (Map.singleton n q) ctx)
   return qs'
  where
-  splitLocal :: Int -> Usage -> (ZeroOneMany, Usage)
-  splitLocal ii' = first (fromMaybe Zero) . Map.alterF (, Nothing) (Local ii')
+  splitVar :: Name -> Usage -> (ZeroOneMany, Usage)
+  splitVar = (first (fromMaybe Zero) .) . Map.alterF (, Nothing)
 
-err :: Usage -> Context -> String
-err qs ctx =
-  "  context: " ++ show ctx ++ "\n     used: " ++ show (Map.toList qs)
+errs :: Usage -> Context -> Maybe (Doc ann)
+errs qs ctx = Map.foldlWithKey'
+  (\es n q -> case find ((== n) . bndName) ctx of
+    Just b
+      | q <: bndUsage b -> es
+      | otherwise -> Just $ fromMaybe emptyDoc es <> hardline <> nest
+        2
+        (vsep
+          [ pretty n <+> ":" <+> pretty (bndType b)
+          , "Used"
+          <+> pretty q
+          <>  "-times, but only available"
+          <+> pretty (bndUsage b)
+          <>  "-times."
+          ]
+        )
+    Nothing -> error
+      ("internal: Unavailable " <> show n <> " used " <> show q <> "-times")
+  )
+  Nothing
+  qs
 
