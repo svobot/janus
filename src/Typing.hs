@@ -3,9 +3,7 @@
 module Typing where
 
 import           Control.Monad                  ( unless )
-import           Control.Monad.Except           ( throwError
-                                                , when
-                                                )
+import           Control.Monad.Except           ( throwError )
 import           Control.Monad.Trans            ( liftIO )
 import           Data.Bifunctor                 ( first
                                                 , second
@@ -18,8 +16,6 @@ import           Data.Text.Prettyprint.Doc
 import           Printer
 import           Rig
 import           Types
-
-import           Debug.Trace                    ( traceM )
 
 type Usage = Map.Map Name ZeroOneMany
 
@@ -49,19 +45,8 @@ iType ii g r (Ann e tyt) = do
   return (qs, ty)
 -- Var:
 iType _ g r (Free x) = case find ((== x) . bndName) (snd g) of
-  Just (Binding _ q ty) -> do
-    when (q /= extend r) $ traceM
-      (  "VAR "
-      ++ show x
-      ++ " : "
-      ++ show ty
-      ++ "\n  context: "
-      ++ show q
-      ++ "\n     used: "
-      ++ show (extend r :: ZeroOneMany)
-      )
-    return (Map.singleton x $ extend r, ty)
-  Nothing -> throwError ("unknown identifier: " ++ render (pretty $ Free x))
+  Just (Binding _ _ ty) -> return (Map.singleton x $ extend r, ty)
+  Nothing -> throwError $ render ("Variable not in scope: " <> pretty (Free x))
 -- App:
 iType ii g r (e1 :@: e2) = do
   (qs1, si) <- iType ii g r e1
@@ -76,7 +61,7 @@ iType ii g r (e1 :@: e2) = do
           qs2 <- cType ii g One' e2 ty
           return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
       return (qs, ty' $ cEval e2 (fst g, []))
-    _ -> throwError "illegal application"
+    ty -> throwError $ wrongType (" _ -> _" :: String) ty (e1 :@: e2)
 -- PairElim:
 iType ii g r (PairElim l i t) = do
   (qs1, lTy) <- iType ii g r l
@@ -107,7 +92,7 @@ iType ii g r (PairElim l i t) = do
         >>= checkVar "pairElim, Local ii+1" (bndName y) (snd gxy)
       let tl = cEval (cSubst 0 l t) (fst gxy, [])
       return (qs, tl)
-    _ -> throwError "illegal pair elimination"
+    ty -> throwError $ wrongType ("_ * _" :: String) ty (PairElim l i t)
  where
   cTypeAnn z = cType (ii + 1)
                      (second (forget . (z :)) g)
@@ -126,7 +111,7 @@ iType ii g r (MUnitElim l i t) = do
       let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
       let tl = cEval (cSubst 0 l t) (fst g, [])
       return (qs, tl)
-    _ -> throwError "illegal unit elimination"
+    ty -> throwError $ wrongType MUnitType ty (MUnitElim l i t)
  where
   cTypeAnn x = cType (ii + 1)
                      (second (forget . (x :)) g)
@@ -139,32 +124,21 @@ iType ii g r (Fst i) = do
   (qs, ty) <- iType ii g r i
   case ty of
     (VWith s _) -> return (qs, s)
-    _           -> throwError "illegal fst elimination"
+    _           -> throwError $ wrongType ("_ & _" :: String) ty (Fst i)
 -- Snd:
 iType ii g r (Snd i) = do
   (qs, ty) <- iType ii g r i
   case ty of
     (VWith _ t) -> return (qs, t . vfree $ Local ii)
-    _           -> throwError "illegal fst elimination"
-iType _ _ _ _ = throwError "type mismatch (iType)"
+    _           -> throwError $ wrongType ("_ & _" :: String) ty (Snd i)
+iType _ _ _ i@(Bound _) =
+  error $ "internal: Trying to infer type of " <> show i
 
 cType :: Int -> (NameEnv, Context) -> ZeroOne -> CTerm -> Type -> Result Usage
 -- Elim
 cType ii g r (Inf e) v = do
   (qs, v') <- iType ii g r e
-  unless
-    (quote0 v == quote0 v')
-    (  throwError
-    $  "type mismatch:\n"
-    ++ "type inferred:  "
-    ++ render (pretty $ quote0 v')
-    ++ "\n"
-    ++ "type expected:  "
-    ++ render (pretty $ quote0 v)
-    ++ "\n"
-    ++ "for expression: "
-    ++ render (pretty e)
-    )
+  unless (quote0 v == quote0 v') (throwError $ wrongType v v' e)
   return qs
 -- Lam:
 cType ii g r (Lam e) (VPi p ty ty') = do
@@ -232,7 +206,10 @@ cType ii g r@Zero' (With tyt tyt') VStar = do
 cType _ _ _ AUnit     VAUnitType = return Map.empty
 -- AUnitType:
 cType _ _ _ AUnitType VStar      = return Map.empty
-cType _ _ _ _         _          = throwError "type mismatch (cType)"
+cType _ _ _ val       ty         = throwError . render $ hardlines
+  [ "Could't match expected type" <+> squotes (pretty ty)
+  , "In the expression:" <+> pretty val
+  ]
 
 checkVar :: String -> Name -> Context -> Usage -> Result Usage
 checkVar loc n ctx qs = do
@@ -270,4 +247,11 @@ errs qs ctx = Map.foldlWithKey'
   )
   Nothing
   qs
+
+wrongType :: (Pretty a, Pretty b, Pretty c) => a -> b -> c -> String
+wrongType expected actual expr = render $ hardlines
+  [ "Couldn't match expected type" <+> squotes (pretty expected)
+  , indent 12 ("with actual type" <+> squotes (pretty actual))
+  , "In the expression:" <+> pretty expr
+  ]
 

@@ -1,16 +1,19 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Printer
-  ( render
+  ( hardlines
   , pretty
+  , render
   , renderRes
   ) where
 
+import           Data.List                      ( intersperse )
 import           Data.Text.Prettyprint.Doc      ( (<+>)
                                                 , Doc
                                                 , Pretty(pretty)
                                                 , align
                                                 , defaultLayoutOptions
+                                                , hardline
                                                 , layoutSmart
                                                 , parens
                                                 , sep
@@ -22,6 +25,9 @@ import           Types
 
 render :: Doc ann -> String
 render = renderString . layoutSmart defaultLayoutOptions
+
+hardlines :: [Doc ann] -> Doc ann
+hardlines = mconcat . intersperse hardline
 
 renderRes :: Binding (Maybe String) ZeroOneMany Type -> Value -> String
 renderRes bnd val =
