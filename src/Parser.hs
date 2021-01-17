@@ -193,7 +193,7 @@ parseLam e = do
   return (iterate Lam t !! length xs)
 
 app :: [String] -> CharParser () ITerm
-app e = foldl (:@:) <$> iTerm OApp e <*> many1 (cTerm OApp e)
+app e = foldl (:$:) <$> iTerm OApp e <*> many1 (cTerm OApp e)
 
 bind :: [String] -> CharParser () Binding
 bind e =

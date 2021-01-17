@@ -34,7 +34,7 @@ data ITerm
    =  Ann CTerm CTerm
    |  Bound Int
    |  Free Name
-   |  ITerm :@: CTerm
+   |  ITerm :$: CTerm
    |  PairElim ITerm CTerm CTerm
    |  MUnitElim ITerm CTerm CTerm
    |  Fst ITerm
@@ -110,7 +110,7 @@ iEval (Free x ) d = case lookup x (fst d) of
   Nothing -> vfree x
   Just v  -> v
 iEval (Bound ii       ) d = snd d !! ii
-iEval (i :@: c        ) d = vapp (iEval i d) (cEval c d)
+iEval (i :$: c        ) d = vapp (iEval i d) (cEval c d)
 iEval (PairElim i c c') d = case iEval i d of
   (VPair x y ) -> cEval c (second ([y, x] ++) d)
   (VNeutral n) -> VNeutral $ NPairElim
@@ -136,7 +136,7 @@ iSubst :: Int -> ITerm -> ITerm -> ITerm
 iSubst ii i' (Ann c c') = Ann (cSubst ii i' c) (cSubst ii i' c')
 iSubst ii i' (Bound j ) = if ii == j then i' else Bound j
 iSubst _  _  (Free  y ) = Free y
-iSubst ii i' (i :@: c ) = iSubst ii i' i :@: cSubst ii i' c
+iSubst ii i' (i :$: c ) = iSubst ii i' i :$: cSubst ii i' c
 iSubst ii r (PairElim i c c') =
   PairElim (iSubst ii r i) (cSubst (ii + 2) r c) (cSubst (ii + 1) r c')
 iSubst ii r (MUnitElim i c c') =
@@ -181,7 +181,7 @@ quote _ VAUnitType = AUnitType
 
 neutralQuote :: Int -> Neutral -> ITerm
 neutralQuote ii (NFree v         ) = boundfree ii v
-neutralQuote ii (NApp n v        ) = neutralQuote ii n :@: quote ii v
+neutralQuote ii (NApp n v        ) = neutralQuote ii n :$: quote ii v
 neutralQuote ii (NPairElim n v v') = PairElim
   (neutralQuote ii n)
   (quote (ii + 2) $ v (vfree $ Quote ii) (vfree $ Quote (ii + 1)))

@@ -53,7 +53,7 @@ iType _ g r (Free x) = case find ((== x) . bndName) (snd g) of
   Nothing ->
     throwError $ renderErr ("Variable not in scope: " <> prettyAnsi (Free x))
 -- App:
-iType ii g r (e1 :@: e2) = do
+iType ii g r (e1 :$: e2) = do
   (qs1, si) <- iType ii g r e1
   case si of
     VPi p ty ty' -> do
@@ -66,7 +66,7 @@ iType ii g r (e1 :@: e2) = do
           qs2 <- cType ii g One' e2 ty
           return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
       return (qs, ty' $ cEval e2 (fst g, []))
-    ty -> throwError $ wrongType (" _ -> _" :: Text) ty (e1 :@: e2)
+    ty -> throwError $ wrongType (" _ -> _" :: Text) ty (e1 :$: e2)
 -- PairElim:
 iType ii g r (PairElim l i t) = do
   (qs1, lTy) <- iType ii g r l

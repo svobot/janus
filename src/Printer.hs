@@ -89,7 +89,7 @@ iPrint p ii (Ann c ty) =
   parensIf (p > 1) (cPrint 2 ii c <+> ":" <+> cPrint 0 ii ty)
 iPrint _ ii (Bound k) = var (ii - k - 1)
 iPrint _ _  (Free  n) = pretty n
-iPrint p ii (i :@: c) =
+iPrint p ii (i :$: c) =
   parensIf (p > 2) (align $ sep [iPrint 2 ii i, cPrint 3 ii c])
 iPrint p ii (PairElim l i t) = parensIf
   (p > 0)
