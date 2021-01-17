@@ -12,7 +12,11 @@ import           Data.List                      ( find )
 import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe )
 import qualified Data.Semiring                 as S
+import           Data.Text                      ( Text )
+import qualified Data.Text.IO                  as T
 import           Data.Text.Prettyprint.Doc
+import           Data.Text.Prettyprint.Doc.Render.Terminal
+                                                ( AnsiStyle )
 import           Printer
 import           Rig
 import           Types
@@ -21,13 +25,13 @@ type Usage = Map.Map Name ZeroOneMany
 
 iinfer :: (NameEnv, Context) -> ZeroOneMany -> ITerm -> Repl (Maybe Type)
 iinfer g r t = case iType0 g r t of
-  Left  e -> liftIO $ putStrLn e >> return Nothing
+  Left  e -> liftIO $ T.putStrLn e >> return Nothing
   Right v -> return (Just v)
 
 iType0 :: (NameEnv, Context) -> ZeroOneMany -> ITerm -> Result Type
 iType0 g r t = do
   (qs, tp) <- first (Map.map (r S.*)) <$> iType 0 g (restrict r) t
-  mapM_ (throwError . render . ("Unavailable resources:" <>) . nest 2)
+  mapM_ (throwError . renderErr . ("Unavailable resources:" <>) . nest 2)
     $ errs qs (snd g)
   return tp
  where
@@ -46,7 +50,8 @@ iType ii g r (Ann e tyt) = do
 -- Var:
 iType _ g r (Free x) = case find ((== x) . bndName) (snd g) of
   Just (Binding _ _ ty) -> return (Map.singleton x $ extend r, ty)
-  Nothing -> throwError $ render ("Variable not in scope: " <> pretty (Free x))
+  Nothing ->
+    throwError $ renderErr ("Variable not in scope: " <> prettyAnsi (Free x))
 -- App:
 iType ii g r (e1 :@: e2) = do
   (qs1, si) <- iType ii g r e1
@@ -61,7 +66,7 @@ iType ii g r (e1 :@: e2) = do
           qs2 <- cType ii g One' e2 ty
           return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
       return (qs, ty' $ cEval e2 (fst g, []))
-    ty -> throwError $ wrongType (" _ -> _" :: String) ty (e1 :@: e2)
+    ty -> throwError $ wrongType (" _ -> _" :: Text) ty (e1 :@: e2)
 -- PairElim:
 iType ii g r (PairElim l i t) = do
   (qs1, lTy) <- iType ii g r l
@@ -92,7 +97,7 @@ iType ii g r (PairElim l i t) = do
         >>= checkVar "pairElim, Local ii+1" (bndName y) (snd gxy)
       let tl = cEval (cSubst 0 l t) (fst gxy, [])
       return (qs, tl)
-    ty -> throwError $ wrongType ("_ * _" :: String) ty (PairElim l i t)
+    ty -> throwError $ wrongType ("_ * _" :: Text) ty (PairElim l i t)
  where
   cTypeAnn z = cType (ii + 1)
                      (second (forget . (z :)) g)
@@ -124,13 +129,13 @@ iType ii g r (Fst i) = do
   (qs, ty) <- iType ii g r i
   case ty of
     (VWith s _) -> return (qs, s)
-    _           -> throwError $ wrongType ("_ & _" :: String) ty (Fst i)
+    _           -> throwError $ wrongType ("_ & _" :: Text) ty (Fst i)
 -- Snd:
 iType ii g r (Snd i) = do
   (qs, ty) <- iType ii g r i
   case ty of
     (VWith _ t) -> return (qs, t . vfree $ Local ii)
-    _           -> throwError $ wrongType ("_ & _" :: String) ty (Snd i)
+    _           -> throwError $ wrongType ("_ & _" :: Text) ty (Snd i)
 iType _ _ _ i@(Bound _) =
   error $ "internal: Trying to infer type of " <> show i
 
@@ -206,9 +211,9 @@ cType ii g r@Zero' (With tyt tyt') VStar = do
 cType _ _ _ AUnit     VAUnitType = return Map.empty
 -- AUnitType:
 cType _ _ _ AUnitType VStar      = return Map.empty
-cType _ _ _ val       ty         = throwError . render $ hardlines
-  [ "Could't match expected type" <+> squotes (pretty ty)
-  , "In the expression:" <+> pretty val
+cType _ _ _ val       ty         = throwError . renderErr $ hardlines
+  [ "Could't match expected type" <+> squotes (prettyAnsi ty)
+  , "In the expression:" <+> prettyAnsi val
   ]
 
 checkVar :: String -> Name -> Context -> Usage -> Result Usage
@@ -216,7 +221,7 @@ checkVar loc n ctx qs = do
   let (q, qs') = splitVar n qs
   mapM_
     ( throwError
-    . render
+    . renderErr
     . (("Unavailable resources (" <> pretty loc <> "):") <>)
     . nest 2
     )
@@ -226,7 +231,7 @@ checkVar loc n ctx qs = do
   splitVar :: Name -> Usage -> (ZeroOneMany, Usage)
   splitVar = (first (fromMaybe Zero) .) . Map.alterF (, Nothing)
 
-errs :: Usage -> Context -> Maybe (Doc ann)
+errs :: Usage -> Context -> Maybe (Doc AnsiStyle)
 errs qs ctx = Map.foldlWithKey'
   (\es n q -> case find ((== n) . bndName) ctx of
     Just b
@@ -234,11 +239,11 @@ errs qs ctx = Map.foldlWithKey'
       | otherwise -> Just $ fromMaybe emptyDoc es <> hardline <> nest
         2
         (vsep
-          [ pretty n <+> ":" <+> pretty (bndType b)
+          [ pretty n <+> ":" <+> prettyAnsi (bndType b)
           , "Used"
-          <+> pretty q
-          <>  "-times, but only available"
-          <+> pretty (bndUsage b)
+          <+> prettyAnsi q
+          <>  "-times, but available"
+          <+> prettyAnsi (bndUsage b)
           <>  "-times."
           ]
         )
@@ -248,10 +253,10 @@ errs qs ctx = Map.foldlWithKey'
   Nothing
   qs
 
-wrongType :: (Pretty a, Pretty b, Pretty c) => a -> b -> c -> String
-wrongType expected actual expr = render $ hardlines
-  [ "Couldn't match expected type" <+> squotes (pretty expected)
-  , indent 12 ("with actual type" <+> squotes (pretty actual))
-  , "In the expression:" <+> pretty expr
+wrongType :: (PrettyAnsi a, PrettyAnsi b, PrettyAnsi c) => a -> b -> c -> Text
+wrongType expected actual expr = renderErr $ hardlines
+  [ "Couldn't match expected type" <+> squotes (prettyAnsi expected)
+  , indent 12 ("with actual type" <+> squotes (prettyAnsi actual))
+  , "In the expression:" <+> prettyAnsi expr
   ]
 

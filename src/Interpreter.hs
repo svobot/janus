@@ -17,7 +17,6 @@ import           Control.Monad.State            ( MonadIO
                                                 , liftIO
                                                 , modify
                                                 , unless
-                                                , void
                                                 )
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhileEnd
@@ -25,6 +24,8 @@ import           Data.List                      ( dropWhileEnd
                                                 , isPrefixOf
                                                 , nub
                                                 )
+import qualified Data.Text                     as T
+import qualified Data.Text.IO                  as T
 import           Parser                         ( Stmt(..) )
 import qualified Parser                        as Parse
 import           Printer
@@ -131,7 +132,7 @@ typeOf x = do
   x' <- Parse.parseIO "<interactive>" (Parse.iTerm Parse.OITerm []) x
   (_, _, ve, te) <- get
   t <- maybe (return Nothing) (iinfer (ve, te) Zero) x'
-  liftIO $ mapM_ (putStrLn . render . pretty) t
+  liftIO $ mapM_ (T.putStrLn . render . prettyAnsi) t
 
 browse :: Cmd Repl
 browse _ = do
@@ -147,7 +148,7 @@ compileFile f = do
     . dropWhileEnd isSpace
     $ f
   case x' of
-    Left  e -> void (liftIO $ print e)
+    Left  e -> liftIO $ print e
     Right x -> Parse.file f x >>= mapM_ (mapM_ handleStmt)
 
 handleStmt :: Stmt -> Repl ()
@@ -155,7 +156,7 @@ handleStmt stmt = case stmt of
   Assume ass -> mapM_ lpassume ass
   Let q x e  -> checkEval q (Just x) e
   Eval     e -> checkEval One Nothing e
-  PutStrLn x -> void (liftIO $ putStrLn x)
+  PutStrLn x -> liftIO $ putStrLn x
   Out      f -> modify $ \(inter, _, ve, te) -> (inter, f, ve, te)
  where
   check :: ZeroOneMany -> ITerm -> ((Value, Type) -> Repl ()) -> Repl ()
@@ -171,13 +172,13 @@ handleStmt stmt = case stmt of
     t
     (\(val, ty) -> do
       let outtext = renderRes (Binding mi q ty) val
-      liftIO . putStrLn $ outtext
+      liftIO . T.putStrLn $ outtext
       (_, out, _, _) <- get
       unless
         (null out)
         (do
-          let process = unlines . map ("< " ++) . lines
-          liftIO . writeFile out $ process outtext
+          let process = T.unlines . map ("< " <>) . T.lines
+          liftIO . T.writeFile out $ process outtext
           modify $ \(i, _, ve, te) -> (i, "", ve, te)
         )
       mapM_
@@ -192,7 +193,7 @@ handleStmt stmt = case stmt of
     Zero
     (Ann t Star)
     (\(val, _) -> do
-      liftIO . putStrLn $ renderRes (Binding Nothing q val) (vfree $ Global x)
+      liftIO . T.putStrLn $ renderRes (Binding Nothing q val) (vfree $ Global x)
       modify $ \(inter, out, ve, te) ->
         (inter, out, ve, Binding (Global x) q val : te)
       return ()
