@@ -85,6 +85,8 @@ type Env = [Value]
 vapp :: Value -> Value -> Value
 vapp (VLam     f) v = f v
 vapp (VNeutral n) v = VNeutral (NApp n v)
+vapp v v' =
+  error ("internal: Unable to apply " <> show v <> " to the value " <> show v')
 
 vfree :: Name -> Value
 vfree n = VNeutral (NFree n)
@@ -117,20 +119,24 @@ iEval (PairElim i c c') d = case iEval i d of
     n
     (\x y -> cEval c $ second ([y, x] ++) d)
     (\z -> cEval c' $ second (z :) d)
-  _ -> error "internal" -- TODO: Fail gracefully?
+  v -> error
+    ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
 iEval (MUnitElim i c c') d = case iEval i d of
   VMUnit -> cEval c (second (VMUnit :) d)
   (VNeutral n) ->
     VNeutral $ NMUnitElim n (cEval c d) (\x -> cEval c' $ second (x :) d)
-  _ -> error "internal" -- TODO: Fail gracefully?
+  v -> error
+    ("internal: Unable to eliminate " <> show v <> ", because it is not a unit")
 iEval (Fst i) d = case iEval i d of
   (VAngles x _) -> x
   (VNeutral n ) -> VNeutral $ NFst n
-  _             -> error "internal"
+  v             -> error
+    ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
 iEval (Snd i) d = case iEval i d of
   (VAngles _ y) -> y
   (VNeutral n ) -> VNeutral $ NSnd n
-  _             -> error "internal"
+  v             -> error
+    ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
 
 iSubst :: Int -> ITerm -> ITerm -> ITerm
 iSubst ii i' (Ann c c') = Ann (cSubst ii i' c) (cSubst ii i' c')
