@@ -70,7 +70,7 @@ byWord :: (Monad m, MonadState IState m) => WordCompleter m
 byWord n = do
   (_, _, _, te) <- get
   let scope = [ s | Global s <- reverse . nub $ map bndName te ]
-  return . filter (n `isPrefixOf`) $ scope
+  return . filter (n `isPrefixOf`) $ scope ++ Parse.keywords
 
 options :: [CmdInfo] -> [(String, Cmd Repl)]
 options = concatMap $ traverse (,) <$> cmdNames <*> cmdAction

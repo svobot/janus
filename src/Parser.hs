@@ -4,6 +4,7 @@ module Parser
   , Stmt(..)
   , file
   , iTerm
+  , keywords
   , parseIO
   , stmt
   ) where
@@ -22,21 +23,24 @@ import qualified Types                         as T
 
 lambdaPi :: P.TokenParser u
 lambdaPi = P.makeTokenParser
-  (haskellStyle
-    { P.identStart    = letter <|> char '_'
-    , P.reservedNames = [ "forall"
-                        , "let"
-                        , "assume"
-                        , "putStrLn"
-                        , "out"
-                        , "in"
-                        , "MUnit"
-                        , "Fst"
-                        , "Snd"
-                        , "AUnit"
-                        ]
-    }
+  (haskellStyle { P.identStart    = letter <|> char '_'
+                , P.reservedNames = keywords
+                }
   )
+
+keywords :: [String]
+keywords =
+  [ "forall"
+  , "let"
+  , "assume"
+  , "putStrLn"
+  , "out"
+  , "in"
+  , "MUnit"
+  , "Fst"
+  , "Snd"
+  , "AUnit"
+  ]
 
 identifier :: CharParser () String
 identifier = P.identifier lambdaPi
