@@ -31,9 +31,10 @@ dependencies:
 - semirings
 - text
 
+default-extensions: OverloadedStrings
+
 library:
   source-dirs: src
-  default-extensions: OverloadedStrings
   ghc-options:
     - -Wall
     - -Wincomplete-uni-patterns

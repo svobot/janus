@@ -2,7 +2,12 @@ module TypeSpec
   ( spec
   ) where
 
-import           Control.Monad                  ( foldM )
+import           Data.Text                      ( unpack )
+import           Data.Text.Prettyprint.Doc      ( (<+>)
+                                                , hardline
+                                                , nest
+                                                )
+import           Printer
 import           Rig
 import           Test.Hspec
 import           Types
@@ -21,8 +26,8 @@ succTests =
     )
     One
     (   Ann (Lam . Lam $ ib 0) (Pi Zero Star $ Pi One (ib 0) (ib 1))
-    :@: ifg "a"
-    :@: ifg "x"
+    :$: ifg "a"
+    :$: ifg "x"
     )
     (ifg "a")
   , SuccTest
@@ -33,7 +38,6 @@ succTests =
       ]
     )
     Zero
-    -- TODO: Should work too?: (PairElim (Ann (Pair (ifg "a") (ifg "x")) (TensPr Zero Star (ib 0)))
     (PairElim (Ann (Pair (ifg "a") (ifg "x")) (Tensor Zero Star (ifg "a")))
               (ib 0)
               (ifg "a")
@@ -47,8 +51,18 @@ succTests =
 
 succTestSpec :: SuccTest -> SpecWith ()
 succTestSpec (SuccTest d g q i t) =
-  it d $ (quote0 <$> iType0 g q i) `shouldBe` Right t
+  it
+      (   (d <>)
+      .   unpack
+      .   render
+      .   nest 4
+      $   hardline
+      <>  prettyAnsi q
+      <+> prettyAnsi (Ann (Inf i) t)
+      )
+    $          (quote0 <$> iType0 g q i)
+    `shouldBe` Right t
 
 spec :: Spec
-spec = foldM (const succTestSpec) () succTests
+spec = mapM_ succTestSpec succTests
 
