@@ -1,27 +1,22 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Printer
-  ( hardlines
+  ( PrettyAnsi
+  , (<+>)
+  , addAnn
+  , hardlines
+  , multAnn
   , render
   , renderErr
   , renderRes
-  , PrettyAnsi
   , prettyAnsi
   ) where
 
-import           Data.List                      ( intersperse )
-import           Data.Text                      ( Text )
-import           Data.Text.Prettyprint.Doc      ( (<+>)
-                                                , Doc
-                                                , Pretty(pretty)
-                                                , align
-                                                , annotate
-                                                , defaultLayoutOptions
-                                                , hardline
-                                                , layoutSmart
-                                                , parens
-                                                , sep
+import           Data.List                      ( foldl'
+                                                , intersperse
                                                 )
+import           Data.Text                      ( Text )
+import           Data.Text.Prettyprint.Doc
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal
                                                as Term
 import           Rig                            ( ZeroOneMany(..) )
@@ -47,6 +42,32 @@ instance PrettyAnsi ZeroOneMany where
   prettyAnsi Zero = annotate (Term.color Term.Magenta <> Term.bold) "0"
   prettyAnsi One  = annotate (Term.color Term.Magenta <> Term.bold) "1"
   prettyAnsi Many = annotate (Term.color Term.Magenta <> Term.bold) "w"
+
+instance PrettyAnsi TypeError where
+  prettyAnsi (MultiplicityError loc es) =
+    "Unavailable resources"
+      <> maybe emptyDoc ((" " <>) . parens . pretty) loc
+      <> ":"
+      <> nest 2 (foldl' (\doc e -> doc <> hardline <> errInfo e) emptyDoc es)
+   where
+    errInfo (n, ty, used, avail) = nest 2 $ vsep
+      [ pretty n <+> ":" <+> prettyAnsi ty
+      , "Used"
+      <+> prettyAnsi used
+      <>  "-times, but available"
+      <+> prettyAnsi avail
+      <>  "-times."
+      ]
+  prettyAnsi (WrongInference expected actual expr) = hardlines
+    [ "Couldn't match expected type" <+> squotes expected
+    , indent 12 ("with actual type" <+> squotes (prettyAnsi actual))
+    , "In the expression:" <+> prettyAnsi expr
+    ]
+  prettyAnsi (WrongCheck ty expr) = hardlines
+    [ "Could't match expected type" <+> squotes (prettyAnsi ty)
+    , "In the expression:" <+> prettyAnsi expr
+    ]
+  prettyAnsi (UnknownVar n) = "Variable not in scope: " <> prettyAnsi (Free n)
 
 render :: Doc Term.AnsiStyle -> Text
 render = Term.renderStrict . layoutSmart defaultLayoutOptions

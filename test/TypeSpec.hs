@@ -2,9 +2,9 @@ module TypeSpec
   ( spec
   ) where
 
+import           Data.Bifunctor                 ( first )
 import           Data.Text                      ( unpack )
-import           Data.Text.Prettyprint.Doc      ( (<+>)
-                                                , hardline
+import           Data.Text.Prettyprint.Doc      ( hardline
                                                 , nest
                                                 )
 import           Printer
@@ -43,6 +43,25 @@ succTests =
               (ifg "a")
     )
     (ifg "a")
+  , SuccTest
+    "Additive value duplication"
+    ( []
+    , [ Binding (Global "a") Zero VStar
+      , Binding (Global "x") Zero (VNeutral . NFree $ Global "a")
+      ]
+    )
+    One
+    (Ann
+      (Lam (Pair (Inf (Fst (Bound 0))) (Inf (Snd (Bound 0)))))
+      (Pi Many
+          (With (Inf (Free (Global "a"))) (Inf (Free (Global "a"))))
+          (Tensor One (Inf (Free (Global "a"))) (Inf (Free (Global "a"))))
+      )
+    )
+    (Pi Many
+        (With (Inf (Free (Global "a"))) (Inf (Free (Global "a"))))
+        (Tensor One (Inf (Free (Global "a"))) (Inf (Free (Global "a"))))
+    )
   ]
  where
   fg  = Free . Global
@@ -60,7 +79,7 @@ succTestSpec (SuccTest d g q i t) =
       <>  prettyAnsi q
       <+> prettyAnsi (Ann (Inf i) t)
       )
-    $          (quote0 <$> iType0 g q i)
+    $          first (render . prettyAnsi) (quote0 <$> iType0 g q i)
     `shouldBe` Right t
 
 spec :: Spec

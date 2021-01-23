@@ -2,7 +2,9 @@ module Types where
 
 import           Control.Monad.State            ( StateT )
 import           Data.Bifunctor                 ( second )
-import           Data.Text                      ( Text )
+import           Data.Text.Prettyprint.Doc      ( Doc )
+import           Data.Text.Prettyprint.Doc.Render.Terminal
+                                                ( AnsiStyle )
 import           Rig
 import           System.Console.Repline         ( HaskelineT )
 
@@ -76,7 +78,13 @@ data Binding n u t = Binding
 instance (Show n, Show u, Show t) => Show (Binding n u t) where
   show (Binding n u t) = show u <> " " <> show n <> " : " <> show t
 
-type Result a = Either Text a
+data TypeError
+   =  MultiplicityError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
+   |  WrongInference (Doc AnsiStyle) Type ITerm
+   |  WrongCheck Type CTerm
+   |  UnknownVar Name
+
+type Result a = Either TypeError a
 type Type = Value
 type Context = [Binding Name ZeroOneMany Type]
 type NameEnv = [(Name, Value)]
