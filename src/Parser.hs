@@ -152,7 +152,7 @@ cTerm b e =
        ]
     ++ [ Inf <$> iTerm b e | b /= OStale ]
  where
-  star = Star <$ reserved "*"
+  star = Universe <$ reserved "U"
   fun  = do
     T.Binding e' q t <- try $ bind e <* reservedOp "->"
     p                <- cTerm OCTerm (e' : e)

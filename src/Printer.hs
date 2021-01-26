@@ -151,7 +151,7 @@ cPrint :: Int -> Int -> CTerm -> Doc Term.AnsiStyle
 cPrint p ii (Inf i) = iPrint p ii i
 cPrint p ii (Lam c) =
   parensIf (p > 0) ("λ" <> varAnn ii <> "." <+> cPrint 0 (ii + 1) c)
-cPrint _ _ Star = "*"
+cPrint _ _ Universe = "U"
 cPrint p ii (Pi q d (Pi q' d' r)) =
   parensIf (p > 0) (nestedForall (ii + 2) [(q', ii + 1, d'), (q, ii, d)] r)
 cPrint p ii (Pi q d r) = parensIf

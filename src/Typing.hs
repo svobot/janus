@@ -38,7 +38,7 @@ iType0 g r t = do
 iType :: Int -> (NameEnv, Context) -> ZeroOne -> ITerm -> Result (Usage, Type)
 -- Cut:
 iType ii g r (Ann e tyt) = do
-  _ <- cType ii (second forget g) Zero' tyt VStar
+  _ <- cType ii (second forget g) Zero' tyt VUniverse
   let ty = cEval tyt (fst g, [])
   qs <- cType ii g r e ty
   return (qs, ty)
@@ -98,7 +98,7 @@ iType ii g r (PairElim l i t) = do
                      (second (forget . (z :)) g)
                      Zero'
                      (cSubst 0 (Free $ bndName z) t)
-                     VStar
+                     VUniverse
   cTypeIn gxy ixy txy = cType (ii + 2) gxy r ixy txy
 -- UnitElim:
 iType ii g r (MUnitElim l i t) = do
@@ -118,7 +118,7 @@ iType ii g r (MUnitElim l i t) = do
                      (second (forget . (x :)) g)
                      Zero'
                      (cSubst 0 (Free $ bndName x) t)
-                     VStar
+                     VUniverse
   cTypeIn tu = cType ii g r i tu
 -- Fst:
 iType ii g r (Fst i) = do
@@ -152,14 +152,14 @@ cType ii g r (Lam e) (VPi p ty ty') = do
               (cSubst 0 (Free $ bndName x) e)
               (ty' . vfree $ bndName x)
   checkVar "lam" (bndName x) (snd local_g) qs
--- Star:
-cType _  _ _       Star            VStar = return Map.empty
+-- Universe:
+cType _  _ _       Universe        VUniverse = return Map.empty
 -- Fun:
-cType ii g r@Zero' (Pi _ tyt tyt') VStar = do
-  _ <- cType ii (second forget g) r tyt VStar
+cType ii g r@Zero' (Pi _ tyt tyt') VUniverse = do
+  _ <- cType ii (second forget g) r tyt VUniverse
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
-  qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
+  qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VUniverse
   checkVar "fun" (bndName x) (snd local_g) qs
 -- Pair:
 cType ii g r (Pair e1 e2) (VTensor p ty ty') = do
@@ -177,16 +177,16 @@ cType ii g r (Pair e1 e2) (VTensor p ty ty') = do
     let e1v = cEval e1 (fst g, [])
     cType ii g r e2 (ty' e1v)
 -- Tensor:
-cType ii g r@Zero' (Tensor _ tyt tyt') VStar = do
-  _ <- cType ii (second forget g) r tyt VStar
+cType ii g r@Zero' (Tensor _ tyt tyt') VUniverse = do
+  _ <- cType ii (second forget g) r tyt VUniverse
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
-  qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
+  qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VUniverse
   checkVar "tensor" (bndName x) (snd local_g) qs
 -- Unit:
 cType _  _ _ MUnit          VMUnitType     = return Map.empty
 -- UnitType:
-cType _  _ _ MUnitType      VStar          = return Map.empty
+cType _  _ _ MUnitType      VUniverse      = return Map.empty
 -- Angles:
 cType ii g r (Angles e1 e2) (VWith ty ty') = do
   qs1 <- cType ii g r e1 ty
@@ -198,16 +198,16 @@ cType ii g r (Angles e1 e2) (VWith ty ty') = do
   combine One  One  = One
   combine _    _    = Many
 -- With:
-cType ii g r@Zero' (With tyt tyt') VStar = do
-  _ <- cType ii (second forget g) r tyt VStar
+cType ii g r@Zero' (With tyt tyt') VUniverse = do
+  _ <- cType ii (second forget g) r tyt VUniverse
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
-  qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VStar
+  qs <- cType (ii + 1) local_g r (cSubst 0 (Free $ bndName x) tyt') VUniverse
   checkVar "with" (bndName x) (snd local_g) qs
 -- AUnit:
 cType _ _ _ AUnit     VAUnitType = return Map.empty
 -- AUnitType:
-cType _ _ _ AUnitType VStar      = return Map.empty
+cType _ _ _ AUnitType VUniverse  = return Map.empty
 cType _ _ _ val       ty         = throwError $ WrongCheck ty val
 
 checkVar :: String -> Name -> Context -> Usage -> Result Usage

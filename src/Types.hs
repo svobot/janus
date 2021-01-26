@@ -20,7 +20,7 @@ data Name
 data CTerm
    =  Inf ITerm
    |  Lam CTerm
-   |  Star
+   |  Universe
    |  Pi ZeroOneMany CTerm CTerm
    |  Pair CTerm CTerm
    |  Tensor ZeroOneMany CTerm CTerm
@@ -45,7 +45,7 @@ data ITerm
 
 data Value
    =  VLam (Value -> Value)
-   |  VStar
+   |  VUniverse
    |  VPi ZeroOneMany Value (Value -> Value)
    |  VNeutral Neutral
    |  VPair Value Value
@@ -102,7 +102,7 @@ vfree n = VNeutral (NFree n)
 cEval :: CTerm -> (NameEnv, Env) -> Value
 cEval (Inf ii)      d = iEval ii d
 cEval (Lam c )      d = VLam (\x -> cEval c $ second (x :) d)
-cEval Star          _ = VStar
+cEval Universe      _ = VUniverse
 cEval (Pi p ty ty') d = VPi p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
 cEval (Pair c c'  ) d = VPair (cEval c d) (cEval c' d)
 cEval (Tensor p ty ty') d =
@@ -161,7 +161,7 @@ iSubst ii r (Snd i) = Snd (iSubst ii r i)
 cSubst :: Int -> ITerm -> CTerm -> CTerm
 cSubst ii i' (Inf i)       = Inf (iSubst ii i' i)
 cSubst ii i' (Lam c)       = Lam (cSubst (ii + 1) i' c)
-cSubst _  _  Star          = Star
+cSubst _  _  Universe      = Universe
 cSubst ii r  (Pi p ty ty') = Pi p (cSubst ii r ty) (cSubst (ii + 1) r ty')
 cSubst ii r  (Pair c c'  ) = Pair (cSubst ii r c) (cSubst ii r c')
 cSubst ii r (Tensor p ty ty') =
@@ -177,8 +177,8 @@ quote0 :: Value -> CTerm
 quote0 = quote 0
 
 quote :: Int -> Value -> CTerm
-quote ii (VLam t) = Lam (quote (ii + 1) (t . vfree $ Quote ii))
-quote _  VStar    = Star
+quote ii (VLam t)  = Lam (quote (ii + 1) (t . vfree $ Quote ii))
+quote _  VUniverse = Universe
 quote ii (VPi p v f) =
   Pi p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
 quote ii (VNeutral n) = Inf $ neutralQuote ii n

@@ -191,7 +191,7 @@ handleStmt stmt = case stmt of
   lpassume :: Parse.Binding -> Repl ()
   lpassume (Binding x q t) = check
     Zero
-    (Ann t Star)
+    (Ann t Universe)
     (\(val, _) -> do
       liftIO . T.putStrLn $ renderRes (Binding Nothing q val) (vfree $ Global x)
       modify $ \(inter, out, ve, te) ->

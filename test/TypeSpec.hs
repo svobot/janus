@@ -20,12 +20,12 @@ succTests =
   [ SuccTest
     "Identity application"
     ( []
-    , [ Binding (Global "a") Zero VStar
+    , [ Binding (Global "a") Zero VUniverse
       , Binding (Global "x") One  (VNeutral . NFree $ Global "a")
       ]
     )
     One
-    (   Ann (Lam . Lam $ ib 0) (Pi Zero Star $ Pi One (ib 0) (ib 1))
+    (   Ann (Lam . Lam $ ib 0) (Pi Zero Universe $ Pi One (ib 0) (ib 1))
     :$: ifg "a"
     :$: ifg "x"
     )
@@ -33,20 +33,21 @@ succTests =
   , SuccTest
     "Dependent pair snd projection"
     ( []
-    , [ Binding (Global "a") Zero VStar
+    , [ Binding (Global "a") Zero VUniverse
       , Binding (Global "x") Zero (VNeutral . NFree $ Global "a")
       ]
     )
     Zero
-    (PairElim (Ann (Pair (ifg "a") (ifg "x")) (Tensor Zero Star (ifg "a")))
-              (ib 0)
-              (ifg "a")
+    (PairElim
+      (Ann (Pair (ifg "a") (ifg "x")) (Tensor Zero Universe (ifg "a")))
+      (ib 0)
+      (ifg "a")
     )
     (ifg "a")
   , SuccTest
     "Additive value duplication"
     ( []
-    , [ Binding (Global "a") Zero VStar
+    , [ Binding (Global "a") Zero VUniverse
       , Binding (Global "x") Zero (VNeutral . NFree $ Global "a")
       ]
     )
