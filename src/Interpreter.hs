@@ -24,6 +24,7 @@ import           Data.List                      ( dropWhileEnd
                                                 , isPrefixOf
                                                 , nub
                                                 )
+import           Data.Maybe                     ( isNothing )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
 import           Parser                         ( Stmt(..) )
@@ -46,7 +47,7 @@ data CmdInfo = CmdInfo
 compilePhrase :: Cmd Repl
 compilePhrase x = do
   x' <- Parse.parseIO "<interactive>" (Parse.stmt []) x
-  maybe (return ()) handleStmt x'
+  mapM_ handleStmt x'
 
 -- Prefix tab completeter
 defaultMatcher
@@ -153,49 +154,45 @@ compileFile f = do
 
 handleStmt :: Stmt -> Repl ()
 handleStmt stmt = case stmt of
-  Assume ass -> mapM_ lpassume ass
+  Assume bs  -> mapM_ assume bs
   Let q x e  -> checkEval q (Just x) e
   Eval     e -> checkEval One Nothing e
   PutStrLn x -> liftIO $ putStrLn x
   Out      f -> modify $ \(inter, _, ve, te) -> (inter, f, ve, te)
  where
-  check :: ZeroOneMany -> ITerm -> ((Value, Type) -> Repl ()) -> Repl ()
-  check q t kp = do
-    --  typecheck and evaluate
-    (_, _, ve, te) <- get
-    x              <- iinfer (ve, te) q t
-    mapM_ (kp . (iEval t (ve, []), )) x
-
   checkEval :: ZeroOneMany -> Maybe String -> ITerm -> Repl ()
-  checkEval q mi t = check
-    q
-    t
-    (\(val, ty) -> do
-      let outtext = renderRes (Binding mi q ty) val
-      liftIO . T.putStrLn $ outtext
-      (_, out, _, _) <- get
-      unless
-        (null out)
-        (do
-          let process = T.unlines . map ("< " <>) . T.lines
-          liftIO . T.writeFile out $ process outtext
-          modify $ \(i, _, ve, te) -> (i, "", ve, te)
-        )
-      mapM_
-        (\i -> modify $ \(inter, o, ve, te) ->
-          (inter, o, (Global i, val) : ve, Binding (Global i) q ty : te)
-        )
-        mi
-    )
+  checkEval q mi t = do
+    (_, _, ve, te) <- get
+    mty            <- iinfer (ve, te) q t
+    mapM_
+      (\ty -> do
+        let val     = iEval t (ve, [])
+        let outtext = renderRes (Binding mi q ty) val
+        liftIO . T.putStrLn $ outtext
+        (_, out, _, _) <- get
+        unless
+          (null out)
+          (do
+            let process = T.unlines . map ("< " <>) . T.lines
+            liftIO . T.writeFile out $ process outtext
+            modify $ \(i, _, ve, te) -> (i, "", ve, te)
+          )
+        mapM_
+          (\i -> modify $ \(inter, o, ve, te) ->
+            (inter, o, (Global i, val) : ve, Binding (Global i) q ty : te)
+          )
+          mi
+      )
+      mty
 
-  lpassume :: Parse.Binding -> Repl ()
-  lpassume (Binding x q t) = check
-    Zero
-    (Ann t Universe)
-    (\(val, _) -> do
+  assume :: Parse.Binding -> Repl ()
+  assume (Binding x q t) = do
+    let annt = Ann t Universe
+    (_, _, ve, te) <- get
+    mty            <- iinfer (ve, te) Zero annt
+    unless (isNothing mty) $ do
+      let val = iEval annt (ve, [])
       liftIO . T.putStrLn $ renderRes (Binding Nothing q val) (vfree $ Global x)
       modify $ \(inter, out, ve, te) ->
         (inter, out, ve, Binding (Global x) q val : te)
-      return ()
-    )
 
