@@ -9,6 +9,7 @@ module Printer
   , render
   , renderErr
   , renderRes
+  , renderTest
   , prettyAnsi
   ) where
 
@@ -17,6 +18,8 @@ import           Data.List                      ( foldl'
                                                 )
 import           Data.Text                      ( Text )
 import           Data.Text.Prettyprint.Doc
+import           Data.Text.Prettyprint.Doc.Render.String
+                                                ( renderString )
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal
                                                as Term
 import           Rig                            ( ZeroOneMany(..) )
@@ -69,6 +72,9 @@ instance PrettyAnsi TypeError where
     ]
   prettyAnsi (UnknownVar n) = "Variable not in scope: " <> prettyAnsi (Free n)
 
+instance Show TypeError where
+  show = renderString . layoutPretty (LayoutOptions Unbounded) . prettyAnsi
+
 render :: Doc Term.AnsiStyle -> Text
 render = Term.renderStrict . layoutSmart defaultLayoutOptions
 
@@ -82,15 +88,20 @@ renderErr =
 hardlines :: [Doc ann] -> Doc ann
 hardlines = mconcat . intersperse hardline
 
-renderRes :: Binding (Maybe String) ZeroOneMany Type -> Value -> Text
-renderRes bnd val = render . (assign <>) . align $ sep ann
+renderBinding
+  :: Maybe String -> Binding Value ZeroOneMany Type -> Doc Term.AnsiStyle
+renderBinding name (Binding val q ty) = (assign <>) . align $ sep ann
  where
-  ann =
-    [ prettyAnsi (bndUsage bnd) <+> prettyAnsi val
-    , ":" <+> prettyAnsi (bndType bnd)
-    ]
-  assign =
-    maybe mempty (((<+> "= ") . annotate Term.bold) . pretty) (bndName bnd)
+  ann    = [prettyAnsi q <+> prettyAnsi val, ":" <+> prettyAnsi ty]
+  assign = maybe mempty (((<+> "= ") . annotate Term.bold) . pretty) name
+
+renderRes :: Maybe String -> Binding Value ZeroOneMany Type -> Text
+renderRes = (render .) . renderBinding
+
+renderTest :: Maybe String -> Binding Value ZeroOneMany Type -> String
+renderTest =
+  ((renderString . layoutPretty (LayoutOptions Unbounded) . group) .)
+    . renderBinding
 
 var :: Int -> Doc ann
 var =

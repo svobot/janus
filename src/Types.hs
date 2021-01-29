@@ -2,6 +2,7 @@ module Types where
 
 import           Control.Monad.State            ( StateT )
 import           Data.Bifunctor                 ( second )
+import           Data.Function                  ( on )
 import           Data.Text.Prettyprint.Doc      ( Doc )
 import           Data.Text.Prettyprint.Doc.Render.Terminal
                                                 ( AnsiStyle )
@@ -83,6 +84,16 @@ data TypeError
    |  WrongInference (Doc AnsiStyle) Type ITerm
    |  WrongCheck Type CTerm
    |  UnknownVar Name
+
+instance Eq TypeError where
+  MultiplicityError ms st == MultiplicityError ms' st' =
+    ms == ms' && ((==) `on` map qt) st st'
+    where qt (n, t, q, q') = (n, quote0 t, q, q')
+  WrongInference doc t i == WrongInference doc' t' i' =
+    ((==) `on` show) doc doc' && ((==) `on` quote0) t t' && i == i'
+  WrongCheck t c == WrongCheck t' c' = ((==) `on` quote0) t t' && c == c'
+  UnknownVar n   == UnknownVar n'    = n == n'
+  _              == _                = False
 
 type Result a = Either TypeError a
 type Type = Value

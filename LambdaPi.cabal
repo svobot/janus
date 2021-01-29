@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 965127a5069afc8bda71307e283030d9416f802838bfdaf027bc69cceb23855a
+-- hash: b44c92be6fc2e03067ec13003f1c5c0b04c73f750e802a6c363e255e2f534ded
 
 name:           LambdaPi
 version:        0.1.0.0
@@ -79,6 +79,7 @@ test-suite LambdaPi-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      IntegrationSpec
       ParseSpec
       TypeSpec
       Paths_LambdaPi

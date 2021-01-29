@@ -161,13 +161,13 @@ handleStmt stmt = case stmt of
   Out      f -> modify $ \(inter, _, ve, te) -> (inter, f, ve, te)
  where
   checkEval :: ZeroOneMany -> Maybe String -> ITerm -> Repl ()
-  checkEval q mi t = do
+  checkEval q mn t = do
     (_, _, ve, te) <- get
     mty            <- iinfer (ve, te) q t
     mapM_
       (\ty -> do
         let val     = iEval t (ve, [])
-        let outtext = renderRes (Binding mi q ty) val
+        let outtext = renderRes mn (Binding val q ty)
         liftIO . T.putStrLn $ outtext
         (_, out, _, _) <- get
         unless
@@ -181,7 +181,7 @@ handleStmt stmt = case stmt of
           (\i -> modify $ \(inter, o, ve, te) ->
             (inter, o, (Global i, val) : ve, Binding (Global i) q ty : te)
           )
-          mi
+          mn
       )
       mty
 
@@ -192,7 +192,7 @@ handleStmt stmt = case stmt of
     mty            <- iinfer (ve, te) Zero annt
     unless (isNothing mty) $ do
       let val = iEval annt (ve, [])
-      liftIO . T.putStrLn $ renderRes (Binding Nothing q val) (vfree $ Global x)
+      liftIO . T.putStrLn . renderRes Nothing $ Binding (vfree $ Global x) q val
       modify $ \(inter, out, ve, te) ->
         (inter, out, ve, Binding (Global x) q val : te)
 
