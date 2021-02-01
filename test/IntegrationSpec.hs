@@ -5,12 +5,13 @@ module IntegrationSpec
   ) where
 
 import           Control.Monad.State            ( foldM )
-import           Data.Bifunctor                 ( first )
-import           Data.Text.Prettyprint.Doc
+import           Data.Bifunctor                 ( first
+                                                , second
+                                                )
 import qualified Parser                        as Parse
 import           Printer
 import           Rig
-import           Test.Hspec
+import           Test.Hspec              hiding ( context )
 import           Text.Parsec                    ( ParseError
                                                 , parse
                                                 )
@@ -61,16 +62,17 @@ setContext s = return . TestState $ do
     (\st stmt -> case stmt of
       (Parse.Assume bs) -> foldM
         (\st' (Binding x q t) -> do
-          let (i, o, ve, te) = st'
-          _ <- first TE $ iType0 (ve, te) Zero (Ann t Universe)
-          let val = iEval (Ann t Universe) (ve, [])
-          return (i, o, ve, Binding (Global x) q val : te)
+          _ <- first TE $ iType0 (context st') Zero (Ann t Universe)
+          let val = iEval (Ann t Universe) (fst $ context st, [])
+          return $ st'
+            { context = second (Binding (Global x) q val :) $ context st'
+            }
         )
         st
         bs
       _ -> undefined
     )
-    (True, [], [], [])
+    (IState "" ([], []))
     stmts
  where
   parseSetup :: [String] -> Either ParseError [Parse.Stmt]
@@ -81,17 +83,19 @@ run c = before (setContext $ setup c) (runTestCase c)
  where
   runTestCase :: TestCase -> SpecWith TestState
   runTestCase tc = it (desc tc) . flip (.) unState $ \case
-    (Left  (PE e)        ) -> expectationFailure $ show e
-    (Left  (TE e)        ) -> Left e `shouldBe` res tc
-    (Right (_, _, ve, te)) -> case parse (Parse.stmt []) "<test>" (expr tc) of
-      Left  e                 -> expectationFailure $ show e
-      Right (Parse.Eval i   ) -> checkEval ve te Nothing One i `shouldBe` res tc
-      Right (Parse.Let q n i) -> checkEval ve te (Just n) q i `shouldBe` res tc
-      _                       -> undefined
+    (Left  (PE e)) -> expectationFailure $ show e
+    (Left  (TE e)) -> Left e `shouldBe` res tc
+    (Right st    ) -> case parse (Parse.stmt []) "<test>" (expr tc) of
+      Left e -> expectationFailure $ show e
+      Right (Parse.Eval i) ->
+        checkEval (context st) Nothing One i `shouldBe` res tc
+      Right (Parse.Let q n i) ->
+        checkEval (context st) (Just n) q i `shouldBe` res tc
+      _ -> undefined
 
-  checkEval ve te n q i = do
-    ty <- iType0 (ve, te) q i
-    let val = iEval i (ve, [])
+  checkEval ctx n q i = do
+    ty <- iType0 ctx q i
+    let val = iEval i (fst ctx, [])
     return $ renderTest n (Binding val q ty)
 
 spec :: Spec

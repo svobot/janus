@@ -10,7 +10,7 @@ import           Typing
 
 data TestCase = TestCase
   { desc  :: String
-  , env   :: (NameEnv, Context)
+  , ctx   :: Context
   , multi :: ZeroOneMany
   , expr  :: ITerm
   , res   :: Result CTerm
@@ -68,7 +68,7 @@ testCases =
 
 runTestCase :: TestCase -> Spec
 runTestCase tc =
-  it (desc tc) $ quote0 <$> liftA3 iType0 env multi expr tc `shouldBe` res tc
+  it (desc tc) $ quote0 <$> liftA3 iType0 ctx multi expr tc `shouldBe` res tc
 
 spec :: Spec
 spec = mapM_ runTestCase testCases

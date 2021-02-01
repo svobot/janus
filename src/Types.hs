@@ -10,7 +10,10 @@ import           Rig
 import           System.Console.Repline         ( HaskelineT )
 
 type Repl a = HaskelineT (StateT IState IO) a
-type IState = (Bool, String, NameEnv, Context)
+data IState = IState
+  { outFile :: String
+  , context :: Context
+  }
 
 data Name
    =  Global String
@@ -97,9 +100,11 @@ instance Eq TypeError where
 
 type Result a = Either TypeError a
 type Type = Value
-type Context = [Binding Name ZeroOneMany Type]
-type NameEnv = [(Name, Value)]
-type Env = [Value]
+
+type TypeEnv = [Binding Name ZeroOneMany Type]
+type ValueEnv = [(Name, Value)]
+type BoundEnv = [Value]
+type Context = (ValueEnv, TypeEnv)
 
 vapp :: Value -> Value -> Value
 vapp (VLam     f) v = f v
@@ -110,7 +115,7 @@ vapp v v' =
 vfree :: Name -> Value
 vfree n = VNeutral (NFree n)
 
-cEval :: CTerm -> (NameEnv, Env) -> Value
+cEval :: CTerm -> (ValueEnv, BoundEnv) -> Value
 cEval (Inf ii)      d = iEval ii d
 cEval (Lam c )      d = VLam (\x -> cEval c $ second (x :) d)
 cEval Universe      _ = VUniverse
@@ -125,7 +130,7 @@ cEval (With   ty ty') d = VWith (cEval ty d) (\x -> cEval ty' $ second (x :) d)
 cEval AUnit           _ = VAUnit
 cEval AUnitType       _ = VAUnitType
 
-iEval :: ITerm -> (NameEnv, Env) -> Value
+iEval :: ITerm -> (ValueEnv, BoundEnv) -> Value
 iEval (Ann c _) d = cEval c d
 iEval (Free x ) d = case lookup x (fst d) of
   Nothing -> vfree x
@@ -222,6 +227,6 @@ boundfree :: Int -> Name -> ITerm
 boundfree ii (Quote k) = Bound ((ii - k - 1) `max` 0)
 boundfree _  x         = Free x
 
-forget :: Context -> Context
+forget :: TypeEnv -> TypeEnv
 forget = map (\b -> b { bndUsage = Zero })
 

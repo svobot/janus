@@ -13,10 +13,13 @@ import           Control.Exception              ( IOException
 import           Control.Monad.State            ( MonadIO
                                                 , MonadState
                                                 , evalStateT
-                                                , get
+                                                , gets
                                                 , liftIO
                                                 , modify
                                                 , unless
+                                                )
+import           Data.Bifunctor                 ( bimap
+                                                , second
                                                 )
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhileEnd
@@ -69,8 +72,8 @@ commandCompleter n =
 -- Default tab completer
 byWord :: (Monad m, MonadState IState m) => WordCompleter m
 byWord n = do
-  (_, _, _, te) <- get
-  let scope = [ s | Global s <- reverse . nub $ map bndName te ]
+  env <- gets $ snd . context
+  let scope = [ s | Global s <- reverse . nub $ map bndName env ]
   return . filter (n `isPrefixOf`) $ scope ++ Parse.keywords
 
 options :: [CmdInfo] -> [(String, Cmd Repl)]
@@ -88,7 +91,7 @@ commandPrefix :: Char
 commandPrefix = ':'
 
 repl :: IO ()
-repl = flip evalStateT (True, [], [], []) $ evalRepl
+repl = flip evalStateT (IState "" ([], [])) $ evalRepl
   (const $ pure ">>> ")
   compilePhrase
   (options commands)
@@ -130,15 +133,15 @@ help _ = liftIO $ do
 
 typeOf :: Cmd Repl
 typeOf x = do
-  x' <- Parse.parseIO "<interactive>" (Parse.iTerm Parse.OITerm []) x
-  (_, _, ve, te) <- get
-  t <- maybe (return Nothing) (iinfer (ve, te) Zero) x'
+  x'  <- Parse.parseIO "<interactive>" (Parse.iTerm Parse.OITerm []) x
+  ctx <- gets context
+  t   <- maybe (return Nothing) (iinfer ctx Zero) x'
   liftIO $ mapM_ (T.putStrLn . render . prettyAnsi) t
 
 browse :: Cmd Repl
 browse _ = do
-  (_, _, _, te) <- get
-  liftIO . putStr $ unlines [ s | Global s <- reverse . nub $ map bndName te ]
+  env <- gets $ snd . context
+  liftIO . putStr $ unlines [ s | Global s <- reverse . nub $ map bndName env ]
 
 compileFile :: Cmd Repl
 compileFile f = do
@@ -158,28 +161,30 @@ handleStmt stmt = case stmt of
   Let q x e  -> checkEval q (Just x) e
   Eval     e -> checkEval One Nothing e
   PutStrLn x -> liftIO $ putStrLn x
-  Out      f -> modify $ \(inter, _, ve, te) -> (inter, f, ve, te)
+  Out      f -> modify $ \st -> st { outFile = f }
  where
   checkEval :: ZeroOneMany -> Maybe String -> ITerm -> Repl ()
   checkEval q mn t = do
-    (_, _, ve, te) <- get
-    mty            <- iinfer (ve, te) q t
+    ctx <- gets context
+    mty <- iinfer ctx q t
     mapM_
       (\ty -> do
-        let val     = iEval t (ve, [])
+        let val     = iEval t (fst ctx, [])
         let outtext = renderRes mn (Binding val q ty)
         liftIO . T.putStrLn $ outtext
-        (_, out, _, _) <- get
+        out <- gets outFile
         unless
           (null out)
           (do
             let process = T.unlines . map ("< " <>) . T.lines
             liftIO . T.writeFile out $ process outtext
-            modify $ \(i, _, ve, te) -> (i, "", ve, te)
+            modify $ \st -> st { outFile = "" }
           )
         mapM_
-          (\i -> modify $ \(inter, o, ve, te) ->
-            (inter, o, (Global i, val) : ve, Binding (Global i) q ty : te)
+          (\i -> modify $ \st -> st
+            { context = bimap ((Global i, val) :) (Binding (Global i) q ty :)
+                          $ context st
+            }
           )
           mn
       )
@@ -188,11 +193,10 @@ handleStmt stmt = case stmt of
   assume :: Parse.Binding -> Repl ()
   assume (Binding x q t) = do
     let annt = Ann t Universe
-    (_, _, ve, te) <- get
-    mty            <- iinfer (ve, te) Zero annt
+    ctx <- gets context
+    mty <- iinfer ctx Zero annt
     unless (isNothing mty) $ do
-      let val = iEval annt (ve, [])
+      let val = iEval annt (fst ctx, [])
       liftIO . T.putStrLn . renderRes Nothing $ Binding (vfree $ Global x) q val
-      modify $ \(inter, out, ve, te) ->
-        (inter, out, ve, Binding (Global x) q val : te)
-
+      modify $ \st ->
+        st { context = second (Binding (Global x) q val :) $ context st }

@@ -19,12 +19,12 @@ import           Types
 
 type Usage = Map.Map Name ZeroOneMany
 
-iinfer :: (NameEnv, Context) -> ZeroOneMany -> ITerm -> Repl (Maybe Type)
+iinfer :: Context -> ZeroOneMany -> ITerm -> Repl (Maybe Type)
 iinfer g r t = case iType0 g r t of
   Left  e -> liftIO (T.putStrLn . renderErr $ prettyAnsi e) >> return Nothing
   Right v -> return (Just v)
 
-iType0 :: (NameEnv, Context) -> ZeroOneMany -> ITerm -> Result Type
+iType0 :: Context -> ZeroOneMany -> ITerm -> Result Type
 iType0 g r t = do
   (qs, tp) <- first (Map.map (r S.*)) <$> iType 0 g (restrict r) t
   mapM_ (throwError . MultiplicityError Nothing) $ checkMultiplicity qs (snd g)
@@ -35,7 +35,7 @@ iType0 g r t = do
   restrict One  = One'
   restrict Many = One'
 
-iType :: Int -> (NameEnv, Context) -> ZeroOne -> ITerm -> Result (Usage, Type)
+iType :: Int -> Context -> ZeroOne -> ITerm -> Result (Usage, Type)
 -- Cut:
 iType ii g r (Ann e tyt) = do
   _ <- cType ii (second forget g) Zero' tyt VUniverse
@@ -135,7 +135,7 @@ iType ii g r (Snd i) = do
 iType _ _ _ i@(Bound _) =
   error $ "internal: Trying to infer type of " <> show i
 
-cType :: Int -> (NameEnv, Context) -> ZeroOne -> CTerm -> Type -> Result Usage
+cType :: Int -> Context -> ZeroOne -> CTerm -> Type -> Result Usage
 -- Elim
 cType ii g r (Inf e) v = do
   (qs, v') <- iType ii g r e
@@ -210,20 +210,20 @@ cType _ _ _ AUnit     VAUnitType = return Map.empty
 cType _ _ _ AUnitType VUniverse  = return Map.empty
 cType _ _ _ val       ty         = throwError $ WrongCheck ty val
 
-checkVar :: String -> Name -> Context -> Usage -> Result Usage
-checkVar loc n ctx qs = do
+checkVar :: String -> Name -> TypeEnv -> Usage -> Result Usage
+checkVar loc n env qs = do
   let (q, qs') = splitVar n qs
   mapM_ (throwError . MultiplicityError (Just loc))
-        (checkMultiplicity (Map.singleton n q) ctx)
+        (checkMultiplicity (Map.singleton n q) env)
   return qs'
  where
   splitVar :: Name -> Usage -> (ZeroOneMany, Usage)
   splitVar = (first (fromMaybe Zero) .) . Map.alterF (, Nothing)
 
 checkMultiplicity
-  :: Usage -> Context -> Maybe [(Name, Type, ZeroOneMany, ZeroOneMany)]
-checkMultiplicity qs ctx = Map.foldrWithKey
-  (\n q es -> case find ((== n) . bndName) ctx of
+  :: Usage -> TypeEnv -> Maybe [(Name, Type, ZeroOneMany, ZeroOneMany)]
+checkMultiplicity qs env = Map.foldrWithKey
+  (\n q es -> case find ((== n) . bndName) env of
     Just b | q <: bndUsage b -> es
            | otherwise -> Just $ (n, bndType b, q, bndUsage b) : fromMaybe [] es
     Nothing ->
