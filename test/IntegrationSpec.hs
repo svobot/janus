@@ -4,6 +4,7 @@ module IntegrationSpec
   ( spec
   ) where
 
+import           Control.Monad.Except           ( throwError )
 import           Control.Monad.State            ( foldM )
 import           Data.Bifunctor                 ( first
                                                 , second
@@ -33,7 +34,7 @@ cases :: [TestCase]
 cases =
   [ TestCase "Identity application"
              ["assume (0 a : U) (1 x : a)"]
-             "(\\x. \\y. y : (0 x : U) -> (1 y : x) -> x) a x"
+             "1 (\\x. \\y. y : (0 x : U) -> (1 y : x) -> x) a x"
              (return "1 x : a")
   , TestCase "Let identity application"
              ["assume (0 a : U) (1 x : a)"]
@@ -42,7 +43,7 @@ cases =
   , TestCase "Unknown variable in setup"
              ["assume (0 a : U) (1 x : b)"]
              ""
-             (Left . UnknownVar $ Global "b")
+             (throwError . UnknownVar $ Global "b")
   , TestCase
     "Erased linear variables in additive pair"
     ["assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"]
@@ -76,7 +77,7 @@ setContext s = return . TestState $ do
     stmts
  where
   parseSetup :: [String] -> Either ParseError [Parse.Stmt]
-  parseSetup = traverse (parse (Parse.stmt []) "<setup>")
+  parseSetup = traverse (parse Parse.stmt "<setup>")
 
 run :: TestCase -> Spec
 run c = before (setContext $ setup c) (runTestCase c)
@@ -85,10 +86,10 @@ run c = before (setContext $ setup c) (runTestCase c)
   runTestCase tc = it (desc tc) . flip (.) unState $ \case
     (Left  (PE e)) -> expectationFailure $ show e
     (Left  (TE e)) -> Left e `shouldBe` res tc
-    (Right st    ) -> case parse (Parse.stmt []) "<test>" (expr tc) of
+    (Right st    ) -> case parse Parse.stmt "<test>" (expr tc) of
       Left e -> expectationFailure $ show e
-      Right (Parse.Eval i) ->
-        checkEval (context st) Nothing One i `shouldBe` res tc
+      Right (Parse.Eval q i) ->
+        checkEval (context st) Nothing q i `shouldBe` res tc
       Right (Parse.Let q n i) ->
         checkEval (context st) (Just n) q i `shouldBe` res tc
       _ -> undefined

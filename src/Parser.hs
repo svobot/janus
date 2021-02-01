@@ -2,6 +2,7 @@ module Parser
   ( Binding
   , Origin(OITerm)
   , Stmt(..)
+  , eval
   , file
   , iTerm
   , keywords
@@ -58,7 +59,7 @@ type Binding = T.Binding String ZeroOneMany CTerm
 data Stmt
   = Let ZeroOneMany String ITerm --  let x = t
   | Assume [Binding]             --  assume x :: t, assume x :: *
-  | Eval ITerm
+  | Eval ZeroOneMany ITerm
   | PutStrLn String --  lhs2TeX hacking, allow to print "magic" string
   | Out String      --  more lhs2TeX hacking, allow to print to files
   deriving (Show, Eq)
@@ -68,8 +69,8 @@ parseIO f p x = case parse (P.whiteSpace lambdaPi *> p <* eof) f x of
   Left  e -> liftIO $ print e >> return Nothing
   Right r -> return (Just r)
 
-stmt :: [String] -> CharParser () Stmt
-stmt e = choice [define, assume', putstr, out, eval]
+stmt :: CharParser () Stmt
+stmt = choice [define, assume', putstr, out, eval Eval]
  where
   define =
     try
@@ -78,14 +79,16 @@ stmt e = choice [define, assume', putstr, out, eval]
         <$> (reserved "let" *> optionMaybe rig)
         <*> (identifier <* reserved "=")
         )
-      <*> iTerm OITerm e
+      <*> iTerm OITerm []
   assume' = Assume . reverse <$> (reserved "assume" *> assume)
   putstr  = PutStrLn <$> (reserved "putStrLn" *> P.stringLiteral lambdaPi)
   out     = Out <$> (reserved "out" *> option "" (P.stringLiteral lambdaPi))
-  eval    = Eval <$> iTerm OITerm e
+
+eval :: (ZeroOneMany -> ITerm -> a) -> CharParser () a
+eval f = f . fromMaybe Many <$> optionMaybe rig <*> iTerm OITerm []
 
 file :: String -> String -> Repl (Maybe [Stmt])
-file name = parseIO name (many $ stmt [])
+file name = parseIO name $ many stmt
 
 rig :: CharParser () ZeroOneMany
 rig = choice [Zero <$ reserved "0", One <$ reserved "1", Many <$ reserved "w"]

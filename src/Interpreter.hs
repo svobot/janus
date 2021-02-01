@@ -49,7 +49,7 @@ data CmdInfo = CmdInfo
 -- Evaluation : handle each line user inputs
 compilePhrase :: Cmd Repl
 compilePhrase x = do
-  x' <- Parse.parseIO "<interactive>" (Parse.stmt []) x
+  x' <- Parse.parseIO "<interactive>" Parse.stmt x
   mapM_ handleStmt x'
 
 -- Prefix tab completeter
@@ -132,11 +132,11 @@ help _ = liftIO $ do
   helpLines = map (fmt . maximum $ map (length . fst) cols) cols
 
 typeOf :: Cmd Repl
-typeOf x = do
-  x'  <- Parse.parseIO "<interactive>" (Parse.iTerm Parse.OITerm []) x
+typeOf s = do
+  mx  <- Parse.parseIO "<interactive>" (Parse.eval (,)) s
   ctx <- gets context
-  t   <- maybe (return Nothing) (iinfer ctx Zero) x'
-  liftIO $ mapM_ (T.putStrLn . render . prettyAnsi) t
+  t   <- maybe (return Nothing) (uncurry (iinfer ctx)) mx
+  mapM_ (liftIO . T.putStrLn . render . prettyAnsi) t
 
 browse :: Cmd Repl
 browse _ = do
@@ -159,7 +159,7 @@ handleStmt :: Stmt -> Repl ()
 handleStmt stmt = case stmt of
   Assume bs  -> mapM_ assume bs
   Let q x e  -> checkEval q (Just x) e
-  Eval     e -> checkEval One Nothing e
+  Eval q e   -> checkEval q Nothing e
   PutStrLn x -> liftIO $ putStrLn x
   Out      f -> modify $ \st -> st { outFile = f }
  where
