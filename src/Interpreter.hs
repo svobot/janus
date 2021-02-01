@@ -22,10 +22,12 @@ import           Data.Bifunctor                 ( bimap
                                                 , second
                                                 )
 import           Data.Char                      ( isSpace )
+import           Data.Function                  ( on )
 import           Data.List                      ( dropWhileEnd
                                                 , intercalate
                                                 , isPrefixOf
                                                 , nub
+                                                , nubBy
                                                 )
 import           Data.Maybe                     ( isNothing )
 import qualified Data.Text                     as T
@@ -141,7 +143,10 @@ typeOf s = do
 browse :: Cmd Repl
 browse _ = do
   env <- gets $ snd . context
-  liftIO . putStr $ unlines [ s | Global s <- reverse . nub $ map bndName env ]
+  mapM_ (liftIO . T.putStrLn . renderRes Nothing)
+    . reverse
+    . map (\b -> b { bndName = vfree $ bndName b })
+    $ nubBy ((==) `on` bndName) env
 
 compileFile :: Cmd Repl
 compileFile f = do
