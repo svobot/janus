@@ -159,10 +159,9 @@ instance PrettyAnsi CTerm where
   prettyAnsi = cPrint 0 0
 
 cPrint :: Int -> Int -> CTerm -> Doc Term.AnsiStyle
-cPrint p ii (Inf i) = iPrint p ii i
-cPrint p ii (Lam c) =
-  parensIf (p > 0) ("λ" <> varAnn ii <> "." <+> cPrint 0 (ii + 1) c)
-cPrint _ _ Universe = "U"
+cPrint p ii (Inf i)  = iPrint p ii i
+cPrint p ii (Lam c)  = parensIf (p > 0) (lambdas ii 1 c)
+cPrint _ _  Universe = "U"
 cPrint p ii (Pi q d (Pi q' d' r)) =
   parensIf (p > 0) (nestedForall (ii + 2) [(q', ii + 1, d'), (q, ii, d)] r)
 cPrint p ii (Pi q d r) = parensIf
@@ -217,11 +216,19 @@ addAnn = annotate (Term.color Term.Green <> Term.bold)
 varAnn :: Int -> Doc Term.AnsiStyle
 varAnn = annotate Term.bold . var
 
+lambdas :: Int -> Int -> CTerm -> Doc Term.AnsiStyle
+lambdas ii depth (Lam c) = lambdas ii (depth + 1) c
+lambdas ii depth c =
+  "λ"
+    <>  hsep (map varAnn [ii .. ii + depth - 1])
+    <>  "."
+    <+> cPrint 0 (ii + depth) c
+
 nestedForall
   :: Int -> [(ZeroOneMany, Int, CTerm)] -> CTerm -> Doc Term.AnsiStyle
 nestedForall ii ds (Pi q d r) = nestedForall (ii + 1) ((q, ii, d) : ds) r
 nestedForall ii ds x          = align $ sep
-  [ "forall"
+  [ "∀"
   <+> align
         (sep
           [ parens $ prettyAnsi q <+> varAnn n <+> ":" <+> cPrint 0 n d

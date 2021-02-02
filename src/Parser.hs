@@ -10,6 +10,7 @@ module Parser
   , stmt
   ) where
 
+import           Control.Monad                  ( foldM )
 import           Control.Monad.Trans            ( liftIO )
 import           Data.List                      ( elemIndex )
 import           Data.Maybe                     ( fromMaybe )
@@ -24,8 +25,9 @@ import qualified Types                         as T
 
 lambdaPi :: P.TokenParser u
 lambdaPi = P.makeTokenParser
-  (haskellStyle { P.identStart    = letter <|> char '_'
-                , P.reservedNames = keywords
+  (haskellStyle { P.identStart      = letter <|> char '_'
+                , P.reservedNames   = keywords
+                , P.reservedOpNames = [":", "=", "\\", "->", "@", "λ", "∀"]
                 }
   )
 
@@ -80,7 +82,7 @@ stmt = choice [define, assume', putstr, out, eval Eval]
         <*> (identifier <* reserved "=")
         )
       <*> iTerm OITerm []
-  assume' = Assume . reverse <$> (reserved "assume" *> assume)
+  assume' = Assume . reverse <$> (reserved "assume" *> bindings False [])
   putstr  = PutStrLn <$> (reserved "putStrLn" *> P.stringLiteral lambdaPi)
   out     = Out <$> (reserved "out" *> option "" (P.stringLiteral lambdaPi))
 
@@ -143,6 +145,7 @@ cTerm b e =
     $  [ parseLam e
        , star
        , fun
+       , forall
        , try pair
        , tensor
        , mUnit
@@ -160,6 +163,12 @@ cTerm b e =
     T.Binding e' q t <- try $ bind e <* reservedOp "->"
     p                <- cTerm OCTerm (e' : e)
     return (Pi q t p)
+  forall = do
+    reserved "forall" <|> reservedOp "∀"
+    xs <- bindings True e
+    reservedOp "."
+    p <- cTerm OCTerm (map bndName xs ++ e)
+    foldM (\a x -> return $ Pi (bndUsage x) (bndType x) a) p xs
   pair =
     P.parens lambdaPi
       $   Pair
@@ -193,11 +202,11 @@ mUnit = MUnit <$ reservedOp "()"
 
 parseLam :: [String] -> CharParser () CTerm
 parseLam e = do
-  reservedOp "\\"
+  reservedOp "\\" <|> reservedOp "λ"
   xs <- many1 identifier
   reservedOp "."
   t <- cTerm OCTerm (reverse xs ++ e)
-  return (iterate Lam t !! length xs)
+  return $ iterate Lam t !! length xs
 
 app :: [String] -> CharParser () ITerm
 app e = foldl (:$:) <$> iTerm OApp e <*> many1 (cTerm OApp e)
@@ -212,10 +221,10 @@ bind e =
     <*  reservedOp ":"
     <*> cTerm OCTerm e
 
-assume :: CharParser () [Binding]
-assume = snd <$> go [] [] where
+bindings :: Bool -> [String] -> CharParser () [Binding]
+bindings bound = fmap snd . flip go [] where
   go :: [String] -> [Binding] -> CharParser () ([String], [Binding])
-  go e bs = do
-    b <- bind []
-    go (bndName b : e) (b : bs) <|> return (bndName b : e, b : bs)
+  go env bs = do
+    b <- bind $ if bound then env else []
+    go (bndName b : env) (b : bs) <|> return (bndName b : env, b : bs)
 
