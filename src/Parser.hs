@@ -24,12 +24,11 @@ import qualified Types                         as T
                                                 ( Binding(..) )
 
 lambdaPi :: P.TokenParser u
-lambdaPi = P.makeTokenParser
-  (haskellStyle { P.identStart      = letter <|> char '_'
-                , P.reservedNames   = keywords
-                , P.reservedOpNames = [":", "=", "\\", "->", "@", "λ", "∀"]
-                }
-  )
+lambdaPi = P.makeTokenParser $ haskellStyle
+  { P.identStart      = letter <|> char '_'
+  , P.reservedNames   = keywords ++ ["<>", "()"]
+  , P.reservedOpNames = [":", "=", "\\", "->", "@", "λ", "∀"]
+  }
 
 keywords :: [String]
 keywords =
@@ -39,6 +38,7 @@ keywords =
   , "putStrLn"
   , "out"
   , "in"
+  , "U"
   , "MUnit"
   , "Fst"
   , "Snd"
@@ -194,11 +194,11 @@ cTerm b e =
       <* reservedOp "&"
     p <- cTerm OCTerm (x : e)
     return $ With t p
-  aUnit     = AUnit <$ reservedOp "<>"
+  aUnit     = AUnit <$ reserved "<>"
   aUnitType = AUnitType <$ reserved "AUnit"
 
 mUnit :: CharParser () CTerm
-mUnit = MUnit <$ reservedOp "()"
+mUnit = MUnit <$ reserved "()"
 
 parseLam :: [String] -> CharParser () CTerm
 parseLam e = do
