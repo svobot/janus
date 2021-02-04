@@ -13,6 +13,7 @@ import           Control.Exception              ( IOException
 import           Control.Monad.State            ( MonadIO
                                                 , MonadState
                                                 , evalStateT
+                                                , forM_
                                                 , gets
                                                 , liftIO
                                                 , modify
@@ -168,11 +169,14 @@ handleStmt stmt = case stmt of
   PutStrLn x -> liftIO $ putStrLn x
   Out      f -> modify $ \st -> st { outFile = f }
  where
+  mapContext f = \st -> st { context = f $ context st }
+
   checkEval :: ZeroOneMany -> Maybe String -> ITerm -> Repl ()
   checkEval q mn t = do
     ctx <- gets context
     mty <- iinfer ctx q t
-    mapM_
+    forM_
+      mty
       (\ty -> do
         let val     = iEval t (fst ctx, [])
         let outtext = renderRes mn (Binding val q ty)
@@ -185,15 +189,12 @@ handleStmt stmt = case stmt of
             liftIO . T.writeFile out $ process outtext
             modify $ \st -> st { outFile = "" }
           )
-        mapM_
-          (\i -> modify $ \st -> st
-            { context = bimap ((Global i, val) :) (Binding (Global i) q ty :)
-                          $ context st
-            }
-          )
+        forM_
           mn
+          (\n -> modify . mapContext $ bimap ((Global n, val) :)
+                                             (Binding (Global n) q ty :)
+          )
       )
-      mty
 
   assume :: Parse.Binding -> Repl ()
   assume (Binding x q t) = do
@@ -203,5 +204,5 @@ handleStmt stmt = case stmt of
     unless (isNothing mty) $ do
       let val = iEval annt (fst ctx, [])
       liftIO . T.putStrLn . renderRes Nothing $ Binding (vfree $ Global x) q val
-      modify $ \st ->
-        st { context = second (Binding (Global x) q val :) $ context st }
+      modify . mapContext $ second (Binding (Global x) q val :)
+
