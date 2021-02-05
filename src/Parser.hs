@@ -13,7 +13,6 @@ module Parser
 import           Control.Monad                  ( foldM )
 import           Control.Monad.Trans            ( liftIO )
 import           Data.List                      ( elemIndex )
-import           Data.Maybe                     ( fromMaybe )
 import           Rig                            ( ZeroOneMany(..) )
 import           Text.Parsec
 import           Text.Parsec.Language           ( haskellStyle )
@@ -27,7 +26,18 @@ lambdaPi :: P.TokenParser u
 lambdaPi = P.makeTokenParser $ haskellStyle
   { P.identStart      = letter <|> char '_'
   , P.reservedNames   = keywords ++ ["<>", "()"]
-  , P.reservedOpNames = [":", "=", "\\", "->", "@", "λ", "∀"]
+  , P.reservedOpNames = [ ":"
+                        , "="
+                        , "\\"
+                        , "λ"
+                        , "."
+                        , "->"
+                        , "*"
+                        , "&"
+                        , "@"
+                        , "∀"
+                        , ","
+                        ]
   }
 
 keywords :: [String]
@@ -77,8 +87,7 @@ stmt = choice [define, assume', putstr, out, eval Eval]
   define =
     try
         (   Let
-        .   fromMaybe Many
-        <$> (reserved "let" *> optionMaybe rig)
+        <$> (reserved "let" *> option Many rig)
         <*> (identifier <* reserved "=")
         )
       <*> iTerm OITerm []
@@ -87,7 +96,7 @@ stmt = choice [define, assume', putstr, out, eval Eval]
   out     = Out <$> (reserved "out" *> option "" (P.stringLiteral lambdaPi))
 
 eval :: (ZeroOneMany -> ITerm -> a) -> CharParser () a
-eval f = f . fromMaybe Many <$> optionMaybe rig <*> iTerm OITerm []
+eval f = f <$> option Many rig <*> iTerm OITerm []
 
 file :: String -> String -> Repl (Maybe [Stmt])
 file name = parseIO name $ many stmt
@@ -143,7 +152,7 @@ cTerm :: Origin -> [String] -> CharParser () CTerm
 cTerm b e =
   choice
     $  [ parseLam e
-       , star
+       , universe
        , fun
        , forall
        , try pair
@@ -158,8 +167,8 @@ cTerm b e =
        ]
     ++ [ Inf <$> iTerm b e | b /= OStale ]
  where
-  star = Universe <$ reserved "U"
-  fun  = do
+  universe = Universe <$ reserved "U"
+  fun      = do
     T.Binding e' q t <- try $ bind e <* reservedOp "->"
     p                <- cTerm OCTerm (e' : e)
     return (Pi q t p)
@@ -215,8 +224,7 @@ bind :: [String] -> CharParser () Binding
 bind e =
   P.parens lambdaPi
     $   flip T.Binding
-    .   fromMaybe Many
-    <$> optionMaybe rig
+    <$> option Many rig
     <*> identifier
     <*  reservedOp ":"
     <*> cTerm OCTerm e
