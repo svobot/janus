@@ -2,88 +2,182 @@ module ParseSpec
   ( spec
   ) where
 
+import           Data.Bifunctor                 ( first )
 import           Parser
 import           Rig
 import           Test.Hspec
-import           Text.Parsec                    ( parse )
+import           Text.Parsec                    ( ParseError
+                                                , eof
+                                                , many
+                                                , parse
+                                                )
+import           Text.Parsec.String             ( GenParser )
+import           Text.Parsec.Token              ( whiteSpace )
 import           Types
 
-data SuccTest = SuccTest String String Stmt
+newtype TestResult a = TR (Either (Maybe ParseError) a)
 
-succTests :: [SuccTest]
-succTests =
-  [ SuccTest "Left associative application"
+instance (Eq a) => Eq (TestResult a) where
+  (TR (Right x)) == (TR (Right y)) = x == y
+  (TR (Left  _)) == (TR (Left  _)) = True
+  _              == _              = False
+
+instance (Show a) => Show (TestResult a) where
+  show (TR x) = either (maybe "Parse error" show) show x
+
+success :: a -> TestResult a
+success = TR . return
+
+err :: TestResult a
+err = TR $ Left Nothing
+
+data TestCase a = TestCase
+  { desc :: String
+  , expr :: String
+  , res  :: TestResult a
+  }
+
+type CharParser = GenParser Char ()
+
+fg :: String -> ITerm
+fg = Free . Global
+
+ifg :: String -> CTerm
+ifg = Inf . fg
+
+ib :: Int -> CTerm
+ib = Inf . Bound
+
+stmtCases :: [TestCase Stmt]
+stmtCases =
+  [ TestCase "Left associative function application"
              "f x y"
-             (Eval Many $ fg "f" :$: ifg "x" :$: ifg "y")
-  , SuccTest
-    "Annotated identity function"
-    "(\\ a x . x) : (0 a : U) -> (1 x : a) -> a"
-    ( Eval Many
-    $ Ann (Lam (Lam (ib 0))) (Pi Zero Universe (Pi One (ib 0) (ib 1)))
-    )
-  , SuccTest "Dependent assumption"
-             "assume (0 a : U) (1 x : a)"
-             (Assume [Binding "a" Zero Universe, Binding "x" One (ifg "a")])
-  , SuccTest "Multiplicative pair eleminator"
-             "let w @ x, y = z in y : a"
-             (Eval Many $ PairElim (fg "z") (ib 0) (ifg "a"))
-  , SuccTest
-    "Annotated multiplicative pair elimination"
-    "let w @ x', y' = (x,y) : (0 x : a) * x in y' : d"
-    (Eval Many $ PairElim
-      (Ann (Pair (ifg "x") (ifg "y")) (Tensor Zero (ifg "a") (ib 0)))
-      (ib 0)
-      (ifg "d")
-    )
-  , SuccTest
-    "Complex multiplicative pair"
-    "(x, f y z) : (0 x : a) * x"
-    (Eval Many $ Ann (Pair (ifg "x") (Inf $ fg "f" :$: ifg "y" :$: ifg "z"))
-                     (Tensor Zero (ifg "a") (ib 0))
-    )
-  , SuccTest "Annotated multiplicative unit elimination"
-             "let x @ () = () : MUnit in () : MUnit"
-             (Eval Many $ MUnitElim (Ann MUnit MUnitType) MUnit MUnitType)
-  , SuccTest "Annotated function application"
+             (success . Eval Many $ fg "f" :$: ifg "x" :$: ifg "y")
+  , TestCase "Annotated function application"
              "f x : a"
-             (Eval Many $ Ann (Inf $ fg "f" :$: ifg "x") (ifg "a"))
-  , SuccTest
-    "Multiplicative pair 'fst' projection"
-    "let 0 fst = (\\ a b p. let z @ x,y = p in x : a) : (0 a: U) -> (0 b : (0 a' : a) -> U) -> (0 p : (0 x : a) * b x) -> a"
-    (Let Zero "fst" $ Ann
-      (Lam (Lam (Lam (Inf (PairElim (Bound 0) (ib 1) (ib 3))))))
-      (Pi
-        Zero
-        Universe
-        (Pi Zero
-            (Pi Zero (ib 0) Universe)
-            (Pi Zero (Tensor Zero (ib 1) (Inf (Bound 1 :$: ib 0))) (ib 2))
+             (success . Eval Many $ Ann (Inf $ fg "f" :$: ifg "x") (ifg "a"))
+  , TestCase
+    "Annotated identity function"
+    "\\a x . x : (0 a : U) -> (1 _ : a) -> a"
+    (success . Eval Many $ Ann (Lam (Lam (ib 0)))
+                               (Pi Zero Universe (Pi One (ib 0) (ib 1)))
+    )
+  , TestCase
+    "Unicode identity function application"
+    "1 (λa x . x : ∀ (0 a : U) (1 _ : a) . a) a x"
+    (   success
+    .   Eval One
+    $   Ann (Lam (Lam (ib 0))) (Pi Zero Universe (Pi One (ib 0) (ib 1)))
+    :$: ifg "a"
+    :$: ifg "x"
+    )
+  , TestCase
+    "Assumption"
+    "assume (0 a : U) (1 x : a) (many : U)"
+    (success $ Assume
+      [ Binding "a"    Zero Universe
+      , Binding "x"    One  (ifg "a")
+      , Binding "many" Many Universe
+      ]
+    )
+  , TestCase
+    "Multiplicative pair elimination"
+    (unlines
+      [ "let p @ x', y' = (x, f y z) : (0 x : a) * x in y'"
+      , "               : ((λu . a) : (0 _ : (0 z : U) * z) -> U) p"
+      ]
+    )
+    (success . Eval Many $ PairElim
+      (Ann (Pair (ifg "x") (Inf $ fg "f" :$: ifg "y" :$: ifg "z"))
+           (Tensor Zero (ifg "a") (ib 0))
+      )
+      (ib 0)
+      (Inf
+        (   Ann (Lam (ifg "a")) (Pi Zero (Tensor Zero Universe (ib 0)) Universe)
+        :$: ib 0
         )
       )
     )
-  , SuccTest
+  , TestCase
+    "Multiplicative unit elimination"
+    "0 let u @ () = f x in y : g u"
+    (success . Eval Zero $ MUnitElim (fg "f" :$: ifg "x")
+                                     (ifg "y")
+                                     (Inf $ fg "g" :$: ib 0)
+    )
+  , TestCase
     "Additive pair"
-    "let 1 x = <y, f z> : (x : U) & U"
-    ( Let One "x"
-    $ Ann
-        (Angles (ifg "y") (Inf (fg "f" :$: ifg "z")))
-        (With Universe Universe)
+    "let p = <x, f y> : (x : a) & f x"
+    (success . Let Many "p" $ Ann
+      (Angles (ifg "x") (Inf $ fg "f" :$: ifg "y"))
+      (With (ifg "a") (Inf $ fg "f" :$: ib 0))
     )
-  , SuccTest
-    "Nested pairs"
-    "(<>, ((U, U))) : (0 x : AUnit) * (0 y : U) * U"
-    (Eval Many $ Ann (Pair AUnit (Pair Universe Universe))
-                     (Tensor Zero AUnitType (Tensor Zero Universe Universe))
+  , TestCase
+    "Additive pair elimination"
+    "1 λp. (Fst p, Snd p) : ∀ (p : (_ : a) & b) . (_ : a) * b"
+    (success . Eval One $ Ann
+      (Lam (Pair (Inf (Fst (Bound 0))) (Inf (Snd (Bound 0)))))
+      (Pi Many (With (ifg "a") (ifg "b")) (Tensor Many (ifg "a") (ifg "b")))
     )
+  , TestCase
+    "Units"
+    "(\\m a. m : forall (1 _ : MUnit) (0 _ : AUnit) . MUnit) () <>"
+    (   success
+    .   Eval Many
+    $   (Ann (Lam (Lam (ib 1))) (Pi One MUnitType (Pi Zero AUnitType MUnitType))
+        :$: MUnit
+        )
+    :$: AUnit
+    )
+  , TestCase
+    "Plentiful parentheses"
+    (unlines
+      [ "1 ((\\x y. ((x) : MUnit))"
+      , "  : forall (1 _ : ((MUnit)))"
+      , "    (_ : ((_ : (MUnit)) * AUnit))"
+      , "  . (MUnit)) ((())) (((), <>))"
+      ]
+    )
+    (   success
+    .   Eval One
+    $   (   Ann
+            (Lam (Lam (Inf (Ann (ib 1) MUnitType))))
+            (Pi One
+                MUnitType
+                (Pi Many (Tensor Many MUnitType AUnitType) MUnitType)
+            )
+        :$: MUnit
+        )
+    :$: Pair MUnit AUnit
+    )
+  , TestCase "Missing parenthesis" "f : (1 _ : a) -> U x" err
   ]
- where
-  fg  = Free . Global
-  ifg = Inf . fg
-  ib  = Inf . Bound
 
-succTestSpec :: SuccTest -> SpecWith ()
-succTestSpec (SuccTest d i r) = it d $ parse stmt i i `shouldBe` Right r
+fileCases :: [TestCase [Stmt]]
+fileCases =
+  [ TestCase
+      "Two lets"
+      (unlines
+        [ "let 1 v = let _ @ x,y = p in x : a"
+        , ""
+        , "let u = let _ @ () = () : MUnit in x : a"
+        ]
+      )
+      (success
+        [ Let One "v" $ PairElim (fg "p") (ib 1) (ifg "a")
+        , Let Many "u" $ MUnitElim (Ann MUnit MUnitType) (ifg "x") (ifg "a")
+        ]
+      )
+  ]
+
+run :: (Eq a, Show a) => CharParser a -> TestCase a -> SpecWith ()
+run p tc = it (desc tc) $ val `shouldBe` res tc
+ where
+  val = TR . first Just . parse p' "<test>" $ expr tc
+  p'  = whiteSpace lang *> p <* eof
 
 spec :: Spec
-spec = mapM_ succTestSpec succTests
+spec = do
+  describe "Statement" $ mapM_ (run stmt) stmtCases
+  describe "File" $ mapM_ (run $ many stmt) fileCases
 

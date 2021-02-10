@@ -31,7 +31,7 @@ dependencies:
 - semirings
 - text
 
-default-extensions: OverloadedStrings
+default-extensions: OverloadedStrings, TypeApplications
 
 library:
   source-dirs: src
