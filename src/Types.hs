@@ -146,7 +146,7 @@ iEval (PairElim i c c') d = case iEval i d of
   v -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
 iEval (MUnitElim i c c') d = case iEval i d of
-  VMUnit -> cEval c (second (VMUnit :) d)
+  VMUnit -> cEval c d
   (VNeutral n) ->
     VNeutral $ NMUnitElim n (cEval c d) (\x -> cEval c' $ second (x :) d)
   v -> error
