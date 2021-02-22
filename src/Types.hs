@@ -84,6 +84,7 @@ instance (Show n, Show u, Show t) => Show (Binding n u t) where
 
 data TypeError
    =  MultiplicityError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
+   |  ErasureError CTerm ZeroOneMany
    |  WrongInference (Doc AnsiStyle) Type ITerm
    |  WrongCheck Type CTerm
    |  UnknownVar Name

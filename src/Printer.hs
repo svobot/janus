@@ -13,9 +13,7 @@ module Printer
   , prettyAnsi
   ) where
 
-import           Data.List                      ( foldl'
-                                                , intersperse
-                                                )
+import           Data.List                      ( intersperse )
 import           Data.Text                      ( Text )
 import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.String
@@ -48,19 +46,27 @@ instance PrettyAnsi ZeroOneMany where
 
 instance PrettyAnsi TypeError where
   prettyAnsi (MultiplicityError loc es) =
-    "Unavailable resources"
-      <> maybe emptyDoc ((" " <>) . parens . pretty) loc
-      <> ":"
-      <> nest 2 (foldl' (\doc e -> doc <> hardline <> errInfo e) emptyDoc es)
+    hardlines
+      $ (  "Unavailable resources"
+        <> maybe emptyDoc ((" " <>) . parens . pretty) loc
+        <> ":"
+        )
+      : map (indent 2) (concatMap errInfo es)
    where
-    errInfo (n, ty, used, avail) = nest 2 $ vsep
+    errInfo (n, ty, used, avail) =
       [ pretty n <+> ":" <+> prettyAnsi ty
-      , "Used"
-      <+> prettyAnsi used
-      <>  "-times, but available"
-      <+> prettyAnsi avail
-      <>  "-times."
+      , indent 2
+        $   "Used"
+        <+> prettyAnsi used
+        <>  "-times, but available"
+        <+> prettyAnsi avail
+        <>  "-times."
       ]
+  prettyAnsi (ErasureError t m) = hardlines
+    [ "Type not erased:"
+    , indent 2 $ prettyAnsi t
+    , indent 4 $ "Used" <+> prettyAnsi m <> "-times."
+    ]
   prettyAnsi (WrongInference expected actual expr) = hardlines
     [ "Couldn't match expected type" <+> squotes expected
     , indent 12 ("with actual type" <+> squotes (prettyAnsi actual))

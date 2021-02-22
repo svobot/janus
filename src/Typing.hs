@@ -71,16 +71,8 @@ iType ii g r (PairElim l i t) = do
       let x   = Binding (Local ii) (p S.* r') xTy
       let y = Binding (Local $ ii + 1) r' (yTy . vfree $ Local ii)
       let gxy = second ([x, y] ++) g
-      let
-        txy = cEval
-          (cSubst
-            0
-            (Ann (Pair (Inf . Free $ bndName x) (Inf . Free $ bndName y))
-                 (quote0 zTy)
-            )
-            t
-          )
-          (fst gxy, [])
+      let txy = cEval (cSubst 0 (Ann (Pair (ifn x) (ifn y)) (quote0 zTy)) t)
+                      (fst gxy, [])
       qs2 <- cTypeIn
         gxy
         (cSubst 1 (Free $ bndName x) . cSubst 0 (Free $ bndName y) $ i)
@@ -94,6 +86,7 @@ iType ii g r (PairElim l i t) = do
     ty -> throwError
       $ WrongInference ("_" <+> multAnn "*" <+> "_") ty (PairElim l i t)
  where
+  ifn = Inf . Free . bndName
   cTypeAnn z = cType (ii + 1)
                      (second (forget . (z :)) g)
                      Zero'
@@ -153,9 +146,10 @@ cType ii g r (Lam e) (VPi p ty ty') = do
               (ty' . vfree $ bndName x)
   checkVar "lam" (bndName x) (snd local_g) qs
 -- Universe:
-cType _  _ _       Universe        VUniverse = return Map.empty
+cType _  _ _ Universe          VUniverse = return Map.empty
 -- Fun:
-cType ii g r@Zero' (Pi _ tyt tyt') VUniverse = do
+cType ii g r t@(Pi _ tyt tyt') VUniverse = do
+  unless (r == Zero') (throwError . ErasureError t $ extend r)
   _ <- cType ii (second forget g) r tyt VUniverse
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
@@ -177,7 +171,8 @@ cType ii g r (Pair e1 e2) (VTensor p ty ty') = do
     let e1v = cEval e1 (fst g, [])
     cType ii g r e2 (ty' e1v)
 -- Tensor:
-cType ii g r@Zero' (Tensor _ tyt tyt') VUniverse = do
+cType ii g r t@(Tensor _ tyt tyt') VUniverse = do
+  unless (r == Zero') (throwError . ErasureError t $ extend r)
   _ <- cType ii (second forget g) r tyt VUniverse
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
@@ -198,7 +193,8 @@ cType ii g r (Angles e1 e2) (VWith ty ty') = do
   combine One  One  = One
   combine _    _    = Many
 -- With:
-cType ii g r@Zero' (With tyt tyt') VUniverse = do
+cType ii g r t@(With tyt tyt') VUniverse = do
+  unless (r == Zero') (throwError . ErasureError t $ extend r)
   _ <- cType ii (second forget g) r tyt VUniverse
   let x       = Binding (Local ii) Zero $ cEval tyt (fst g, [])
   let local_g = second (forget . (x :)) g
