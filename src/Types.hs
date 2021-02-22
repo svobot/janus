@@ -99,7 +99,7 @@ instance Eq TypeError where
   UnknownVar n   == UnknownVar n'    = n == n'
   _              == _                = False
 
-type Result a = Either TypeError a
+type Result = Either TypeError
 type Type = Value
 
 type TypeEnv = [Binding Name ZeroOneMany Type]
