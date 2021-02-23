@@ -114,14 +114,14 @@ stmtCases =
     )
   , TestCase
     "Additive pair elimination"
-    "1 λp. (Fst p, Snd p) : ∀ (p : (_ : a) & b) . (_ : a) * b"
+    "1 λp. (fst p, snd p) : ∀ (p : (_ : a) & b) . (_ : a) * b"
     (success . Eval One $ Ann
       (Lam (Pair (Inf (Fst (Bound 0))) (Inf (Snd (Bound 0)))))
       (Pi Many (With (ifg "a") (ifg "b")) (Tensor Many (ifg "a") (ifg "b")))
     )
   , TestCase
     "Units"
-    "(\\m a. m : forall (1 _ : MUnit) (0 _ : AUnit) . MUnit) () <>"
+    "(\\m a. m : forall (1 _ : I) (0 _ : T) . I) () <>"
     (   success
     .   Eval Many
     $   (Ann (Lam (Lam (ib 1))) (Pi One MUnitType (Pi Zero AUnitType MUnitType))
@@ -132,10 +132,10 @@ stmtCases =
   , TestCase
     "Plentiful parentheses"
     (unlines
-      [ "1 ((\\x y. ((x) : MUnit))"
-      , "  : forall (1 _ : ((MUnit)))"
-      , "    (_ : ((_ : (MUnit)) * AUnit))"
-      , "  . (MUnit)) ((())) (((), <>))"
+      [ "1 ((\\x y. ((x) : I))"
+      , "  : forall (1 _ : ((I)))"
+      , "    (_ : ((_ : (I)) * T))"
+      , "  . (I)) ((())) (((), <>))"
       ]
     )
     (   success
@@ -160,7 +160,7 @@ fileCases =
       (unlines
         [ "let 1 v = let _ @ x,y = p in x : a"
         , ""
-        , "let u = let _ @ () = () : MUnit in x : a"
+        , "let u = let _ @ () = () : I in x : a"
         ]
       )
       (success

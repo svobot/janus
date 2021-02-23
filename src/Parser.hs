@@ -50,10 +50,10 @@ keywords =
   , "out"
   , "in"
   , "U"
-  , "MUnit"
-  , "Fst"
-  , "Snd"
-  , "AUnit"
+  , "I"
+  , "fst"
+  , "snd"
+  , "T"
   ]
 
 identifier :: CharParser String
@@ -130,8 +130,8 @@ iTermInner e = foldl (:$:) <$> inner e <*> many (cTermWith inner e)
         rest PairElim ([y, x] ++ e) (z : e)
       )
       <|> (mUnit *> rest MUnitElim e (z : e))
-  fstElim = Fst <$> (reserved "Fst" *> iTerm e)
-  sndElim = Snd <$> (reserved "Snd" *> iTerm e)
+  fstElim = Fst <$> (reserved "fst" *> iTerm e)
+  sndElim = Snd <$> (reserved "snd" *> iTerm e)
   var     = (\x -> maybe (Free $ Global x) Bound $ elemIndex x e) <$> identifier
 
 cTermWith :: ([String] -> CharParser ITerm) -> [String] -> CharParser CTerm
@@ -177,7 +177,7 @@ cTermInner e = choice
   tensor = do
     T.Binding x q t <- try $ bind e <* reservedOp "*"
     Tensor q t <$> cTerm (x : e)
-  mUnitType = MUnitType <$ reserved "MUnit"
+  mUnitType = MUnitType <$ reserved "I"
   angles    = P.angles lang $ Angles <$> cTerm e <* reservedOp "," <*> cTerm e
   with      = do
     (x, t) <-
@@ -186,7 +186,7 @@ cTermInner e = choice
       <* reservedOp "&"
     With t <$> cTerm (x : e)
   aUnit     = AUnit <$ reserved "<>"
-  aUnitType = AUnitType <$ reserved "AUnit"
+  aUnitType = AUnitType <$ reserved "T"
 
 mUnit :: CharParser CTerm
 mUnit = MUnit <$ reserved "()"

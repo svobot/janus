@@ -158,8 +158,8 @@ iPrint p ii (MUnitElim l i t) = parensIf
     , multAnn "in" <+> cPrint 0 ii i <+> multAnn ":" <+> cPrint 0 (ii + 1) t
     ]
   )
-iPrint p ii (Fst i) = parensIf (p > 0) (addAnn "Fst" <+> iPrint 3 ii i)
-iPrint p ii (Snd i) = parensIf (p > 0) (addAnn "Snd" <+> iPrint 3 ii i)
+iPrint p ii (Fst i) = parensIf (p > 0) (addAnn "fst" <+> iPrint 3 ii i)
+iPrint p ii (Snd i) = parensIf (p > 0) (addAnn "snd" <+> iPrint 3 ii i)
 
 instance PrettyAnsi CTerm where
   prettyAnsi = cPrint 0 0
@@ -199,7 +199,7 @@ cPrint p ii (Tensor q c c') = parensIf
     ]
   )
 cPrint _ _ MUnit     = multAnn "()"
-cPrint _ _ MUnitType = multAnn "MUnit"
+cPrint _ _ MUnitType = multAnn "I"
 cPrint _ ii (Angles c c') =
   addAnn "<" <> cPrint 0 ii c <> addAnn "," <+> cPrint 0 ii c' <> addAnn ">"
 cPrint p ii (With c c') = parensIf
@@ -211,7 +211,7 @@ cPrint p ii (With c c') = parensIf
     ]
   )
 cPrint _ _ AUnit     = addAnn "<>"
-cPrint _ _ AUnitType = addAnn "AUnit"
+cPrint _ _ AUnitType = addAnn "T"
 
 multAnn :: Doc Term.AnsiStyle -> Doc Term.AnsiStyle
 multAnn = annotate (Term.color Term.Blue <> Term.bold)
