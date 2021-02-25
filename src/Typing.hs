@@ -181,11 +181,15 @@ cType _  _ MUnitType      VUniverse      = return Map.empty
 cType ii r (Angles e1 e2) (VWith ty ty') = do
   qs1 <- cType ii r e1 ty
   qs2 <- evalInEnv e1 >>= (cType ii r e2 . ty')
-  return $ Map.unionWith combine qs1 qs2
+  return $ Map.merge (Map.mapMissing (const $ lub Zero))
+                     (Map.mapMissing (const $ lub Zero))
+                     (Map.zipWithMatched (const lub))
+                     qs1
+                     qs2
  where
-  combine Zero Zero = Zero
-  combine One  One  = One
-  combine _    _    = Many
+  lub Zero Zero = Zero
+  lub One  One  = One
+  lub _    _    = Many
 -- With:
 cType ii r t@(With tyt tyt') VUniverse = do
   unless (r == Zero') (throwError . ErasureError t $ extend r)
