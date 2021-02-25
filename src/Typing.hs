@@ -13,8 +13,11 @@ import           Data.Bifunctor                 ( first
                                                 , second
                                                 )
 import           Data.List                      ( find )
+import qualified Data.Map.Merge.Strict         as Map
 import qualified Data.Map.Strict               as Map
-import           Data.Maybe                     ( fromMaybe )
+import           Data.Maybe                     ( fromMaybe
+                                                , mapMaybe
+                                                )
 import qualified Data.Semiring                 as S
 import qualified Data.Text.IO                  as T
 import           Printer
@@ -32,7 +35,7 @@ iinfer g r t = case iType0 g r t of
 iType0 :: Context -> ZeroOneMany -> ITerm -> Result Type
 iType0 g r t = do
   (qs, tp) <- first (Map.map (r S.*)) <$> runReaderT (iType 0 (restrict r) t) g
-  mapM_ (throwError . MultiplicityError Nothing) $ checkMultiplicity qs (snd g)
+  mapM_ (throwError . MultiplicityError Nothing) $ checkMultiplicity (snd g) qs
   return tp
  where
   restrict :: ZeroOneMany -> ZeroOne
@@ -55,7 +58,7 @@ iType _ r (Free x) = do
   env <- asks snd
   case find ((== x) . bndName) env of
     Just (Binding _ _ ty) -> return (Map.singleton x $ extend r, ty)
-    Nothing               -> throwError $ UnknownVar x
+    Nothing               -> throwError $ UnknownVarError x
 -- App:
 iType ii r (e1 :$: e2) = do
   (qs1, si) <- iType ii r e1
@@ -70,7 +73,7 @@ iType ii r (e1 :$: e2) = do
           qs2 <- cType ii One' e2 ty
           return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
       (qs, ) . ty' <$> evalInEnv e2
-    ty -> throwError $ WrongInference "_ -> _" ty (e1 :$: e2)
+    ty -> throwError $ InferenceError "_ -> _" ty (e1 :$: e2)
 -- PairElim:
 iType ii r (PairElim l i t) = do
   (qs1, lTy) <- iType ii r l
@@ -91,7 +94,7 @@ iType ii r (PairElim l i t) = do
           >>= checkVar "pairElim, Local ii+1" (bndName y)
         (qs, ) <$> evalInEnv (cSubst 0 l t)
     ty -> throwError
-      $ WrongInference ("_" <+> multAnn "*" <+> "_") ty (PairElim l i t)
+      $ InferenceError ("_" <+> multAnn "*" <+> "_") ty (PairElim l i t)
  where
   ifn = Inf . Free . bndName
   cTypeAnn z = local (second (forget . (z :)))
@@ -108,7 +111,7 @@ iType ii r (MUnitElim l i t) = do
       let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
       (qs, ) <$> evalInEnv (cSubst 0 l t)
     ty ->
-      throwError $ WrongInference (prettyAnsi MUnitType) ty (MUnitElim l i t)
+      throwError $ InferenceError (prettyAnsi MUnitType) ty (MUnitElim l i t)
  where
   cTypeAnn x = local (second (forget . (x :)))
     $ cType (ii + 1) Zero' (cSubst 0 (Free $ bndName x) t) VUniverse
@@ -118,13 +121,13 @@ iType ii r (Fst i) = do
   (qs, ty) <- iType ii r i
   case ty of
     (VWith s _) -> return (qs, s)
-    _ -> throwError $ WrongInference ("_" <+> addAnn "&" <+> "_") ty (Fst i)
+    _ -> throwError $ InferenceError ("_" <+> addAnn "&" <+> "_") ty (Fst i)
 -- Snd:
 iType ii r (Snd i) = do
   (qs, ty) <- iType ii r i
   case ty of
     (VWith _ t) -> return (qs, t . vfree $ Local ii)
-    _ -> throwError $ WrongInference ("_" <+> addAnn "&" <+> "_") ty (Snd i)
+    _ -> throwError $ InferenceError ("_" <+> addAnn "&" <+> "_") ty (Snd i)
 iType _ _ i@(Bound _) = error $ "internal: Trying to infer type of " <> show i
 
 cType :: Int -> ZeroOne -> CTerm -> Type -> Judgement Usage
@@ -132,17 +135,14 @@ cType :: Int -> ZeroOne -> CTerm -> Type -> Judgement Usage
 cType ii r (Inf e) v = do
   (qs, v') <- iType ii r e
   unless (quote0 v == quote0 v')
-         (throwError $ WrongInference (prettyAnsi v) v' e)
+         (throwError $ InferenceError (prettyAnsi v) v' e)
   return qs
 -- Lam:
 cType ii r (Lam e) (VPi p ty ty') = do
   let x = Binding (Local ii) (p S.* extend r) ty
-  local (second (x :)) $ do
-    qs <- cType (ii + 1)
-                r
-                (cSubst 0 (Free $ bndName x) e)
-                (ty' . vfree $ bndName x)
-    checkVar "lam" (bndName x) qs
+  local (second (x :))
+    $ cType (ii + 1) r (cSubst 0 (Free $ bndName x) e) (ty' . vfree $ bndName x)
+    >>= checkVar "lam" (bndName x)
 -- Universe:
 cType _  _ Universe          VUniverse = return Map.empty
 -- Fun:
@@ -198,28 +198,28 @@ cType ii r t@(With tyt tyt') VUniverse = do
 cType _ _ AUnit     VAUnitType = return Map.empty
 -- AUnitType:
 cType _ _ AUnitType VUniverse  = return Map.empty
-cType _ _ val       ty         = throwError $ WrongCheck ty val
+cType _ _ val       ty         = throwError $ CheckError ty val
 
 checkVar :: String -> Name -> Usage -> Judgement Usage
 checkVar loc n qs = do
   env <- asks snd
   let (q, qs') = splitVar n qs
   mapM_ (throwError . MultiplicityError (Just loc))
-        (checkMultiplicity (Map.singleton n q) env)
+        (checkMultiplicity env $ Map.singleton n q)
   return qs'
  where
   splitVar :: Name -> Usage -> (ZeroOneMany, Usage)
   splitVar = (first (fromMaybe Zero) .) . Map.alterF (, Nothing)
 
 checkMultiplicity
-  :: Usage -> TypeEnv -> Maybe [(Name, Type, ZeroOneMany, ZeroOneMany)]
-checkMultiplicity qs env = Map.foldrWithKey
-  (\n q es -> case find ((== n) . bndName) env of
-    Just b | q <: bndUsage b -> es
-           | otherwise -> Just $ (n, bndType b, q, bndUsage b) : fromMaybe [] es
+  :: TypeEnv -> Usage -> Maybe [(Name, Type, ZeroOneMany, ZeroOneMany)]
+checkMultiplicity env = toMaybe . mapMaybe notEnough . Map.toList
+ where
+  notEnough (n, q) = case find ((== n) . bndName) env of
+    Just b | q <: bndUsage b -> Nothing
+           | otherwise       -> Just (n, bndType b, q, bndUsage b)
     Nothing ->
-      error ("internal: Unknown " <> show n <> " used " <> show q <> "-times")
-  )
-  Nothing
-  qs
+      error $ "internal: Unknown " <> show n <> " used " <> show q <> "-times"
+  toMaybe [] = Nothing
+  toMaybe es = Just es
 

@@ -85,19 +85,19 @@ instance (Show n, Show u, Show t) => Show (Binding n u t) where
 data TypeError
    =  MultiplicityError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
    |  ErasureError CTerm ZeroOneMany
-   |  WrongInference (Doc AnsiStyle) Type ITerm
-   |  WrongCheck Type CTerm
-   |  UnknownVar Name
+   |  InferenceError (Doc AnsiStyle) Type ITerm
+   |  CheckError Type CTerm
+   |  UnknownVarError Name
 
 instance Eq TypeError where
   MultiplicityError ms st == MultiplicityError ms' st' =
     ms == ms' && ((==) `on` map qt) st st'
     where qt (n, t, q, q') = (n, quote0 t, q, q')
-  WrongInference doc t i == WrongInference doc' t' i' =
+  InferenceError doc t i == InferenceError doc' t' i' =
     ((==) `on` show) doc doc' && ((==) `on` quote0) t t' && i == i'
-  WrongCheck t c == WrongCheck t' c' = ((==) `on` quote0) t t' && c == c'
-  UnknownVar n   == UnknownVar n'    = n == n'
-  _              == _                = False
+  CheckError t c    == CheckError t' c'   = ((==) `on` quote0) t t' && c == c'
+  UnknownVarError n == UnknownVarError n' = n == n'
+  _                 == _                  = False
 
 type Result = Either TypeError
 type Type = Value

@@ -47,7 +47,7 @@ instance PrettyAnsi ZeroOneMany where
 instance PrettyAnsi TypeError where
   prettyAnsi (MultiplicityError loc es) =
     hardlines
-      $ (  "Unavailable resources"
+      $ (  "Mismatched multiplicities"
         <> maybe emptyDoc ((" " <>) . parens . pretty) loc
         <> ":"
         )
@@ -62,21 +62,23 @@ instance PrettyAnsi TypeError where
         <+> prettyAnsi avail
         <>  "-times."
       ]
-  prettyAnsi (ErasureError t m) = hardlines
-    [ "Type not erased:"
-    , indent 2 $ prettyAnsi t
-    , indent 4 $ "Used" <+> prettyAnsi m <> "-times."
-    ]
-  prettyAnsi (WrongInference expected actual expr) = hardlines
+  prettyAnsi (ErasureError t m) =
+    "Type"
+      <+> squotes (prettyAnsi t)
+      <+> "used"
+      <+> prettyAnsi m
+      <>  "-times outside erased context."
+  prettyAnsi (InferenceError expected actual expr) = hardlines
     [ "Couldn't match expected type" <+> squotes expected
     , indent 12 ("with actual type" <+> squotes (prettyAnsi actual))
     , "In the expression:" <+> prettyAnsi expr
     ]
-  prettyAnsi (WrongCheck ty expr) = hardlines
+  prettyAnsi (CheckError ty expr) = hardlines
     [ "Could't match expected type" <+> squotes (prettyAnsi ty)
     , "In the expression:" <+> prettyAnsi expr
     ]
-  prettyAnsi (UnknownVar n) = "Variable not in scope: " <> prettyAnsi (Free n)
+  prettyAnsi (UnknownVarError n) =
+    "Variable not in scope: " <> prettyAnsi (Free n)
 
 instance Show TypeError where
   show = renderString . layoutPretty (LayoutOptions Unbounded) . prettyAnsi
