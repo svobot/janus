@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LiberalTypeSynonyms #-}
-{-# LANGUAGE TupleSections #-}
 
 module Interpreter
   ( repl

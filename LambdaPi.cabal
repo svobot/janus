@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 421d2f687886d66034283356065aa9306e3ab4d807694d5cb0811fe5dda47b5e
+-- hash: 99b68057a4de151b5c395d3fd72c1ad4ea64395d9776005f71353dab631e4cc1
 
 name:           LambdaPi
 version:        0.1.0.0
@@ -38,7 +38,7 @@ library
       Paths_LambdaPi
   hs-source-dirs:
       src
-  default-extensions: OverloadedStrings, TypeApplications
+  default-extensions: OverloadedStrings, TupleSections, TypeApplications
   ghc-options: -Wall -Wincomplete-uni-patterns
   build-depends:
       base >=4.7 && <5
@@ -59,7 +59,7 @@ executable LambdaPi-exe
       Paths_LambdaPi
   hs-source-dirs:
       app
-  default-extensions: OverloadedStrings, TypeApplications
+  default-extensions: OverloadedStrings, TupleSections, TypeApplications
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       LambdaPi
@@ -85,7 +85,7 @@ test-suite LambdaPi-test
       Paths_LambdaPi
   hs-source-dirs:
       test
-  default-extensions: OverloadedStrings, TypeApplications
+  default-extensions: OverloadedStrings, TupleSections, TypeApplications
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       LambdaPi

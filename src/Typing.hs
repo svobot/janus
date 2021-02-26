@@ -1,6 +1,7 @@
-{-# LANGUAGE TupleSections #-}
-
-module Typing where
+module Typing
+  ( iinfer
+  , iType0
+  ) where
 
 import           Control.Monad.Except           ( throwError )
 import           Control.Monad.Reader           ( MonadIO(liftIO)
@@ -46,20 +47,18 @@ iType0 g r t = do
 evalInEnv :: CTerm -> Judgement Value
 evalInEnv t = asks (cEval t . (, []) . fst)
 
+-- | Infer the type and count the resource usage of the term.
 iType :: Int -> ZeroOne -> ITerm -> Judgement (Usage, Type)
--- Cut:
 iType ii r (Ann e tyt) = do
   _  <- local (second forget) $ cType ii Zero' tyt VUniverse
   ty <- evalInEnv tyt
   qs <- cType ii r e ty
   return (qs, ty)
--- Var:
 iType _ r (Free x) = do
   env <- asks snd
   case find ((== x) . bndName) env of
     Just (Binding _ _ ty) -> return (Map.singleton x $ extend r, ty)
     Nothing               -> throwError $ UnknownVarError x
--- App:
 iType ii r (e1 :$: e2) = do
   (qs1, si) <- iType ii r e1
   case si of
@@ -74,7 +73,6 @@ iType ii r (e1 :$: e2) = do
           return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
       (qs, ) . ty' <$> evalInEnv e2
     ty -> throwError $ InferenceError "_ -> _" ty (e1 :$: e2)
--- PairElim:
 iType ii r (PairElim l i t) = do
   (qs1, lTy) <- iType ii r l
   case lTy of
@@ -100,7 +98,6 @@ iType ii r (PairElim l i t) = do
   cTypeAnn z = local (second (forget . (z :)))
     $ cType (ii + 1) Zero' (cSubst 0 (Free $ bndName z) t) VUniverse
   cTypeIn ixy txy = cType (ii + 2) r ixy txy
--- UnitElim:
 iType ii r (MUnitElim l i t) = do
   (qs1, lTy) <- iType ii r l
   case lTy of
@@ -116,13 +113,11 @@ iType ii r (MUnitElim l i t) = do
   cTypeAnn x = local (second (forget . (x :)))
     $ cType (ii + 1) Zero' (cSubst 0 (Free $ bndName x) t) VUniverse
   cTypeIn tu = cType ii r i tu
--- Fst:
 iType ii r (Fst i) = do
   (qs, ty) <- iType ii r i
   case ty of
     (VWith s _) -> return (qs, s)
     _ -> throwError $ InferenceError ("_" <+> addAnn "&" <+> "_") ty (Fst i)
--- Snd:
 iType ii r (Snd i) = do
   (qs, ty) <- iType ii r i
   case ty of
@@ -130,30 +125,18 @@ iType ii r (Snd i) = do
     _ -> throwError $ InferenceError ("_" <+> addAnn "&" <+> "_") ty (Snd i)
 iType _ _ i@(Bound _) = error $ "internal: Trying to infer type of " <> show i
 
+-- | Check the type and count the resource usage of the term.
 cType :: Int -> ZeroOne -> CTerm -> Type -> Judgement Usage
--- Elim
 cType ii r (Inf e) v = do
   (qs, v') <- iType ii r e
   unless (quote0 v == quote0 v')
          (throwError $ InferenceError (prettyAnsi v) v' e)
   return qs
--- Lam:
 cType ii r (Lam e) (VPi p ty ty') = do
   let x = Binding (Local ii) (p S.* extend r) ty
   local (second (x :))
     $ cType (ii + 1) r (cSubst 0 (Free $ bndName x) e) (ty' . vfree $ bndName x)
     >>= checkVar "lam" (bndName x)
--- Universe:
-cType _  _ Universe          VUniverse = return Map.empty
--- Fun:
-cType ii r t@(Pi _ tyt tyt') VUniverse = do
-  unless (r == Zero') (throwError . ErasureError t $ extend r)
-  _ <- local (second forget) $ cType ii r tyt VUniverse
-  x <- Binding (Local ii) Zero <$> evalInEnv tyt
-  local (second (forget . (x :)))
-    $   cType (ii + 1) r (cSubst 0 (Free $ bndName x) tyt') VUniverse
-    >>= checkVar "fun" (bndName x)
--- Pair:
 cType ii r (Pair e1 e2) (VTensor p ty ty') = do
   let r' = extend r
   if p S.* r' == Zero
@@ -165,22 +148,12 @@ cType ii r (Pair e1 e2) (VTensor p ty ty') = do
       qs2 <- rest
       return $ Map.unionWith (S.+) qs2 (Map.map (p S.* r' S.*) qs1)
   where rest = evalInEnv e1 >>= (cType ii r e2 . ty')
--- Tensor:
-cType ii r t@(Tensor _ tyt tyt') VUniverse = do
-  unless (r == Zero') (throwError . ErasureError t $ extend r)
-  _ <- local (second forget) $ cType ii r tyt VUniverse
-  x <- Binding (Local ii) Zero <$> evalInEnv tyt
-  local (second (forget . (x :)))
-    $   cType (ii + 1) r (cSubst 0 (Free $ bndName x) tyt') VUniverse
-    >>= checkVar "tensor" (bndName x)
--- Unit:
-cType _  _ MUnit          VMUnitType     = return Map.empty
--- UnitType:
-cType _  _ MUnitType      VUniverse      = return Map.empty
--- Angles:
 cType ii r (Angles e1 e2) (VWith ty ty') = do
   qs1 <- cType ii r e1 ty
   qs2 <- evalInEnv e1 >>= (cType ii r e2 . ty')
+  -- For every resource that is used anywhere in the pair, take the least upper
+  -- bound of the resource usages in both elements of the pair. The element that
+  -- is missing a usage of a resource is considered to use it zero-times.
   return $ Map.merge (Map.mapMissing (const $ lub Zero))
                      (Map.mapMissing (const $ lub Zero))
                      (Map.zipWithMatched (const lub))
@@ -190,19 +163,32 @@ cType ii r (Angles e1 e2) (VWith ty ty') = do
   lub Zero Zero = Zero
   lub One  One  = One
   lub _    _    = Many
--- With:
-cType ii r t@(With tyt tyt') VUniverse = do
+cType ii r t@Pi{}     VUniverse  = cTypeDependent "fun" ii r t
+cType ii r t@Tensor{} VUniverse  = cTypeDependent "tensor" ii r t
+cType ii r t@With{}   VUniverse  = cTypeDependent "with" ii r t
+cType _  _ Universe   VUniverse  = return Map.empty
+cType _  _ MUnit      VMUnitType = return Map.empty
+cType _  _ MUnitType  VUniverse  = return Map.empty
+cType _  _ AUnit      VAUnitType = return Map.empty
+cType _  _ AUnitType  VUniverse  = return Map.empty
+cType _  _ val        ty         = throwError $ CheckError ty val
+
+-- | Generic typing rule that check terms containing a dependent function type,
+-- dependent tensor product type, or a dependent with type
+cTypeDependent :: String -> Int -> ZeroOne -> CTerm -> Judgement Usage
+cTypeDependent loc ii r t = do
   unless (r == Zero') (throwError . ErasureError t $ extend r)
   _ <- local (second forget) $ cType ii r tyt VUniverse
   x <- Binding (Local ii) Zero <$> evalInEnv tyt
   local (second (forget . (x :)))
     $   cType (ii + 1) r (cSubst 0 (Free $ bndName x) tyt') VUniverse
-    >>= checkVar "with" (bndName x)
--- AUnit:
-cType _ _ AUnit     VAUnitType = return Map.empty
--- AUnitType:
-cType _ _ AUnitType VUniverse  = return Map.empty
-cType _ _ val       ty         = throwError $ CheckError ty val
+    >>= checkVar loc (bndName x)
+ where
+  (tyt, tyt') = case t of
+    (Pi     _ t1 t2) -> (t1, t2)
+    (Tensor _ t1 t2) -> (t1, t2)
+    (With t1 t2    ) -> (t1, t2)
+    ty -> error $ "internal: " <> show ty <> " is not a dependent type."
 
 checkVar :: String -> Name -> Usage -> Judgement Usage
 checkVar loc n qs = do
