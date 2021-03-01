@@ -13,7 +13,17 @@ module Printer
   , prettyAnsi
   ) where
 
+import           Control.Monad.Reader           ( MonadReader(local)
+                                                , Reader
+                                                , asks
+                                                , runReader
+                                                )
+import           Control.Monad.State            ( State
+                                                , modify
+                                                , runState
+                                                )
 import           Data.List                      ( intersperse )
+import qualified Data.Set                      as Set
 import           Data.Text                      ( Text )
 import           Data.Text.Prettyprint.Doc
 import           Data.Text.Prettyprint.Doc.Render.String
@@ -23,18 +33,23 @@ import qualified Data.Text.Prettyprint.Doc.Render.Terminal
 import           Rig                            ( ZeroOneMany(..) )
 import           Types
 
+type TermDoc = Doc Term.AnsiStyle
+
 instance Pretty Name where
   pretty (Global s) = pretty s
   pretty x          = "[" <> pretty (show x) <> "]"
 
 class PrettyAnsi a where
-  prettyAnsi :: a -> Doc Term.AnsiStyle
+  prettyAnsi :: a -> TermDoc
 
 instance PrettyAnsi Text where
   prettyAnsi = pretty
 
 instance PrettyAnsi ITerm where
-  prettyAnsi = iPrint 0 0
+  prettyAnsi = runPrinter $ iPrint 0
+
+instance PrettyAnsi CTerm where
+  prettyAnsi = runPrinter $ cPrint 0
 
 instance PrettyAnsi Value where
   prettyAnsi = prettyAnsi . quote0
@@ -83,10 +98,10 @@ instance PrettyAnsi TypeError where
 instance Show TypeError where
   show = renderString . layoutPretty (LayoutOptions Unbounded) . prettyAnsi
 
-render :: Doc Term.AnsiStyle -> Text
+render :: TermDoc -> Text
 render = Term.renderStrict . layoutSmart defaultLayoutOptions
 
-renderErr :: Doc Term.AnsiStyle -> Text
+renderErr :: TermDoc -> Text
 renderErr =
   Term.renderStrict
     . layoutSmart defaultLayoutOptions
@@ -96,8 +111,7 @@ renderErr =
 hardlines :: [Doc ann] -> Doc ann
 hardlines = mconcat . intersperse hardline
 
-renderBinding
-  :: Maybe String -> Binding Value ZeroOneMany Type -> Doc Term.AnsiStyle
+renderBinding :: Maybe String -> Binding Value ZeroOneMany Type -> TermDoc
 renderBinding name (Binding val q ty) = (assign <>) . align $ sep ann
  where
   ann    = [prettyAnsi q <+> prettyAnsi val, ":" <+> prettyAnsi ty]
@@ -111,139 +125,172 @@ renderTest =
   ((renderString . layoutPretty (LayoutOptions Unbounded) . group) .)
     . renderBinding
 
-var :: Int -> Doc ann
-var =
-  pretty
-    . ([ c : n
-       | n <- "" : map show [1 :: Integer ..]
-       , c <- ['x', 'y', 'z'] ++ ['a' .. 'w']
-       ] !!
-      )
-
 parensIf :: Bool -> Doc ann -> Doc ann
 parensIf True  = parens
 parensIf False = id
 
-iPrint :: Int -> Int -> ITerm -> Doc Term.AnsiStyle
-iPrint p ii (Ann c ty) =
-  parensIf (p > 1) (cPrint 2 ii c <+> ":" <+> cPrint 0 ii ty)
-iPrint _ ii (Bound k) = var (ii - k - 1)
-iPrint _ _  (Free  n) = pretty n
-iPrint p ii (i :$: c) =
-  parensIf (p > 2) (align $ sep [iPrint 2 ii i, cPrint 3 ii c])
-iPrint p ii (PairElim l i t) = parensIf
-  (p > 0)
-  (align $ sep
-    [ multAnn "let"
-    <+> varAnn (ii + 2)
-    <+> multAnn "@"
-    <+> varAnn ii
-    <>  multAnn ","
-    <+> varAnn (ii + 1)
-    <+> multAnn "="
-    <+> iPrint 0 ii l
-    , multAnn "in"
-    <+> cPrint 0 (ii + 2) i
-    <+> multAnn ":"
-    <+> cPrint 0 (ii + 3) t
+type Printer doc = State FreeVars (Reader (NameEnv doc) doc)
+type FreeVars = Set.Set String
+data NameEnv doc = NameEnv
+  { fresh :: [doc]
+  , bound :: [doc]
+  }
+
+runPrinter :: (a -> Printer (Doc ann)) -> a -> Doc ann
+runPrinter printer term = runReader r (NameEnv (freshNames finalState) [])
+ where
+  (r, finalState) = runState (printer term) Set.empty
+  -- Filter the free variables that occur in the term out of the names that can
+  -- be used for bound variables.
+  freshNames freeVars =
+    [ pretty $ c : n
+    | n <- "" : map show [1 :: Int ..]
+    , c <- ['x', 'y', 'z'] ++ ['a' .. 'w']
+    , (c : n) `Set.notMember` freeVars
     ]
-  )
-iPrint p ii (MUnitElim l i t) = parensIf
-  (p > 0)
-  (sep
+
+skip :: Int -> NameEnv a -> NameEnv a
+skip i env = env { fresh = drop i $ fresh env }
+
+bind :: NameEnv a -> NameEnv a
+bind (NameEnv (new : fs) bs) = NameEnv fs (new : bs)
+bind _                       = error "internal: No new variable name available."
+
+bindMany :: Int -> NameEnv a -> NameEnv a
+bindMany n (NameEnv as bs) = NameEnv (drop n as) (reverse (take n as) ++ bs)
+
+iPrint :: Int -> ITerm -> Printer TermDoc
+iPrint p (Ann c c') = (<*>) . (fmt <$>) <$> cPrint 2 c <*> cPrint 0 c'
+  where fmt val ty = parensIf (p > 1) $ val <+> ":" <+> ty
+iPrint _ (Bound k) = return . asks $ (!! k) . bound
+iPrint _ (Free  n) = do
+  case n of
+    Global s -> modify (Set.insert s)
+    _        -> return ()
+  return . return $ pretty n
+iPrint p (i :$: c) = (<*>) . (fmt <$>) <$> iPrint 2 i <*> cPrint 3 c
+  where fmt f x = parensIf (p > 2) . align $ sep [f, x]
+iPrint p (PairElim l i t) = do
+  letPart  <- iPrint 0 l
+  inPart   <- cPrint 0 i
+  typePart <- cPrint 0 t
+  return
+    $   asks fmt
+    <*> letPart
+    <*> local (bindMany 2)    inPart
+    <*> local (bind . skip 2) typePart
+ where
+  fmt (NameEnv ns _) letPart inPart typePart = parensIf (p > 0) . align $ sep
     [ multAnn "let"
-    <+> varAnn ii
+    <+> varAnn (ns !! 2)
+    <+> multAnn "@"
+    <+> varAnn (head ns)
+    <>  multAnn ","
+    <+> varAnn (ns !! 1)
+    <+> multAnn "="
+    <+> letPart
+    , multAnn "in" <+> inPart <+> multAnn ":" <+> typePart
+    ]
+iPrint p (MUnitElim l i t) = do
+  letPart  <- iPrint 0 l
+  inPart   <- cPrint 0 i
+  typePart <- cPrint 0 t
+  return
+    $   asks (fmt . head . fresh)
+    <*> letPart
+    <*> inPart
+    <*> local bind typePart
+ where
+  fmt name letPart inPart typePart = parensIf (p > 0) $ sep
+    [ multAnn "let"
+    <+> varAnn name
     <+> multAnn "@"
     <+> multAnn "()"
     <+> multAnn "="
-    <+> iPrint 0 ii l
-    , multAnn "in" <+> cPrint 0 ii i <+> multAnn ":" <+> cPrint 0 (ii + 1) t
+    <+> letPart
+    , multAnn "in" <+> inPart <+> multAnn ":" <+> typePart
     ]
-  )
-iPrint p ii (Fst i) = parensIf (p > 0) (addAnn "fst" <+> iPrint 3 ii i)
-iPrint p ii (Snd i) = parensIf (p > 0) (addAnn "snd" <+> iPrint 3 ii i)
+iPrint p (Fst i) = (parensIf (p > 0) . (addAnn "fst" <+>) <$>) <$> iPrint 3 i
+iPrint p (Snd i) = (parensIf (p > 0) . (addAnn "snd" <+>) <$>) <$> iPrint 3 i
 
-instance PrettyAnsi CTerm where
-  prettyAnsi = cPrint 0 0
+cPrint :: Int -> CTerm -> Printer TermDoc
+cPrint p (Inf i) = iPrint p i
+cPrint p (Lam c) = (parensIf (p > 0) <$>) <$> go 0 c
+ where
+  go depth (Lam c') = go (depth + 1) c'
+  go depth c'       = do
+    body <- cPrint 0 c'
+    return $ asks (fmt depth) <*> local (bindMany $ depth + 1) body
+  fmt depth (NameEnv ns _) body = do
+    "λ" <> hsep (map (varAnn . (ns !!)) [0 .. depth]) <> "." <+> body
+cPrint p (Pi q1 d1 (Pi q2 d2 r)) =
+  (parensIf (p > 0) <$>) <$> go [(q2, d2), (q1, d1)] r
+ where
+  go ds (Pi q d x) = go ((q, d) : ds) x
+  go ds x          = do
+    let bindCount = length ds
+    binds <- mapM
+      (\(depth, (q, d)) -> do
+        ty <- cPrint 0 d
+        return
+          .   local (bindMany depth)
+          $   asks (fmtBind q . head . fresh)
+          <*> local (skip $ bindCount - depth) ty
+      )
+      (zip [0 ..] $ reverse ds)
+    body <- cPrint 0 x
+    return $ do
+      bindsDoc <- sequence binds
+      bodyDoc  <- local (bindMany bindCount) body
+      return . align $ sep ["∀" <+> align (sep bindsDoc) <+> ".", bodyDoc]
+  fmtBind q name body = parens $ prettyAnsi q <+> varAnn name <+> ":" <+> body
+cPrint p (Pi q c c') = cPrintDependent fmt c c'
+ where
+  fmt name l r = parensIf (p > 0) $ sep
+    ["(" <> prettyAnsi q <+> varAnn name <+> ":" <+> l <> ")" <+> "->", r]
+cPrint p (Tensor q c c') = cPrintDependent fmt c c'
+ where
+  fmt name l r = do
+    parensIf (p > 0) $ sep
+      [ multAnn "("
+      <>  prettyAnsi q
+      <+> varAnn name
+      <+> ":"
+      <+> l
+      <>  multAnn ")"
+      <+> multAnn "*"
+      , r
+      ]
+cPrint p (With c c') = cPrintDependent fmt c c'
+ where
+  fmt name l r = parensIf (p > 0) $ sep
+    [addAnn "(" <> varAnn name <+> ":" <+> l <> addAnn ")" <+> addAnn "&", r]
+cPrint _ (Pair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
+  where fmt l r = multAnn "(" <> l <> multAnn "," <+> r <> multAnn ")"
+cPrint _ (Angles c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
+  where fmt l r = addAnn "<" <> l <> addAnn "," <+> r <> addAnn ">"
+cPrint _ Universe  = return . return $ "U"
+cPrint _ MUnit     = return . return $ multAnn "()"
+cPrint _ MUnitType = return . return $ multAnn "I"
+cPrint _ AUnit     = return . return $ addAnn "<>"
+cPrint _ AUnitType = return . return $ addAnn "T"
 
-cPrint :: Int -> Int -> CTerm -> Doc Term.AnsiStyle
-cPrint p ii (Inf i)  = iPrint p ii i
-cPrint p ii (Lam c)  = parensIf (p > 0) (lambdas ii 1 c)
-cPrint _ _  Universe = "U"
-cPrint p ii (Pi q d (Pi q' d' r)) =
-  parensIf (p > 0) (nestedForall (ii + 2) [(q', ii + 1, d'), (q, ii, d)] r)
-cPrint p ii (Pi q d r) = parensIf
-  (p > 0)
-  (sep
-    [ "("
-    <>  prettyAnsi q
-    <+> varAnn ii
-    <+> ":"
-    <+> cPrint 0 ii d
-    <>  ")"
-    <+> "->"
-    , cPrint 0 (ii + 1) r
-    ]
-  )
-cPrint _ ii (Pair c c') =
-  multAnn "(" <> cPrint 0 ii c <> multAnn "," <+> cPrint 0 ii c' <> multAnn ")"
-cPrint p ii (Tensor q c c') = parensIf
-  (p > 0)
-  (sep
-    [ multAnn "("
-    <>  prettyAnsi q
-    <+> varAnn ii
-    <+> ":"
-    <+> cPrint 0 ii c
-    <>  multAnn ")"
-    <+> multAnn "*"
-    , cPrint 0 (ii + 1) c'
-    ]
-  )
-cPrint _ _ MUnit     = multAnn "()"
-cPrint _ _ MUnitType = multAnn "I"
-cPrint _ ii (Angles c c') =
-  addAnn "<" <> cPrint 0 ii c <> addAnn "," <+> cPrint 0 ii c' <> addAnn ">"
-cPrint p ii (With c c') = parensIf
-  (p > 0)
-  (sep
-    [ addAnn "(" <> varAnn ii <+> ":" <+> cPrint 0 ii c <> addAnn ")" <+> addAnn
-      "&"
-    , cPrint 0 (ii + 1) c'
-    ]
-  )
-cPrint _ _ AUnit     = addAnn "<>"
-cPrint _ _ AUnitType = addAnn "T"
+cPrintDependent
+  :: (TermDoc -> TermDoc -> TermDoc -> TermDoc)
+  -> CTerm
+  -> CTerm
+  -> Printer TermDoc
+cPrintDependent fmt l r = do
+  left  <- cPrint 0 l
+  right <- cPrint 0 r
+  return $ asks (fmt . head . fresh) <*> left <*> local bind right
 
-multAnn :: Doc Term.AnsiStyle -> Doc Term.AnsiStyle
+multAnn :: TermDoc -> TermDoc
 multAnn = annotate (Term.color Term.Blue <> Term.bold)
 
-addAnn :: Doc Term.AnsiStyle -> Doc Term.AnsiStyle
+addAnn :: TermDoc -> TermDoc
 addAnn = annotate (Term.color Term.Green <> Term.bold)
 
-varAnn :: Int -> Doc Term.AnsiStyle
-varAnn = annotate Term.bold . var
-
-lambdas :: Int -> Int -> CTerm -> Doc Term.AnsiStyle
-lambdas ii depth (Lam c) = lambdas ii (depth + 1) c
-lambdas ii depth c =
-  "λ"
-    <>  hsep (map varAnn [ii .. ii + depth - 1])
-    <>  "."
-    <+> cPrint 0 (ii + depth) c
-
-nestedForall
-  :: Int -> [(ZeroOneMany, Int, CTerm)] -> CTerm -> Doc Term.AnsiStyle
-nestedForall ii ds (Pi q d r) = nestedForall (ii + 1) ((q, ii, d) : ds) r
-nestedForall ii ds x          = align $ sep
-  [ "∀"
-  <+> align
-        (sep
-          [ parens $ prettyAnsi q <+> varAnn n <+> ":" <+> cPrint 0 n d
-          | (q, n, d) <- reverse ds
-          ]
-        )
-  <+> "."
-  , cPrint 0 ii x
-  ]
+varAnn :: TermDoc -> TermDoc
+varAnn = annotate Term.bold
 
