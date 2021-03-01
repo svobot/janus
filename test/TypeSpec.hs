@@ -3,6 +3,7 @@ module TypeSpec
   ) where
 
 import           Control.Applicative            ( liftA3 )
+import           Control.Monad.Except           ( throwError )
 import           Rig
 import           Test.Hspec
 import           Types
@@ -13,52 +14,109 @@ data TestCase = TestCase
   , ctx   :: Context
   , multi :: ZeroOneMany
   , expr  :: ITerm
-  , res   :: Result CTerm
+  , res   :: TestResult
   }
 
-defaultContext =
-  ( []
-  , [ Binding (Global "a") Zero VUniverse
-    , Binding (Global "x") One  (VNeutral . NFree $ Global "a")
-    ]
-  )
+newtype TestResult =  TR (Result CTerm)
 
-testCases :: [TestCase]
-testCases =
+instance Eq TestResult where
+  (TR (Left  te)) == (TR (Left  te')) = show te == show te'
+  (TR (Right ty)) == (TR (Right ty')) = ty == ty'
+  _               == _                = False
+
+instance Show TestResult where
+  show (TR (Left  te)) = show te
+  show (TR (Right ty)) = show ty
+
+cases :: [TestCase]
+cases =
   [ TestCase
-    "Identity application"
-    defaultContext
+    "Identity function application"
+    -- 1 (λa x. x : ∀ (0 a : U) (1 _ : a) . a) a x
+    abxyContext
     One
     (   Ann (Lam . Lam $ ib 0) (Pi Zero Universe $ Pi One (ib 0) (ib 1))
     :$: ifg "a"
     :$: ifg "x"
     )
-    (Right $ ifg "a")
+    (TR . return $ ifg "a")
   , TestCase
-    "Dependent pair snd projection"
-    defaultContext
+    "Constant function application"
+    -- 1 ((λa b x y. x)
+    -- : ∀ (0 a : U) (0 b : (0 _ : a) -> U) (1 x : a) (w y : b x) . a) a (\a. b) x y
+    ( []
+    , [ Binding (Global "a") Zero VUniverse
+      , Binding (Global "b") Zero VUniverse
+      , Binding (Global "x") One  (VNeutral . NFree $ Global "a")
+      , Binding (Global "y") Many (VNeutral . NFree $ Global "b")
+      ]
+    )
+    One
+    (   (   (   (   Ann
+                    (Lam (Lam (Lam (Lam (ib 1)))))
+                    (Pi
+                      Zero
+                      Universe
+                      (Pi Zero
+                          (Pi Zero (ib 0) Universe)
+                          (Pi One (ib 1) (Pi Many (Inf (Bound 1 :$: ib 0)) (ib 3)))
+                      )
+                    )
+                :$: ifg "a"
+                )
+            :$: Lam (ifg "b")
+            )
+        :$: ifg "x"
+        )
+    :$: ifg "y"
+    )
+    (TR . return $ ifg "a")
+  , TestCase
+    "Second projection of dependent multiplicative pair"
+    -- 1 let _ @ x, y = (a, x) : (0 _ : U) * a in y : a
+    abxyContext
     One
     (PairElim
       (Ann (Pair (ifg "a") (ifg "x")) (Tensor Zero Universe (ifg "a")))
       (ib 0)
       (ifg "a")
     )
-    (Right $ ifg "a")
+    (TR . return $ ifg "a")
   , TestCase
-    "Additive value duplication"
-    defaultContext
+    "Linear swap"
+    -- 1 ((\p. let z @ x, y = p in (y, x) : (1 _ : b) * a) : (1 _ : (1 _ : a) * b) -> (1 _ : b) * a) (x, y)
+    abxyContext
     One
-    (Ann
-      (Lam (Pair (Inf (Fst (Bound 0))) (Inf (Snd (Bound 0)))))
-      (Pi Many
-          (With (Inf (Free (Global "a"))) (Inf (Free (Global "a"))))
-          (Tensor One (Inf (Free (Global "a"))) (Inf (Free (Global "a"))))
-      )
+    (   Ann
+        (Lam
+          (Inf
+            (PairElim (Bound 0)
+                      (Pair (ib 0) (ib 1))
+                      (Tensor One (ifg "b") (ifg "a"))
+            )
+          )
+        )
+        (Pi One
+            (Tensor One (ifg "a") (ifg "b"))
+            (Tensor One (ifg "b") (ifg "a"))
+        )
+    :$: Pair (ifg "x") (ifg "y")
     )
-    (Right $ Pi
-      Many
-      (With (Inf (Free (Global "a"))) (Inf (Free (Global "a"))))
-      (Tensor One (Inf (Free (Global "a"))) (Inf (Free (Global "a"))))
+    (TR . return $ Tensor One (ifg "b") (ifg "a"))
+  , TestCase
+    "Second projection of dependent additive pair"
+    -- 1 ((\p. snd p) : (1 _ : (_ : a) & b) -> b) <x, y>
+    abxyContext
+    One
+    (   Ann (Lam (Inf (Snd (Bound 0))))
+            (Pi One (With (ifg "a") (ifg "b")) (ifg "b"))
+    :$: Angles (ifg "x") (ifg "y")
+    )
+    (TR . throwError $ MultiplicityError
+      Nothing
+      [ (Global "x", vfree $ Global "a", Many, One)
+      , (Global "y", vfree $ Global "b", Many, One)
+      ]
     )
   ]
  where
@@ -66,10 +124,20 @@ testCases =
   ifg = Inf . fg
   ib  = Inf . Bound
 
-runTestCase :: TestCase -> Spec
-runTestCase tc =
-  it (desc tc) $ quote0 <$> liftA3 iType0 ctx multi expr tc `shouldBe` res tc
+  abxyContext =
+    ( []
+    , [ Binding (Global "a") Zero VUniverse
+      , Binding (Global "b") Zero VUniverse
+      , Binding (Global "x") One  (VNeutral . NFree $ Global "a")
+      , Binding (Global "y") One  (VNeutral . NFree $ Global "b")
+      ]
+    )
+run :: TestCase -> Spec
+run tc =
+  it (desc tc)
+    $          TR (quote0 <$> liftA3 iType0 ctx multi expr tc)
+    `shouldBe` res tc
 
 spec :: Spec
-spec = mapM_ runTestCase testCases
+spec = mapM_ run cases
 
