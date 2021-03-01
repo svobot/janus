@@ -35,7 +35,6 @@ import           Parser                         ( Stmt(..) )
 import qualified Parser                        as Parse
 import           Printer
 import           Rig
-import           Scope
 import           System.Console.Repline  hiding ( options )
 import           Types
 import           Typing

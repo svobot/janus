@@ -2,7 +2,6 @@ module Types where
 
 import           Control.Monad.State            ( StateT )
 import           Data.Bifunctor                 ( second )
-import           Data.Function                  ( on )
 import           Data.Text.Prettyprint.Doc      ( Doc )
 import           Data.Text.Prettyprint.Doc.Render.Terminal
                                                 ( AnsiStyle )
@@ -89,16 +88,6 @@ data TypeError
    |  CheckError Type CTerm
    |  UnknownVarError Name
 
-instance Eq TypeError where
-  MultiplicityError ms st == MultiplicityError ms' st' =
-    ms == ms' && ((==) `on` map qt) st st'
-    where qt (n, t, q, q') = (n, quote0 t, q, q')
-  InferenceError doc t i == InferenceError doc' t' i' =
-    ((==) `on` show) doc doc' && ((==) `on` quote0) t t' && i == i'
-  CheckError t c    == CheckError t' c'   = ((==) `on` quote0) t t' && c == c'
-  UnknownVarError n == UnknownVarError n' = n == n'
-  _                 == _                  = False
-
 type Result = Either TypeError
 type Type = Value
 
@@ -106,12 +95,6 @@ type TypeEnv = [Binding Name ZeroOneMany Type]
 type ValueEnv = [(Name, Value)]
 type BoundEnv = [Value]
 type Context = (ValueEnv, TypeEnv)
-
-vapp :: Value -> Value -> Value
-vapp (VLam     f) v = f v
-vapp (VNeutral n) v = VNeutral (NApp n v)
-vapp v v' =
-  error ("internal: Unable to apply " <> show v <> " to the value " <> show v')
 
 vfree :: Name -> Value
 vfree n = VNeutral (NFree n)
@@ -136,8 +119,13 @@ iEval (Ann c _) d = cEval c d
 iEval (Free x ) d = case lookup x (fst d) of
   Nothing -> vfree x
   Just v  -> v
-iEval (Bound ii       ) d = snd d !! ii
-iEval (i :$: c        ) d = vapp (iEval i d) (cEval c d)
+iEval (Bound ii) d = snd d !! ii
+iEval (i :$: c ) d = case iEval i d of
+  (VLam     f) -> f val
+  (VNeutral n) -> VNeutral (NApp n val)
+  v            -> error
+    ("internal: Unable to apply " <> show v <> " to the value " <> show val)
+  where val = cEval c d
 iEval (PairElim i c c') d = case iEval i d of
   (VPair x y ) -> cEval c (second ([y, x] ++) d)
   (VNeutral n) -> VNeutral $ NPairElim
