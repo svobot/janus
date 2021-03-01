@@ -30,7 +30,7 @@ type Judgement = ReaderT Context Result
 
 iinfer :: Context -> ZeroOneMany -> ITerm -> Repl (Maybe Type)
 iinfer g r t = case iType0 g r t of
-  Left  e -> liftIO (T.putStrLn . renderErr $ prettyAnsi e) >> return Nothing
+  Left  e -> liftIO (T.putStrLn . render $ prettyAnsi e) >> return Nothing
   Right v -> return (Just v)
 
 iType0 :: Context -> ZeroOneMany -> ITerm -> Result Type

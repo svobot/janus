@@ -142,7 +142,7 @@ typeOf s = do
 browse :: Cmd Repl
 browse _ = do
   env <- gets $ snd . context
-  mapM_ (liftIO . T.putStrLn . renderRes Nothing)
+  mapM_ (liftIO . T.putStrLn . renderBinding Nothing)
     . reverse
     . map (\b -> b { bndName = vfree $ bndName b })
     $ nubBy ((==) `on` bndName) env
@@ -177,7 +177,7 @@ handleStmt stmt = case stmt of
       mty
       (\ty -> do
         let val     = iEval t (fst ctx, [])
-        let outtext = renderRes mn (Binding val q ty)
+        let outtext = renderBinding mn (Binding val q ty)
         liftIO . T.putStrLn $ outtext
         out <- gets outFile
         unless
@@ -201,6 +201,8 @@ handleStmt stmt = case stmt of
     mty <- iinfer ctx Zero annt
     unless (isNothing mty) $ do
       let val = iEval annt (fst ctx, [])
-      liftIO . T.putStrLn . renderRes Nothing $ Binding (vfree $ Global x) q val
+      liftIO . T.putStrLn . renderBinding Nothing $ Binding (vfree $ Global x)
+                                                            q
+                                                            val
       modify . mapContext $ second (Binding (Global x) q val :)
 

@@ -7,9 +7,8 @@ module Printer
   , hardlines
   , multAnn
   , render
-  , renderErr
-  , renderRes
-  , renderTest
+  , renderBinding
+  , renderBindingPlain
   , prettyAnsi
   ) where
 
@@ -60,70 +59,66 @@ instance PrettyAnsi ZeroOneMany where
   prettyAnsi Many = annotate (Term.color Term.Magenta <> Term.bold) "w"
 
 instance PrettyAnsi TypeError where
-  prettyAnsi (MultiplicityError loc es) =
-    hardlines
-      $ (  "Mismatched multiplicities"
-        <> maybe emptyDoc ((" " <>) . parens . pretty) loc
-        <> ":"
-        )
-      : map (indent 2) (concatMap errInfo es)
+  prettyAnsi err = annotate (Term.color Term.Red <> Term.bold) "error:"
+    <+> align (go err)
    where
-    errInfo (n, ty, used, avail) =
-      [ pretty n <+> ":" <+> prettyAnsi ty
-      , indent 2
-        $   "Used"
-        <+> prettyAnsi used
-        <>  "-times, but available"
-        <+> prettyAnsi avail
-        <>  "-times."
+    go (MultiplicityError loc es) =
+      hardlines
+        $ (  "Mismatched multiplicities"
+          <> maybe emptyDoc ((" " <>) . parens . pretty) loc
+          <> ":"
+          )
+        : map (indent 2) (concatMap errInfo es)
+     where
+      errInfo (n, ty, used, avail) =
+        [ pretty n <+> ":" <+> prettyAnsi ty
+        , indent 2
+          $   "Used"
+          <+> prettyAnsi used
+          <>  "-times, but available"
+          <+> prettyAnsi avail
+          <>  "-times."
+        ]
+    go (ErasureError t m) =
+      "Type"
+        <+> squotes (prettyAnsi t)
+        <+> "used"
+        <+> prettyAnsi m
+        <>  "-times outside erased context."
+    go (InferenceError expected actual expr) = hardlines
+      [ "Couldn't match expected type" <+> squotes expected
+      , indent 12 ("with actual type" <+> squotes (prettyAnsi actual))
+      , "In the expression:" <+> prettyAnsi expr
       ]
-  prettyAnsi (ErasureError t m) =
-    "Type"
-      <+> squotes (prettyAnsi t)
-      <+> "used"
-      <+> prettyAnsi m
-      <>  "-times outside erased context."
-  prettyAnsi (InferenceError expected actual expr) = hardlines
-    [ "Couldn't match expected type" <+> squotes expected
-    , indent 12 ("with actual type" <+> squotes (prettyAnsi actual))
-    , "In the expression:" <+> prettyAnsi expr
-    ]
-  prettyAnsi (CheckError ty expr) = hardlines
-    [ "Could't match expected type" <+> squotes (prettyAnsi ty)
-    , "In the expression:" <+> prettyAnsi expr
-    ]
-  prettyAnsi (UnknownVarError n) =
-    "Variable not in scope: " <> prettyAnsi (Free n)
+    go (CheckError ty expr) = hardlines
+      [ "Could't match expected type" <+> squotes (prettyAnsi ty)
+      , "In the expression:" <+> prettyAnsi expr
+      ]
+    go (UnknownVarError n) = "Variable not in scope: " <> prettyAnsi (Free n)
 
 instance Show TypeError where
-  show = renderString . layoutPretty (LayoutOptions Unbounded) . prettyAnsi
+  show =
+    renderString . layoutSmart defaultLayoutOptions . unAnnotate . prettyAnsi
 
 render :: TermDoc -> Text
 render = Term.renderStrict . layoutSmart defaultLayoutOptions
 
-renderErr :: TermDoc -> Text
-renderErr =
-  Term.renderStrict
-    . layoutSmart defaultLayoutOptions
-    . (annotate (Term.color Term.Red <> Term.bold) "error:" <+>)
-    . align
-
-hardlines :: [Doc ann] -> Doc ann
-hardlines = mconcat . intersperse hardline
-
-renderBinding :: Maybe String -> Binding Value ZeroOneMany Type -> TermDoc
-renderBinding name (Binding val q ty) = (assign <>) . align $ sep ann
+renderBinding' :: Maybe String -> Binding Value ZeroOneMany Type -> TermDoc
+renderBinding' name (Binding val q ty) = (assign <>) . align $ sep ann
  where
   ann    = [prettyAnsi q <+> prettyAnsi val, ":" <+> prettyAnsi ty]
   assign = maybe mempty (((<+> "= ") . annotate Term.bold) . pretty) name
 
-renderRes :: Maybe String -> Binding Value ZeroOneMany Type -> Text
-renderRes = (render .) . renderBinding
+renderBinding :: Maybe String -> Binding Value ZeroOneMany Type -> Text
+renderBinding = (render .) . renderBinding'
 
-renderTest :: Maybe String -> Binding Value ZeroOneMany Type -> String
-renderTest =
-  ((renderString . layoutPretty (LayoutOptions Unbounded) . group) .)
-    . renderBinding
+renderBindingPlain :: Maybe String -> Binding Value ZeroOneMany Type -> String
+renderBindingPlain =
+  ((renderString . layoutSmart defaultLayoutOptions . unAnnotate) .)
+    . renderBinding'
+
+hardlines :: [Doc ann] -> Doc ann
+hardlines = mconcat . intersperse hardline
 
 parensIf :: Bool -> Doc ann -> Doc ann
 parensIf True  = parens
