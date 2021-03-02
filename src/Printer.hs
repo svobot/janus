@@ -1,15 +1,15 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Printer
-  ( PrettyAnsi
+  ( Pretty
   , (<+>)
-  , addAnn
+  , add
   , hardlines
-  , multAnn
+  , mult
   , render
   , renderBinding
   , renderBindingPlain
-  , prettyAnsi
+  , pretty
   ) where
 
 import           Control.Monad.Reader           ( MonadReader(local)
@@ -25,6 +25,10 @@ import           Data.List                      ( intersperse )
 import qualified Data.Set                      as Set
 import           Data.Text                      ( Text )
 import           Data.Text.Prettyprint.Doc
+                                         hiding ( Doc
+                                                , Pretty(..)
+                                                )
+import qualified Data.Text.Prettyprint.Doc     as PP
 import           Data.Text.Prettyprint.Doc.Render.String
                                                 ( renderString )
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal
@@ -32,82 +36,81 @@ import qualified Data.Text.Prettyprint.Doc.Render.Terminal
 import           Rig                            ( ZeroOneMany(..) )
 import           Types
 
-type TermDoc = Doc Term.AnsiStyle
+type Doc = PP.Doc Term.AnsiStyle
+
+class Pretty a where
+  pretty :: a -> Doc
+
+instance Pretty Text where
+  pretty = PP.pretty
 
 instance Pretty Name where
-  pretty (Global s) = pretty s
-  pretty x          = "[" <> pretty (show x) <> "]"
+  pretty (Global s) = PP.pretty s
+  pretty x          = localVar "[" <> PP.pretty (show x) <> localVar "]"
 
-class PrettyAnsi a where
-  prettyAnsi :: a -> TermDoc
+instance Pretty ITerm where
+  pretty = runPrinter $ iPrint 0
 
-instance PrettyAnsi Text where
-  prettyAnsi = pretty
+instance Pretty CTerm where
+  pretty = runPrinter $ cPrint 0
 
-instance PrettyAnsi ITerm where
-  prettyAnsi = runPrinter $ iPrint 0
+instance Pretty Value where
+  pretty = pretty . quote0
 
-instance PrettyAnsi CTerm where
-  prettyAnsi = runPrinter $ cPrint 0
+instance Pretty ZeroOneMany where
+  pretty Zero = annotate (Term.color Term.Magenta <> Term.bold) "0"
+  pretty One  = annotate (Term.color Term.Magenta <> Term.bold) "1"
+  pretty Many = annotate (Term.color Term.Magenta <> Term.bold) "w"
 
-instance PrettyAnsi Value where
-  prettyAnsi = prettyAnsi . quote0
-
-instance PrettyAnsi ZeroOneMany where
-  prettyAnsi Zero = annotate (Term.color Term.Magenta <> Term.bold) "0"
-  prettyAnsi One  = annotate (Term.color Term.Magenta <> Term.bold) "1"
-  prettyAnsi Many = annotate (Term.color Term.Magenta <> Term.bold) "w"
-
-instance PrettyAnsi TypeError where
-  prettyAnsi err = annotate (Term.color Term.Red <> Term.bold) "error:"
+instance Pretty TypeError where
+  pretty err = annotate (Term.color Term.Red <> Term.bold) "error:"
     <+> align (go err)
    where
     go (MultiplicityError loc es) =
       hardlines
         $ (  "Mismatched multiplicities"
-          <> maybe emptyDoc ((" " <>) . parens . pretty) loc
+          <> maybe emptyDoc ((" " <>) . parens . PP.pretty) loc
           <> ":"
           )
         : map (indent 2) (concatMap errInfo es)
      where
       errInfo (n, ty, used, avail) =
-        [ pretty n <+> ":" <+> prettyAnsi ty
+        [ pretty n <+> ":" <+> pretty ty
         , indent 2
           $   "Used"
-          <+> prettyAnsi used
+          <+> pretty used
           <>  "-times, but available"
-          <+> prettyAnsi avail
+          <+> pretty avail
           <>  "-times."
         ]
     go (ErasureError t m) =
       "Type"
-        <+> squotes (prettyAnsi t)
+        <+> squotes (pretty t)
         <+> "used"
-        <+> prettyAnsi m
+        <+> pretty m
         <>  "-times outside erased context."
     go (InferenceError expected actual expr) = hardlines
       [ "Couldn't match expected type" <+> squotes expected
-      , indent 12 ("with actual type" <+> squotes (prettyAnsi actual))
-      , "In the expression:" <+> prettyAnsi expr
+      , indent 12 ("with actual type" <+> squotes (pretty actual))
+      , "In the expression:" <+> pretty expr
       ]
     go (CheckError ty expr) = hardlines
-      [ "Could't match expected type" <+> squotes (prettyAnsi ty)
-      , "In the expression:" <+> prettyAnsi expr
+      [ "Could't match expected type" <+> squotes (pretty ty)
+      , "In the expression:" <+> pretty expr
       ]
-    go (UnknownVarError n) = "Variable not in scope: " <> prettyAnsi (Free n)
+    go (UnknownVarError n) = "Variable not in scope: " <> pretty (Free n)
 
 instance Show TypeError where
-  show =
-    renderString . layoutSmart defaultLayoutOptions . unAnnotate . prettyAnsi
+  show = renderString . layoutSmart defaultLayoutOptions . unAnnotate . pretty
 
-render :: TermDoc -> Text
+render :: Doc -> Text
 render = Term.renderStrict . layoutSmart defaultLayoutOptions
 
-renderBinding' :: Maybe String -> Binding Value ZeroOneMany Type -> TermDoc
+renderBinding' :: Maybe String -> Binding Value ZeroOneMany Type -> Doc
 renderBinding' name (Binding val q ty) = (assign <>) . align $ sep ann
  where
-  ann    = [prettyAnsi q <+> prettyAnsi val, ":" <+> prettyAnsi ty]
-  assign = maybe mempty (((<+> "= ") . annotate Term.bold) . pretty) name
+  ann    = [pretty q <+> pretty val, ":" <+> pretty ty]
+  assign = maybe mempty (((<+> "= ") . annotate Term.bold) . PP.pretty) name
 
 renderBinding :: Maybe String -> Binding Value ZeroOneMany Type -> Text
 renderBinding = (render .) . renderBinding'
@@ -117,10 +120,10 @@ renderBindingPlain =
   ((renderString . layoutSmart defaultLayoutOptions . unAnnotate) .)
     . renderBinding'
 
-hardlines :: [Doc ann] -> Doc ann
+hardlines :: [Doc] -> Doc
 hardlines = mconcat . intersperse hardline
 
-parensIf :: Bool -> Doc ann -> Doc ann
+parensIf :: Bool -> Doc -> Doc
 parensIf True  = parens
 parensIf False = id
 
@@ -131,14 +134,14 @@ data NameEnv doc = NameEnv
   , bound :: [doc]
   }
 
-runPrinter :: (a -> Printer (Doc ann)) -> a -> Doc ann
-runPrinter printer term = runReader r (NameEnv (freshNames finalState) [])
+runPrinter :: (a -> Printer Doc) -> a -> Doc
+runPrinter printer term = runReader r (NameEnv freshNames [])
  where
-  (r, finalState) = runState (printer term) Set.empty
+  (r, freeVars) = runState (printer term) Set.empty
   -- Filter the free variables that occur in the term out of the names that can
   -- be used for bound variables.
-  freshNames freeVars =
-    [ pretty $ c : n
+  freshNames =
+    [ PP.pretty $ c : n
     | n <- "" : map show [1 :: Int ..]
     , c <- ['x', 'y', 'z'] ++ ['a' .. 'w']
     , (c : n) `Set.notMember` freeVars
@@ -154,7 +157,7 @@ bind _                       = error "internal: No new variable name available."
 bindMany :: Int -> NameEnv a -> NameEnv a
 bindMany n (NameEnv as bs) = NameEnv (drop n as) (reverse (take n as) ++ bs)
 
-iPrint :: Int -> ITerm -> Printer TermDoc
+iPrint :: Int -> ITerm -> Printer Doc
 iPrint p (Ann c c') = (<*>) . (fmt <$>) <$> cPrint 2 c <*> cPrint 0 c'
   where fmt val ty = parensIf (p > 1) $ val <+> ":" <+> ty
 iPrint _ (Bound k) = return . asks $ (!! k) . bound
@@ -170,21 +173,21 @@ iPrint p (PairElim l i t) = do
   inPart   <- cPrint 0 i
   typePart <- cPrint 0 t
   return
-    $   asks fmt
+    $   asks (fmt . fresh)
     <*> letPart
     <*> local (bindMany 2)    inPart
     <*> local (bind . skip 2) typePart
  where
-  fmt (NameEnv ns _) letPart inPart typePart = parensIf (p > 0) . align $ sep
-    [ multAnn "let"
-    <+> varAnn (ns !! 2)
-    <+> multAnn "@"
-    <+> varAnn (head ns)
-    <>  multAnn ","
-    <+> varAnn (ns !! 1)
-    <+> multAnn "="
+  fmt names letPart inPart typePart = parensIf (p > 0) . align $ sep
+    [ mult "let"
+    <+> var (names !! 2)
+    <+> mult "@"
+    <+> var (head names)
+    <>  mult ","
+    <+> var (names !! 1)
+    <+> mult "="
     <+> letPart
-    , multAnn "in" <+> inPart <+> multAnn ":" <+> typePart
+    , mult "in" <+> inPart <+> mult ":" <+> typePart
     ]
 iPrint p (MUnitElim l i t) = do
   letPart  <- iPrint 0 l
@@ -197,27 +200,27 @@ iPrint p (MUnitElim l i t) = do
     <*> local bind typePart
  where
   fmt name letPart inPart typePart = parensIf (p > 0) $ sep
-    [ multAnn "let"
-    <+> varAnn name
-    <+> multAnn "@"
-    <+> multAnn "()"
-    <+> multAnn "="
+    [ mult "let"
+    <+> var name
+    <+> mult "@"
+    <+> mult "()"
+    <+> mult "="
     <+> letPart
-    , multAnn "in" <+> inPart <+> multAnn ":" <+> typePart
+    , mult "in" <+> inPart <+> mult ":" <+> typePart
     ]
-iPrint p (Fst i) = (parensIf (p > 0) . (addAnn "fst" <+>) <$>) <$> iPrint 3 i
-iPrint p (Snd i) = (parensIf (p > 0) . (addAnn "snd" <+>) <$>) <$> iPrint 3 i
+iPrint p (Fst i) = (parensIf (p > 0) . (add "fst" <+>) <$>) <$> iPrint 3 i
+iPrint p (Snd i) = (parensIf (p > 0) . (add "snd" <+>) <$>) <$> iPrint 3 i
 
-cPrint :: Int -> CTerm -> Printer TermDoc
+cPrint :: Int -> CTerm -> Printer Doc
 cPrint p (Inf i) = iPrint p i
 cPrint p (Lam c) = (parensIf (p > 0) <$>) <$> go 0 c
  where
   go depth (Lam c') = go (depth + 1) c'
   go depth c'       = do
     body <- cPrint 0 c'
-    return $ asks (fmt depth) <*> local (bindMany $ depth + 1) body
-  fmt depth (NameEnv ns _) body = do
-    "λ" <> hsep (map (varAnn . (ns !!)) [0 .. depth]) <> "." <+> body
+    return $ asks (fmt depth . fresh) <*> local (bindMany $ depth + 1) body
+  fmt depth names body = do
+    "λ" <> hsep (map (var . (names !!)) [0 .. depth]) <> "." <+> body
 cPrint p (Pi q1 d1 (Pi q2 d2 r)) =
   (parensIf (p > 0) <$>) <$> go [(q2, d2), (q1, d1)] r
  where
@@ -238,54 +241,41 @@ cPrint p (Pi q1 d1 (Pi q2 d2 r)) =
       bindsDoc <- sequence binds
       bodyDoc  <- local (bindMany bindCount) body
       return . align $ sep ["∀" <+> align (sep bindsDoc) <+> ".", bodyDoc]
-  fmtBind q name body = parens $ prettyAnsi q <+> varAnn name <+> ":" <+> body
+  fmtBind q name body = parens $ pretty q <+> var name <+> ":" <+> body
 cPrint p (Pi q c c') = cPrintDependent fmt c c'
  where
-  fmt name l r = parensIf (p > 0) $ sep
-    ["(" <> prettyAnsi q <+> varAnn name <+> ":" <+> l <> ")" <+> "->", r]
+  fmt name l r = parensIf (p > 0)
+    $ sep ["(" <> pretty q <+> var name <+> ":" <+> l <> ")" <+> "->", r]
 cPrint p (Tensor q c c') = cPrintDependent fmt c c'
  where
   fmt name l r = do
     parensIf (p > 0) $ sep
-      [ multAnn "("
-      <>  prettyAnsi q
-      <+> varAnn name
-      <+> ":"
-      <+> l
-      <>  multAnn ")"
-      <+> multAnn "*"
+      [ mult "(" <> pretty q <+> var name <+> ":" <+> l <> mult ")" <+> mult "*"
       , r
       ]
 cPrint p (With c c') = cPrintDependent fmt c c'
  where
-  fmt name l r = parensIf (p > 0) $ sep
-    [addAnn "(" <> varAnn name <+> ":" <+> l <> addAnn ")" <+> addAnn "&", r]
+  fmt name l r = parensIf (p > 0)
+    $ sep [add "(" <> var name <+> ":" <+> l <> add ")" <+> add "&", r]
 cPrint _ (Pair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
-  where fmt l r = multAnn "(" <> l <> multAnn "," <+> r <> multAnn ")"
+  where fmt l r = mult "(" <> l <> mult "," <+> r <> mult ")"
 cPrint _ (Angles c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
-  where fmt l r = addAnn "<" <> l <> addAnn "," <+> r <> addAnn ">"
+  where fmt l r = add "<" <> l <> add "," <+> r <> add ">"
 cPrint _ Universe  = return . return $ "U"
-cPrint _ MUnit     = return . return $ multAnn "()"
-cPrint _ MUnitType = return . return $ multAnn "I"
-cPrint _ AUnit     = return . return $ addAnn "<>"
-cPrint _ AUnitType = return . return $ addAnn "T"
+cPrint _ MUnit     = return . return $ mult "()"
+cPrint _ MUnitType = return . return $ mult "I"
+cPrint _ AUnit     = return . return $ add "<>"
+cPrint _ AUnitType = return . return $ add "T"
 
-cPrintDependent
-  :: (TermDoc -> TermDoc -> TermDoc -> TermDoc)
-  -> CTerm
-  -> CTerm
-  -> Printer TermDoc
+cPrintDependent :: (Doc -> Doc -> Doc -> Doc) -> CTerm -> CTerm -> Printer Doc
 cPrintDependent fmt l r = do
   left  <- cPrint 0 l
   right <- cPrint 0 r
   return $ asks (fmt . head . fresh) <*> left <*> local bind right
 
-multAnn :: TermDoc -> TermDoc
-multAnn = annotate (Term.color Term.Blue <> Term.bold)
-
-addAnn :: TermDoc -> TermDoc
-addAnn = annotate (Term.color Term.Green <> Term.bold)
-
-varAnn :: TermDoc -> TermDoc
-varAnn = annotate Term.bold
+mult, add, var, localVar :: Doc -> Doc
+mult = annotate (Term.color Term.Blue <> Term.bold)
+add = annotate (Term.color Term.Green <> Term.bold)
+var = annotate Term.bold
+localVar = annotate (Term.color Term.Yellow <> Term.bold)
 

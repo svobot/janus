@@ -136,7 +136,7 @@ typeOf s = do
   mx  <- Parse.parseIO "<interactive>" (Parse.eval (,)) s
   ctx <- gets context
   t   <- maybe (return Nothing) (uncurry (iinfer ctx)) mx
-  mapM_ (liftIO . T.putStrLn . render . prettyAnsi) t
+  mapM_ (liftIO . T.putStrLn . render . pretty) t
 
 browse :: Cmd Repl
 browse _ = do

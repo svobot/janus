@@ -30,7 +30,7 @@ type Judgement = ReaderT Context Result
 
 iinfer :: Context -> ZeroOneMany -> ITerm -> Repl (Maybe Type)
 iinfer g r t = case iType0 g r t of
-  Left  e -> liftIO (T.putStrLn . render $ prettyAnsi e) >> return Nothing
+  Left  e -> liftIO (T.putStrLn . render $ pretty e) >> return Nothing
   Right v -> return (Just v)
 
 iType0 :: Context -> ZeroOneMany -> ITerm -> Result Type
@@ -92,7 +92,7 @@ iType ii r (PairElim l i t) = do
           >>= checkVar "pairElim, Local ii+1" (bndName y)
         (qs, ) <$> evalInEnv (cSubst 0 l t)
     ty -> throwError
-      $ InferenceError ("_" <+> multAnn "*" <+> "_") ty (PairElim l i t)
+      $ InferenceError ("_" <+> mult "*" <+> "_") ty (PairElim l i t)
  where
   ifn = Inf . Free . bndName
   cTypeAnn z = local (second (forget . (z :)))
@@ -107,8 +107,7 @@ iType ii r (MUnitElim l i t) = do
       qs2 <- cTypeIn tu
       let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
       (qs, ) <$> evalInEnv (cSubst 0 l t)
-    ty ->
-      throwError $ InferenceError (prettyAnsi MUnitType) ty (MUnitElim l i t)
+    ty -> throwError $ InferenceError (pretty MUnitType) ty (MUnitElim l i t)
  where
   cTypeAnn x = local (second (forget . (x :)))
     $ cType (ii + 1) Zero' (cSubst 0 (Free $ bndName x) t) VUniverse
@@ -117,20 +116,19 @@ iType ii r (Fst i) = do
   (qs, ty) <- iType ii r i
   case ty of
     (VWith s _) -> return (qs, s)
-    _ -> throwError $ InferenceError ("_" <+> addAnn "&" <+> "_") ty (Fst i)
+    _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Fst i)
 iType ii r (Snd i) = do
   (qs, ty) <- iType ii r i
   case ty of
     (VWith _ t) -> return (qs, t . vfree $ Local ii)
-    _ -> throwError $ InferenceError ("_" <+> addAnn "&" <+> "_") ty (Snd i)
+    _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Snd i)
 iType _ _ i@(Bound _) = error $ "internal: Trying to infer type of " <> show i
 
 -- | Check the type and count the resource usage of the term.
 cType :: Int -> ZeroOne -> CTerm -> Type -> Judgement Usage
 cType ii r (Inf e) v = do
   (qs, v') <- iType ii r e
-  unless (quote0 v == quote0 v')
-         (throwError $ InferenceError (prettyAnsi v) v' e)
+  unless (quote0 v == quote0 v') (throwError $ InferenceError (pretty v) v' e)
   return qs
 cType ii r (Lam e) (VPi p ty ty') = do
   let x = Binding (Local ii) (p S.* extend r) ty
