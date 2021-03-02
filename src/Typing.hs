@@ -7,12 +7,11 @@ import           Control.Monad.Except           ( throwError )
 import           Control.Monad.Reader           ( MonadIO(liftIO)
                                                 , MonadReader(local)
                                                 , ReaderT(runReaderT)
+                                                , ask
                                                 , asks
                                                 , unless
                                                 )
-import           Data.Bifunctor                 ( first
-                                                , second
-                                                )
+import           Data.Bifunctor                 ( first )
 import           Data.List                      ( find )
 import qualified Data.Map.Merge.Strict         as Map
 import qualified Data.Map.Strict               as Map
@@ -26,7 +25,11 @@ import           Rig
 import           Types
 
 type Usage = Map.Map Name ZeroOneMany
-type Judgement = ReaderT Context Result
+data TypingConfig = TypingConfig
+  { cfgContext     :: Context
+  , cfgBoundLocals :: Int
+  }
+type Judgement = ReaderT TypingConfig Result
 
 iinfer :: Context -> ZeroOneMany -> ITerm -> Repl (Maybe Type)
 iinfer g r t = case iType0 g r t of
@@ -35,7 +38,8 @@ iinfer g r t = case iType0 g r t of
 
 iType0 :: Context -> ZeroOneMany -> ITerm -> Result Type
 iType0 g r t = do
-  (qs, tp) <- first (Map.map (r S.*)) <$> runReaderT (iType 0 (restrict r) t) g
+  (qs, tp) <- first (Map.map (r S.*))
+    <$> runReaderT (iType (restrict r) t) (TypingConfig g 0)
   mapM_ (throwError . MultiplicityError Nothing) $ checkMultiplicity (snd g) qs
   return tp
  where
@@ -44,111 +48,119 @@ iType0 g r t = do
   restrict One  = One'
   restrict Many = One'
 
+erased :: TypingConfig -> TypingConfig
+erased (TypingConfig (vs, ts) i) = TypingConfig (vs, forget ts) i
+
+with :: Binding Name ZeroOneMany Type -> TypingConfig -> TypingConfig
+with b (TypingConfig (vs, ts) i) = TypingConfig (vs, b : ts) (i + 1)
+
+bind :: ZeroOneMany -> Type -> TypingConfig -> Binding Name ZeroOneMany Type
+bind r ty (TypingConfig _ i) = Binding (Local i) r ty
+
 evalInEnv :: CTerm -> Judgement Value
-evalInEnv t = asks (cEval t . (, []) . fst)
+evalInEnv t = asks (cEval t . (, []) . fst . cfgContext)
 
 -- | Infer the type and count the resource usage of the term.
-iType :: Int -> ZeroOne -> ITerm -> Judgement (Usage, Type)
-iType ii r (Ann e tyt) = do
-  _  <- local (second forget) $ cType ii Zero' tyt VUniverse
+iType :: ZeroOne -> ITerm -> Judgement (Usage, Type)
+iType r (Ann e tyt) = do
+  _  <- local erased $ cType Zero' tyt VUniverse
   ty <- evalInEnv tyt
-  qs <- cType ii r e ty
+  qs <- cType r e ty
   return (qs, ty)
-iType _ r (Free x) = do
-  env <- asks snd
+iType r (Free x) = do
+  env <- asks (snd . cfgContext)
   case find ((== x) . bndName) env of
     Just (Binding _ _ ty) -> return (Map.singleton x $ extend r, ty)
     Nothing               -> throwError $ UnknownVarError x
-iType ii r (e1 :$: e2) = do
-  (qs1, si) <- iType ii r e1
+iType r (e1 :$: e2) = do
+  (qs1, si) <- iType r e1
   case si of
     VPi p ty ty' -> do
       let r' = extend r
       qs <- if p S.* r' == Zero
         then do
-          _ <- cType ii Zero' e2 ty
+          _ <- cType Zero' e2 ty
           return qs1
         else do
-          qs2 <- cType ii One' e2 ty
+          qs2 <- cType One' e2 ty
           return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
       (qs, ) . ty' <$> evalInEnv e2
     ty -> throwError $ InferenceError "_ -> _" ty (e1 :$: e2)
-iType ii r (PairElim l i t) = do
-  (qs1, lTy) <- iType ii r l
+iType r (PairElim l i t) = do
+  (qs1, lTy) <- iType r l
   case lTy of
     zTy@(VTensor p xTy yTy) -> do
-      qs3 <- cTypeAnn (Binding (Local ii) Zero zTy)
+      z   <- asks $ bind Zero zTy
+      qs3 <- local (erased . with z)
+        $ cType Zero' (cSubst 0 (Free $ bndName z) t) VUniverse
       let r' = extend r
-      let x  = Binding (Local ii) (p S.* r') xTy
-      let y = Binding (Local $ ii + 1) r' (yTy . vfree $ Local ii)
-      local (second ([x, y] ++)) $ do
-        txy <- evalInEnv (cSubst 0 (Ann (Pair (ifn x) (ifn y)) (quote0 zTy)) t)
-        qs2 <- cTypeIn
-          (cSubst 1 (Free $ bndName x) . cSubst 0 (Free $ bndName y) $ i)
-          txy
-        qs <-
-          pure (Map.unionsWith (S.+) [qs1, qs2, qs3])
-          >>= checkVar "pairElim, Local ii"   (bndName x)
-          >>= checkVar "pairElim, Local ii+1" (bndName y)
-        (qs, ) <$> evalInEnv (cSubst 0 l t)
+      x <- asks $ bind (p S.* r') xTy
+      local (with x) $ do
+        y <- asks $ bind r' (yTy . vfree $ bndName x)
+        local (with y) $ do
+          txy <- evalInEnv
+            (cSubst 0 (Ann (Pair (ifn x) (ifn y)) (quote0 zTy)) t)
+          qs2 <- cType
+            r
+            (cSubst 1 (Free $ bndName x) . cSubst 0 (Free $ bndName y) $ i)
+            txy
+          qs <-
+            pure (Map.unionsWith (S.+) [qs1, qs2, qs3])
+            >>= checkVar "pairElim, Local ii"   (bndName x)
+            >>= checkVar "pairElim, Local ii+1" (bndName y)
+          (qs, ) <$> evalInEnv (cSubst 0 l t)
     ty -> throwError
       $ InferenceError ("_" <+> mult "*" <+> "_") ty (PairElim l i t)
- where
-  ifn = Inf . Free . bndName
-  cTypeAnn z = local (second (forget . (z :)))
-    $ cType (ii + 1) Zero' (cSubst 0 (Free $ bndName z) t) VUniverse
-  cTypeIn ixy txy = cType (ii + 2) r ixy txy
-iType ii r (MUnitElim l i t) = do
-  (qs1, lTy) <- iType ii r l
+  where ifn = Inf . Free . bndName
+iType r (MUnitElim l i t) = do
+  (qs1, lTy) <- iType r l
   case lTy of
     xTy@VMUnitType -> do
-      qs3 <- cTypeAnn (Binding (Local ii) Zero xTy)
+      x   <- asks $ bind Zero xTy
+      qs3 <- local (erased . with x)
+        $ cType Zero' (cSubst 0 (Free $ bndName x) t) VUniverse
       tu  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) t)
-      qs2 <- cTypeIn tu
+      qs2 <- cType r i tu
       let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
       (qs, ) <$> evalInEnv (cSubst 0 l t)
     ty -> throwError $ InferenceError (pretty MUnitType) ty (MUnitElim l i t)
- where
-  cTypeAnn x = local (second (forget . (x :)))
-    $ cType (ii + 1) Zero' (cSubst 0 (Free $ bndName x) t) VUniverse
-  cTypeIn tu = cType ii r i tu
-iType ii r (Fst i) = do
-  (qs, ty) <- iType ii r i
+iType r (Fst i) = do
+  (qs, ty) <- iType r i
   case ty of
     (VWith s _) -> return (qs, s)
     _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Fst i)
-iType ii r (Snd i) = do
-  (qs, ty) <- iType ii r i
+iType r (Snd i) = do
+  (qs, ty) <- iType r i
   case ty of
-    (VWith _ t) -> return (qs, t . vfree $ Local ii)
+    (VWith _ t) -> asks $ (qs, ) . t . vfree . Local . cfgBoundLocals
     _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Snd i)
-iType _ _ i@(Bound _) = error $ "internal: Trying to infer type of " <> show i
+iType _ i@(Bound _) = error $ "internal: Trying to infer type of " <> show i
 
 -- | Check the type and count the resource usage of the term.
-cType :: Int -> ZeroOne -> CTerm -> Type -> Judgement Usage
-cType ii r (Inf e) v = do
-  (qs, v') <- iType ii r e
+cType :: ZeroOne -> CTerm -> Type -> Judgement Usage
+cType r (Inf e) v = do
+  (qs, v') <- iType r e
   unless (quote0 v == quote0 v') (throwError $ InferenceError (pretty v) v' e)
   return qs
-cType ii r (Lam e) (VPi p ty ty') = do
-  let x = Binding (Local ii) (p S.* extend r) ty
-  local (second (x :))
-    $ cType (ii + 1) r (cSubst 0 (Free $ bndName x) e) (ty' . vfree $ bndName x)
+cType r (Lam e) (VPi p ty ty') = do
+  x <- asks $ bind (p S.* extend r) ty
+  local (with x)
+    $   cType r (cSubst 0 (Free $ bndName x) e) (ty' . vfree $ bndName x)
     >>= checkVar "lam" (bndName x)
-cType ii r (Pair e1 e2) (VTensor p ty ty') = do
+cType r (Pair e1 e2) (VTensor p ty ty') = do
   let r' = extend r
   if p S.* r' == Zero
     then do
-      _ <- cType ii Zero' e1 ty
+      _ <- cType Zero' e1 ty
       rest
     else do
-      qs1 <- cType ii One' e1 ty
+      qs1 <- cType One' e1 ty
       qs2 <- rest
       return $ Map.unionWith (S.+) qs2 (Map.map (p S.* r' S.*) qs1)
-  where rest = evalInEnv e1 >>= (cType ii r e2 . ty')
-cType ii r (Angles e1 e2) (VWith ty ty') = do
-  qs1 <- cType ii r e1 ty
-  qs2 <- evalInEnv e1 >>= (cType ii r e2 . ty')
+  where rest = evalInEnv e1 >>= (cType r e2 . ty')
+cType r (Angles e1 e2) (VWith ty ty') = do
+  qs1 <- cType r e1 ty
+  qs2 <- evalInEnv e1 >>= (cType r e2 . ty')
   -- For every resource that is used anywhere in the pair, take the least upper
   -- bound of the resource usages in both elements of the pair. The element that
   -- is missing a usage of a resource is considered to use it zero-times.
@@ -161,25 +173,25 @@ cType ii r (Angles e1 e2) (VWith ty ty') = do
   lub Zero Zero = Zero
   lub One  One  = One
   lub _    _    = Many
-cType ii r t@Pi{}     VUniverse  = cTypeDependent "fun" ii r t
-cType ii r t@Tensor{} VUniverse  = cTypeDependent "tensor" ii r t
-cType ii r t@With{}   VUniverse  = cTypeDependent "with" ii r t
-cType _  _ Universe   VUniverse  = return Map.empty
-cType _  _ MUnit      VMUnitType = return Map.empty
-cType _  _ MUnitType  VUniverse  = return Map.empty
-cType _  _ AUnit      VAUnitType = return Map.empty
-cType _  _ AUnitType  VUniverse  = return Map.empty
-cType _  _ val        ty         = throwError $ CheckError ty val
+cType r t@Pi{}     VUniverse  = cTypeDependent "fun" r t
+cType r t@Tensor{} VUniverse  = cTypeDependent "tensor" r t
+cType r t@With{}   VUniverse  = cTypeDependent "with" r t
+cType _ Universe   VUniverse  = return Map.empty
+cType _ MUnit      VMUnitType = return Map.empty
+cType _ MUnitType  VUniverse  = return Map.empty
+cType _ AUnit      VAUnitType = return Map.empty
+cType _ AUnitType  VUniverse  = return Map.empty
+cType _ val        ty         = throwError $ CheckError ty val
 
 -- | Generic typing rule that check terms containing a dependent function type,
 -- dependent tensor product type, or a dependent with type
-cTypeDependent :: String -> Int -> ZeroOne -> CTerm -> Judgement Usage
-cTypeDependent loc ii r t = do
+cTypeDependent :: String -> ZeroOne -> CTerm -> Judgement Usage
+cTypeDependent loc r t = do
   unless (r == Zero') (throwError . ErasureError t $ extend r)
-  _ <- local (second forget) $ cType ii r tyt VUniverse
-  x <- Binding (Local ii) Zero <$> evalInEnv tyt
-  local (second (forget . (x :)))
-    $   cType (ii + 1) r (cSubst 0 (Free $ bndName x) tyt') VUniverse
+  _ <- local erased $ cType r tyt VUniverse
+  x <- bind Zero <$> evalInEnv tyt <*> ask
+  local (erased . with x)
+    $   cType r (cSubst 0 (Free $ bndName x) tyt') VUniverse
     >>= checkVar loc (bndName x)
  where
   (tyt, tyt') = case t of
@@ -190,7 +202,7 @@ cTypeDependent loc ii r t = do
 
 checkVar :: String -> Name -> Usage -> Judgement Usage
 checkVar loc n qs = do
-  env <- asks snd
+  env <- asks (snd . cfgContext)
   let (q, qs') = splitVar n qs
   mapM_ (throwError . MultiplicityError (Just loc))
         (checkMultiplicity env $ Map.singleton n q)
