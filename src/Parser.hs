@@ -107,10 +107,10 @@ rig = choice [Zero <$ reserved "0", One <$ reserved "1", Many <$ reserved "w"]
 iTerm :: [String] -> CharParser ITerm
 iTerm e =
   do
-    try $ do
-      t <- iTermInner e
-      ann (Inf t) <|> return t
-  <|> (cTermInner e >>= ann)
+    cTermInner e >>= ann
+  <|> do
+        t <- iTermInner e
+        ann (Inf t) <|> return t
   where ann t = Ann t <$> (reservedOp ":" *> cTerm e)
 
 iTermInner :: [String] -> CharParser ITerm
@@ -166,7 +166,7 @@ cTermInner e = choice
   universe = Universe <$ reserved "U"
   fun      = do
     T.Binding x q t <- try $ bind e <* reservedOp "->"
-    Pi q t <$> cTerm (x : e)
+    Pi q t <$> cTermWith iTermInner (x : e)
   forall = do
     reserved "forall" <|> reservedOp "∀"
     xs <- bindings True e
@@ -176,7 +176,7 @@ cTermInner e = choice
   pair   = P.parens lang $ Pair <$> cTerm e <* reservedOp "," <*> cTerm e
   tensor = do
     T.Binding x q t <- try $ bind e <* reservedOp "*"
-    Tensor q t <$> cTerm (x : e)
+    Tensor q t <$> cTermWith iTermInner (x : e)
   mUnitType = MUnitType <$ reserved "I"
   angles    = P.angles lang $ Angles <$> cTerm e <* reservedOp "," <*> cTerm e
   with      = do
@@ -184,7 +184,7 @@ cTermInner e = choice
       try
       $  P.parens lang ((,) <$> identifier <* reservedOp ":" <*> cTerm e)
       <* reservedOp "&"
-    With t <$> cTerm (x : e)
+    With t <$> cTermWith iTermInner (x : e)
   aUnit     = AUnit <$ reserved "<>"
   aUnitType = AUnitType <$ reserved "T"
 

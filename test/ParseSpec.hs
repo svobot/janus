@@ -151,6 +151,28 @@ stmtCases =
     :$: Pair MUnit AUnit
     )
   , TestCase "Missing parenthesis" "f : (1 _ : a) -> U x" err
+  , TestCase
+    "Annotated Pi type"
+    "0 (0 x : a) -> b : U"
+    (success . Eval Zero $ Ann (Pi Zero (ifg "a") (ifg "b")) Universe)
+  , TestCase
+    "Annotated Pi type in parentheses"
+    "0 ((0 x : a) -> b) : U"
+    (success . Eval Zero $ Ann (Pi Zero (ifg "a") (ifg "b")) Universe)
+  , TestCase
+    "Annotated Tensor type"
+    "0 (0 x : a) * b : U"
+    (success . Eval Zero $ Ann (Tensor Zero (ifg "a") (ifg "b")) Universe)
+  , TestCase
+    "Annotated Tensor type in parentheses"
+    "0 ((0 x : a) * b) : U"
+    (success . Eval Zero $ Ann (Tensor Zero (ifg "a") (ifg "b")) Universe)
+  , TestCase "Annotated With type"
+             "0 (x : a) & b : U"
+             (success . Eval Zero $ Ann (With (ifg "a") (ifg "b")) Universe)
+  , TestCase "Annotated With type in parentheses"
+             "0 ((x : a) & b) : U"
+             (success . Eval Zero $ Ann (With (ifg "a") (ifg "b")) Universe)
   ]
 
 fileCases :: [TestCase [Stmt]]
