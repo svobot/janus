@@ -106,8 +106,8 @@ iType r (PairElim l i t) = do
             txy
           qs <-
             pure (Map.unionsWith (S.+) [qs1, qs2, qs3])
-            >>= checkVar "pairElim, Local ii"   (bndName x)
-            >>= checkVar "pairElim, Local ii+1" (bndName y)
+            >>= checkVar "First element of the pair elimination"  (bndName x)
+            >>= checkVar "Second element of the pair elimination" (bndName y)
           (qs, ) <$> evalInEnv (cSubst 0 l t)
     ty -> throwError
       $ InferenceError ("_" <+> mult "*" <+> "_") ty (PairElim l i t)
@@ -146,7 +146,7 @@ cType r (Lam e) (VPi p ty ty') = do
   x <- asks $ bind (p S.* extend r) ty
   local (with x)
     $   cType r (cSubst 0 (Free $ bndName x) e) (ty' . vfree $ bndName x)
-    >>= checkVar "lam" (bndName x)
+    >>= checkVar "Lambda abstraction" (bndName x)
 cType r (Pair e1 e2) (VTensor p ty ty') = do
   let r' = extend r
   if p S.* r' == Zero
@@ -173,32 +173,28 @@ cType r (Angles e1 e2) (VWith ty ty') = do
   lub Zero Zero = Zero
   lub One  One  = One
   lub _    _    = Many
-cType r t@Pi{}     VUniverse  = cTypeDependent "fun" r t
-cType r t@Tensor{} VUniverse  = cTypeDependent "tensor" r t
-cType r t@With{}   VUniverse  = cTypeDependent "with" r t
-cType _ Universe   VUniverse  = return Map.empty
-cType _ MUnit      VMUnitType = return Map.empty
-cType _ MUnitType  VUniverse  = return Map.empty
-cType _ AUnit      VAUnitType = return Map.empty
-cType _ AUnitType  VUniverse  = return Map.empty
-cType _ val        ty         = throwError $ CheckError ty val
+cType r t@(Pi     _ t1 t2) VUniverse  = cTypeDependent "Pi type" r t t1 t2
+cType r t@(Tensor _ t1 t2) VUniverse  = cTypeDependent "Tensor type" r t t1 t2
+cType r t@(With t1 t2    ) VUniverse  = cTypeDependent "With type" r t t1 t2
+cType _ Universe           VUniverse  = return Map.empty
+cType _ MUnit              VMUnitType = return Map.empty
+cType _ MUnitType          VUniverse  = return Map.empty
+cType _ AUnit              VAUnitType = return Map.empty
+cType _ AUnitType          VUniverse  = return Map.empty
+cType _ val                ty         = throwError $ CheckError ty val
 
 -- | Generic typing rule that check terms containing a dependent function type,
 -- dependent tensor product type, or a dependent with type
-cTypeDependent :: String -> ZeroOne -> CTerm -> Judgement Usage
-cTypeDependent loc r t = do
+cTypeDependent
+  :: String -> ZeroOne -> CTerm -> CTerm -> CTerm -> Judgement Usage
+cTypeDependent loc r t tyt tyt' = do
   unless (r == Zero') (throwError . ErasureError t $ extend r)
-  _ <- local erased $ cType r tyt VUniverse
-  x <- bind Zero <$> evalInEnv tyt <*> ask
-  local (erased . with x)
-    $   cType r (cSubst 0 (Free $ bndName x) tyt') VUniverse
-    >>= checkVar loc (bndName x)
- where
-  (tyt, tyt') = case t of
-    (Pi     _ t1 t2) -> (t1, t2)
-    (Tensor _ t1 t2) -> (t1, t2)
-    (With t1 t2    ) -> (t1, t2)
-    ty -> error $ "internal: " <> show ty <> " is not a dependent type."
+  local erased $ do
+    _ <- cType r tyt VUniverse
+    x <- bind Zero <$> evalInEnv tyt <*> ask
+    local (with x)
+      $   cType r (cSubst 0 (Free $ bndName x) tyt') VUniverse
+      >>= checkVar loc (bndName x)
 
 checkVar :: String -> Name -> Usage -> Judgement Usage
 checkVar loc n qs = do

@@ -105,7 +105,7 @@ cases =
     "Duplication of linear argument"
     []
     "(λx. (x, x) : ∀ (1 _ : I). (1 _ : I) * I) ()"
-    "error: Mismatched multiplicities (lam):\n\
+    "error: Mismatched multiplicities (Lambda abstraction):\n\
     \         [Local 0] : I\n\
     \           Used w-times, but available 1-times."
   , TestCase "Erased multiplicative usage of linear argument"
@@ -129,7 +129,7 @@ cases =
       \                  (w f : (w x : a) -> b exp)\n\
       \                . b exp"
     ]
-    "ofcElim a (λexp. (w _ : a) * a) (m, ()) (λmm. (mm, mm))"
+    "ofcElim a (λexp. (w _ : a) * a) (m, ()) (λm'. (m', m'))"
     "w (m, m) : (w x : a) * a"
   ]
 
@@ -220,14 +220,14 @@ withCases =
     "1 <x, y> -> 1 (1 x, y)"
     ["assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"]
     "1 (λi. (fst i, snd i) : (1 _ : (_ : a) & b) -> (1 _ : a) * b) <x, y>"
-    "error: Mismatched multiplicities (lam):\n\
+    "error: Mismatched multiplicities (Lambda abstraction):\n\
     \         [Local 0] : (x : a) & b\n\
     \           Used w-times, but available 1-times."
   , TestCase
     "1 <x, y> -> 1 (1 x, x)"
     ["assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"]
     "1 (λi. (fst i, fst i) : (1 _ : (_ : a) & b) -> (1 _ : a) * a) <x, y>"
-    "error: Mismatched multiplicities (lam):\n\
+    "error: Mismatched multiplicities (Lambda abstraction):\n\
     \         [Local 0] : (x : a) & b\n\
     \           Used w-times, but available 1-times."
   , TestCase
