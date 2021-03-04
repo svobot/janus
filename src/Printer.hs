@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Printer
   ( Pretty
@@ -7,9 +8,9 @@ module Printer
   , hardlines
   , mult
   , render
-  , renderBinding
-  , renderBindingPlain
+  , renderString
   , pretty
+  , var
   ) where
 
 import           Control.Monad.Reader           ( MonadReader(local)
@@ -29,8 +30,8 @@ import           Data.Text.Prettyprint.Doc
                                                 , Pretty(..)
                                                 )
 import qualified Data.Text.Prettyprint.Doc     as PP
-import           Data.Text.Prettyprint.Doc.Render.String
-                                                ( renderString )
+import qualified Data.Text.Prettyprint.Doc.Render.String
+                                               as PPS
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal
                                                as Term
 import           Rig                            ( ZeroOneMany(..) )
@@ -41,7 +42,10 @@ type Doc = PP.Doc Term.AnsiStyle
 class Pretty a where
   pretty :: a -> Doc
 
-instance Pretty Text where
+instance Pretty Doc where
+  pretty = id
+
+instance  Pretty Text where
   pretty = PP.pretty
 
 instance Pretty Name where
@@ -61,6 +65,12 @@ instance Pretty ZeroOneMany where
   pretty Zero = annotate (Term.color Term.Magenta <> Term.bold) "0"
   pretty One  = annotate (Term.color Term.Magenta <> Term.bold) "1"
   pretty Many = annotate (Term.color Term.Magenta <> Term.bold) "w"
+
+instance (Pretty n, Pretty q, Pretty t) => Pretty (Binding n q t) where
+  pretty (Binding n q t) = align . group . PP.width (pretty q) $ \case
+    0 -> rest
+    _ -> " " <> rest
+    where rest = var (pretty n) <> line <> ":" <+> pretty t
 
 instance Pretty TypeError where
   pretty err = annotate (Term.color Term.Red <> Term.bold) "error:"
@@ -101,24 +111,13 @@ instance Pretty TypeError where
     go (UnknownVarError n) = "Variable not in scope: " <> pretty (Free n)
 
 instance Show TypeError where
-  show = renderString . layoutSmart defaultLayoutOptions . unAnnotate . pretty
+  show = renderString . pretty
 
 render :: Doc -> Text
 render = Term.renderStrict . layoutSmart defaultLayoutOptions
 
-renderBinding' :: Maybe String -> Binding Value ZeroOneMany Type -> Doc
-renderBinding' name (Binding val q ty) = (assign <>) . align $ sep ann
- where
-  ann    = [pretty q <+> pretty val, ":" <+> pretty ty]
-  assign = maybe mempty (((<+> "= ") . annotate Term.bold) . PP.pretty) name
-
-renderBinding :: Maybe String -> Binding Value ZeroOneMany Type -> Text
-renderBinding = (render .) . renderBinding'
-
-renderBindingPlain :: Maybe String -> Binding Value ZeroOneMany Type -> String
-renderBindingPlain =
-  ((renderString . layoutSmart defaultLayoutOptions . unAnnotate) .)
-    . renderBinding'
+renderString :: Doc -> String
+renderString = PPS.renderString . layoutSmart defaultLayoutOptions . unAnnotate
 
 hardlines :: [Doc] -> Doc
 hardlines = mconcat . intersperse hardline
@@ -244,19 +243,16 @@ cPrint p (Pi q1 d1 (Pi q2 d2 r)) =
   fmtBind q name body = parens $ pretty q <+> var name <+> ":" <+> body
 cPrint p (Pi q c c') = cPrintDependent fmt c c'
  where
-  fmt name l r = parensIf (p > 0)
-    $ sep ["(" <> pretty q <+> var name <+> ":" <+> l <> ")" <+> "->", r]
+  fmt name l r =
+    parensIf (p > 0) $ sep ["(" <> pretty (Binding name q l) <> ")" <+> "->", r]
 cPrint p (Tensor q c c') = cPrintDependent fmt c c'
  where
-  fmt name l r = do
-    parensIf (p > 0) $ sep
-      [ mult "(" <> pretty q <+> var name <+> ":" <+> l <> mult ")" <+> mult "*"
-      , r
-      ]
+  fmt name l r = parensIf (p > 0)
+    $ sep [mult "(" <> pretty (Binding name q l) <> mult ")" <+> mult "*", r]
 cPrint p (With c c') = cPrintDependent fmt c c'
  where
-  fmt name l r = parensIf (p > 0)
-    $ sep [add "(" <> var name <+> ":" <+> l <> add ")" <+> add "&", r]
+  fmt name l r = parensIf (p > 0) $ sep
+    [add "(" <> pretty (Binding @_ @Text name "" l) <> add ")" <+> add "&", r]
 cPrint _ (Pair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = mult "(" <> l <> mult "," <+> r <> mult ")"
 cPrint _ (Angles c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'

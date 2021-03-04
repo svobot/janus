@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module IntegrationSpec
   ( spec
   ) where
@@ -12,6 +10,7 @@ import           Data.Bifunctor                 ( bimap
 import           Data.String                    ( IsString
                                                 , fromString
                                                 )
+import qualified Data.Text                     as T
 import qualified Parser                        as Parse
 import           Printer
 import           Rig
@@ -291,9 +290,11 @@ run c = before (setContext $ setup c) (runTestCase c)
         checkEval (context st) (Just n) q i `shouldBe` res tc
       _ -> undefined
 
-  checkEval ctx n q i =
+  checkEval ctx mn q i =
     TR
-      $   renderBindingPlain n
+      $   renderString
+      .   (maybe mempty ((<+> "= ") . var . pretty . T.pack) mn <>)
+      .   pretty
       .   Binding (iEval i (fst ctx, [])) q
       <$> iType0 ctx q i
 

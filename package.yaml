@@ -31,7 +31,7 @@ dependencies:
 - semirings
 - text
 
-default-extensions: OverloadedStrings, TupleSections, TypeApplications
+default-extensions: LambdaCase, OverloadedStrings, TupleSections, TypeApplications
 
 library:
   source-dirs: src
