@@ -26,8 +26,8 @@ import           Types
 
 type Usage = Map.Map Name ZeroOneMany
 data TypingConfig = TypingConfig
-  { cfgContext     :: Context
-  , cfgBoundLocals :: Int
+  { cfgContext      :: Context
+  , _cfgBoundLocals :: Int
   }
 type Judgement = ReaderT TypingConfig Result
 
@@ -132,7 +132,7 @@ iType r (Fst i) = do
 iType r (Snd i) = do
   (qs, ty) <- iType r i
   case ty of
-    (VWith _ t) -> asks $ (qs, ) . t . vfree . Local . cfgBoundLocals
+    (VWith _ t) -> (qs, ) . t <$> evalInEnv (Inf $ Fst i)
     _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Snd i)
 iType _ i@(Bound _) = error $ "internal: Trying to infer type of " <> show i
 
