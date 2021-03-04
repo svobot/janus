@@ -7,7 +7,6 @@ import           Control.Monad.Except           ( throwError )
 import           Control.Monad.Reader           ( MonadIO(liftIO)
                                                 , MonadReader(local)
                                                 , ReaderT(runReaderT)
-                                                , ask
                                                 , asks
                                                 , unless
                                                 )
@@ -26,8 +25,8 @@ import           Types
 
 type Usage = Map.Map Name ZeroOneMany
 data TypingConfig = TypingConfig
-  { cfgContext      :: Context
-  , _cfgBoundLocals :: Int
+  { cfgGlobalContext :: Context
+  , cfgBoundLocals   :: TypeEnv
   }
 type Judgement = ReaderT TypingConfig Result
 
@@ -39,7 +38,7 @@ iinfer g r t = case iType0 g r t of
 iType0 :: Context -> ZeroOneMany -> ITerm -> Result Type
 iType0 g r t = do
   (qs, tp) <- first (Map.map (r S.*))
-    <$> runReaderT (iType (restrict r) t) (TypingConfig g 0)
+    <$> runReaderT (iType (restrict r) t) (TypingConfig g [])
   mapM_ (throwError . MultiplicityError Nothing) $ checkMultiplicity (snd g) qs
   return tp
  where
@@ -49,16 +48,19 @@ iType0 g r t = do
   restrict Many = One'
 
 erased :: TypingConfig -> TypingConfig
-erased (TypingConfig (vs, ts) i) = TypingConfig (vs, forget ts) i
+erased (TypingConfig (vs, ts) bs) = TypingConfig (vs, forget ts) (forget bs)
 
 with :: Binding Name ZeroOneMany Type -> TypingConfig -> TypingConfig
-with b (TypingConfig (vs, ts) i) = TypingConfig (vs, b : ts) (i + 1)
+with b cfg = cfg { cfgBoundLocals = b : cfgBoundLocals cfg }
 
 bind :: ZeroOneMany -> Type -> TypingConfig -> Binding Name ZeroOneMany Type
-bind r ty (TypingConfig _ i) = Binding (Local i) r ty
+bind r ty (TypingConfig _ bs) = Binding (Local (length bs)) r ty
+
+typeEnv :: TypingConfig -> TypeEnv
+typeEnv (TypingConfig (_, ts) bs) = bs ++ ts
 
 evalInEnv :: CTerm -> Judgement Value
-evalInEnv t = asks (cEval t . (, []) . fst . cfgContext)
+evalInEnv t = asks (cEval t . (, []) . fst . cfgGlobalContext)
 
 -- | Infer the type and count the resource usage of the term.
 iType :: ZeroOne -> ITerm -> Judgement (Usage, Type)
@@ -68,7 +70,7 @@ iType r (Ann e tyt) = do
   qs <- cType r e ty
   return (qs, ty)
 iType r (Free x) = do
-  env <- asks (snd . cfgContext)
+  env <- asks typeEnv
   case find ((== x) . bndName) env of
     Just (Binding _ _ ty) -> return (Map.singleton x $ extend r, ty)
     Nothing               -> throwError $ UnknownVarError x
@@ -191,14 +193,14 @@ cTypeDependent loc r t tyt tyt' = do
   unless (r == Zero') (throwError . ErasureError t $ extend r)
   local erased $ do
     _ <- cType r tyt VUniverse
-    x <- bind Zero <$> evalInEnv tyt <*> ask
+    x <- asks (flip $ bind Zero) <*> evalInEnv tyt
     local (with x)
       $   cType r (cSubst 0 (Free $ bndName x) tyt') VUniverse
       >>= checkVar loc (bndName x)
 
 checkVar :: String -> Name -> Usage -> Judgement Usage
 checkVar loc n qs = do
-  env <- asks (snd . cfgContext)
+  env <- asks typeEnv
   let (q, qs') = splitVar n qs
   mapM_ (throwError . MultiplicityError (Just loc))
         (checkMultiplicity env $ Map.singleton n q)
