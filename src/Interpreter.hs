@@ -117,7 +117,7 @@ help :: Cmd Repl
 help _ = liftIO $ do
   putStrLn
     "List of commands:  Any command may be abbreviated to its unique prefix.\n"
-  putStr $ intercalate "\n" helpLines
+  putStrLn $ intercalate "\n" helpLines
  where
   aliases args =
     intercalate ", " . map ((++ maybe "" (' ' :) args) . (commandPrefix :))
@@ -178,8 +178,9 @@ handleStmt stmt = case stmt of
         let val = iEval t (fst ctx, [])
         let outtext =
               render
-                $  maybe mempty ((<+> "= ") . var . pretty . T.pack) mn
-                <> pretty (Binding val q ty)
+                $   pretty q
+                <+> maybe mempty ((<+> "= ") . var . pretty . T.pack) mn
+                <>  pretty (Ann (quote0 val) (quote0 ty))
         liftIO . T.putStrLn $ outtext
         out <- gets outFile
         unless

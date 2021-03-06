@@ -158,7 +158,8 @@ bindMany n (NameEnv as bs) = NameEnv (drop n as) (reverse (take n as) ++ bs)
 
 iPrint :: Int -> ITerm -> Printer Doc
 iPrint p (Ann c c') = (<*>) . (fmt <$>) <$> cPrint 2 c <*> cPrint 0 c'
-  where fmt val ty = parensIf (p > 1) $ val <+> ":" <+> ty
+ where
+  fmt val ty = align . group . parensIf (p > 1) $ val <> line <> ":" <+> ty
 iPrint _ (Bound k) = return . asks $ (!! k) . bound
 iPrint _ (Free  n) = do
   case n of
@@ -239,19 +240,19 @@ cPrint p (Pi q1 d1 (Pi q2 d2 r)) =
     return $ do
       bindsDoc <- sequence binds
       bodyDoc  <- local (bindMany bindCount) body
-      return . align $ sep ["∀" <+> align (sep bindsDoc) <+> ".", bodyDoc]
+      return . align $ sep ["∀" <+> align (sep bindsDoc), "." <+> bodyDoc]
   fmtBind q name body = parens $ pretty q <+> var name <+> ":" <+> body
 cPrint p (Pi q c c') = cPrintDependent fmt c c'
  where
-  fmt name l r =
-    parensIf (p > 0) $ sep ["(" <> pretty (Binding name q l) <> ")" <+> "->", r]
+  fmt name l r = align . group . parensIf (p > 0) $ sep
+    ["(" <> pretty (Binding name q l) <> ")" <+> "->", r]
 cPrint p (Tensor q c c') = cPrintDependent fmt c c'
  where
-  fmt name l r = parensIf (p > 0)
-    $ sep [mult "(" <> pretty (Binding name q l) <> mult ")" <+> mult "*", r]
+  fmt name l r = align . group . parensIf (p > 0) $ sep
+    [mult "(" <> pretty (Binding name q l) <> mult ")" <+> mult "*", r]
 cPrint p (With c c') = cPrintDependent fmt c c'
  where
-  fmt name l r = parensIf (p > 0) $ sep
+  fmt name l r = align . group . parensIf (p > 0) $ sep
     [add "(" <> pretty (Binding @_ @Text name "" l) <> add ")" <+> add "&", r]
 cPrint _ (Pair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = mult "(" <> l <> mult "," <+> r <> mult ")"

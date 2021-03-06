@@ -47,12 +47,8 @@ cases :: [TestCase]
 cases =
   [ TestCase "Identity application"
              ["assume (0 a : U) (1 x : a)"]
-             "1 (\\x. \\y. y : (0 x : U) -> (1 y : x) -> x) a x"
-             "1 x : a"
-  , TestCase "Let identity application"
-             ["assume (0 a : U) (1 x : a)"]
              "let 1 id = (\\x. \\y. y : (0 x : U) -> (1 y : x) -> x) a x"
-             "id = 1 x : a"
+             "1 id = x : a"
   , TestCase "Unknown variable in setup"
              ["assume (0 a : U) (1 x : b)"]
              ""
@@ -142,8 +138,8 @@ prettyCases =
     \                (0 b : ∀ (0 a' : a) . U)\n\
     \                (0 p : (0 x : a) * b x)\n\
     \              . a"
-    "proj1 = 0 λx y z. let c @ a, b = z in a : x\n\
-    \        : ∀ (0 x : U) (0 y : (0 a : x) -> U) (0 z : (0 a : x) * y a) . x"
+    "0 proj1 = (λx y z. let c @ a, b = z in a : x)\n\
+    \          : ∀ (0 x : U) (0 y : (0 a : x) -> U) (0 z : (0 a : x) * y a) . x"
   , TestCase
     "Multiplicative pair second element projection"
     [ "let 0 proj1 = λa b p. let z @ x, y = p in x : a\n\
@@ -157,13 +153,13 @@ prettyCases =
     \                (0 b : (0 a' : a) -> U)\n\
     \                (0 p : (0 x : a) * b x)\n\
     \              . b (proj1 a b p)"
-    "proj2 = 0 λx y z. let c @ a, b = z in b : y (let f @ d, e = c in d : x)\n\
-    \        : ∀ (0 x : U) (0 y : (0 a : x) -> U) (0 z : (0 a : x) * y a) .\n\
-    \          y (let c @ a, b = z in a : x)"
+    "0 proj2 = (λx y z. let c @ a, b = z in b : y (let f @ d, e = c in d : x))\n\
+    \          : ∀ (0 x : U) (0 y : (0 a : x) -> U) (0 z : (0 a : x) * y a)\n\
+    \            . y (let c @ a, b = z in a : x)"
   , TestCase "SKI Calculus (I combinator)"
              []
              "let w Id = λ_ x. x : ∀ (0 a : U) (1 _ : a) . a"
-             "Id = w λx y. y : ∀ (0 x : U) (1 y : x) . x"
+             "w Id = (λx y. y) : ∀ (0 x : U) (1 y : x) . x"
   , TestCase
     "SKI Calculus (K combinator)"
     []
@@ -173,7 +169,8 @@ prettyCases =
     \            (1 x : a)\n\
     \            (w _ : b x)\n\
     \          . a"
-    "K = w λx y z a. z : ∀ (0 x : U) (0 y : (0 b : x) -> U) (1 z : x) (w a : y z) . x"
+    "w K = (λx y z a. z)\n\
+    \      : ∀ (0 x : U) (0 y : (0 b : x) -> U) (1 z : x) (w a : y z) . x"
   , TestCase
     "SKI Calculus (S combinator)"
     []
@@ -185,14 +182,14 @@ prettyCases =
     \            (1 y : (w z : a) -> b z)\n\
     \            (w z : a)\n\
     \          . c z (y z))"
-    "S = w λx y z a b c. a c (b c)\n\
-    \    : ∀ (0 x : U)\n\
-    \        (0 y : (0 d : x) -> U)\n\
-    \        (0 z : ∀ (0 d : x) (0 e : y d) . U)\n\
-    \        (1 a : ∀ (w d : x) (1 e : y d) . z d e)\n\
-    \        (1 b : (w d : x) -> y d)\n\
-    \        (w c : x) .\n\
-    \      z c (b c)"
+    "w S = (λx y z a b c. a c (b c))\n\
+    \      : ∀ (0 x : U)\n\
+    \          (0 y : (0 d : x) -> U)\n\
+    \          (0 z : ∀ (0 d : x) (0 e : y d) . U)\n\
+    \          (1 a : ∀ (w d : x) (1 e : y d) . z d e)\n\
+    \          (1 b : (w d : x) -> y d)\n\
+    \          (w c : x)\n\
+    \        . z c (b c)"
   ]
 
 withCases :: [TestCase]
@@ -293,9 +290,11 @@ run c = before (setContext $ setup c) (runTestCase c)
   checkEval ctx mn q i =
     TR
       $   renderString
+      .   (pretty q <+>)
       .   (maybe mempty ((<+> "= ") . var . pretty . T.pack) mn <>)
       .   pretty
-      .   Binding (iEval i (fst ctx, [])) q
+      .   Ann (quote0 $ iEval i (fst ctx, []))
+      .   quote0
       <$> iType0 ctx q i
 
 spec :: Spec
