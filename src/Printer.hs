@@ -18,9 +18,9 @@ import           Control.Monad.Reader           ( MonadReader(local)
                                                 , asks
                                                 , runReader
                                                 )
-import           Control.Monad.State            ( State
-                                                , modify
-                                                , runState
+import           Control.Monad.Writer.Strict    ( MonadWriter(tell)
+                                                , Writer
+                                                , runWriter
                                                 )
 import           Data.List                      ( intersperse )
 import qualified Data.Set                      as Set
@@ -126,7 +126,7 @@ parensIf :: Bool -> Doc -> Doc
 parensIf True  = parens
 parensIf False = id
 
-type Printer doc = State FreeVars (Reader (NameEnv doc) doc)
+type Printer doc = Writer FreeVars (Reader (NameEnv doc) doc)
 type FreeVars = Set.Set String
 data NameEnv doc = NameEnv
   { fresh :: [doc]
@@ -136,7 +136,7 @@ data NameEnv doc = NameEnv
 runPrinter :: (a -> Printer Doc) -> a -> Doc
 runPrinter printer term = runReader r (NameEnv freshNames [])
  where
-  (r, freeVars) = runState (printer term) Set.empty
+  (r, freeVars) = runWriter (printer term)
   -- Filter the free variables that occur in the term out of the names that can
   -- be used for bound variables.
   freshNames =
@@ -162,7 +162,7 @@ iPrint p (Ann c c') = (<*>) . (fmt <$>) <$> cPrint 2 c <*> cPrint 0 c'
 iPrint _ (Bound k) = return . asks $ (!! k) . bound
 iPrint _ (Free  n) = do
   case n of
-    Global s -> modify (Set.insert s)
+    Global s -> tell $ Set.singleton s
     _        -> return ()
   return . return $ pretty n
 iPrint p (i :$: c) = (<*>) . (fmt <$>) <$> iPrint 2 i <*> cPrint 3 c
