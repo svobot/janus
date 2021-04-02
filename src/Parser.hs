@@ -14,6 +14,7 @@ import           Control.Monad                  ( foldM )
 import           Control.Monad.Trans            ( liftIO )
 import           Data.Char                      ( isAlpha )
 import           Data.List                      ( elemIndex )
+import           Prelude                 hiding ( pi )
 import           Rig                            ( ZeroOneMany(..) )
 import           Text.Parsec
 import           Text.Parsec.Language           ( haskellStyle )
@@ -105,12 +106,9 @@ rig :: CharParser ZeroOneMany
 rig = choice [Zero <$ reserved "0", One <$ reserved "1", Many <$ reserved "w"]
 
 iTerm :: [String] -> CharParser ITerm
-iTerm e =
-  do
-    cTermInner e >>= ann
-  <|> do
-        t <- iTermInner e
-        ann (Inf t) <|> return t
+iTerm e = (cTermInner e >>= ann) <|> do
+  t <- iTermInner e
+  ann (Inf t) <|> return t
   where ann t = Ann t <$> (reservedOp ":" *> cTerm e)
 
 iTermInner :: [String] -> CharParser ITerm
@@ -130,8 +128,8 @@ iTermInner e = foldl (:$:) <$> inner e <*> many (cTermWith inner e)
         rest PairElim ([y, x] ++ e) (z : e)
       )
       <|> (mUnit *> rest MUnitElim e (z : e))
-  fstElim = Fst <$> (reserved "fst" *> iTerm e)
-  sndElim = Snd <$> (reserved "snd" *> iTerm e)
+  fstElim = Fst <$> (reserved "fst" *> inner e)
+  sndElim = Snd <$> (reserved "snd" *> inner e)
   var     = (\x -> maybe (Free $ Global x) Bound $ elemIndex x e) <$> identifier
 
 cTermWith :: ([String] -> CharParser ITerm) -> [String] -> CharParser CTerm
@@ -144,7 +142,7 @@ cTermInner :: [String] -> CharParser CTerm
 cTermInner e = choice
   [ lam
   , universe
-  , fun
+  , pi
   , forall
   , try pair
   , tensor
@@ -164,7 +162,7 @@ cTermInner e = choice
     t <- cTermWith iTermInner (reverse xs ++ e)
     return $ iterate Lam t !! length xs
   universe = Universe <$ reserved "U"
-  fun      = do
+  pi       = do
     T.Binding x q t <- try $ bind e <* reservedOp "->"
     Pi q t <$> cTermWith iTermInner (x : e)
   forall = do
