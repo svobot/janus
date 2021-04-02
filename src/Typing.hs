@@ -28,7 +28,7 @@ data TypingConfig = TypingConfig
   { cfgGlobalContext :: Context
   , cfgBoundLocals   :: TypeEnv
   }
-type Judgement = ReaderT TypingConfig Result
+type Judgment = ReaderT TypingConfig Result
 
 iinfer :: Context -> ZeroOneMany -> ITerm -> Repl (Maybe Type)
 iinfer g r t = case iType0 g r t of
@@ -42,10 +42,10 @@ iType0 g r t = do
   mapM_ (throwError . MultiplicityError Nothing) $ checkMultiplicity (snd g) qs
   return tp
  where
-  restrict :: ZeroOneMany -> ZeroOne
-  restrict Zero = Zero'
-  restrict One  = One'
-  restrict Many = One'
+  restrict :: ZeroOneMany -> Relevance
+  restrict Zero = Erased
+  restrict One  = Present
+  restrict Many = Present
 
 erased :: TypingConfig -> TypingConfig
 erased (TypingConfig (vs, ts) bs) = TypingConfig (vs, forget ts) (forget bs)
@@ -59,13 +59,13 @@ bind r ty (TypingConfig _ bs) = Binding (Local (length bs)) r ty
 typeEnv :: TypingConfig -> TypeEnv
 typeEnv (TypingConfig (_, ts) bs) = bs ++ ts
 
-evalInEnv :: CTerm -> Judgement Value
+evalInEnv :: CTerm -> Judgment Value
 evalInEnv t = asks (cEval t . (, []) . fst . cfgGlobalContext)
 
 -- | Infer the type and count the resource usage of the term.
-iType :: ZeroOne -> ITerm -> Judgement (Usage, Type)
+iType :: Relevance -> ITerm -> Judgment (Usage, Type)
 iType r (Ann e tyt) = do
-  local erased (cType Zero' tyt VUniverse) >>= checkErased
+  local erased (cType Erased tyt VUniverse) >>= checkErased
   ty <- evalInEnv tyt
   qs <- cType r e ty
   return (qs, ty)
@@ -81,10 +81,10 @@ iType r (e1 :$: e2) = do
       let r' = extend r
       qs <- if p S.* r' == Zero
         then do
-          _ <- cType Zero' e2 ty
+          _ <- cType Erased e2 ty
           return qs1
         else do
-          qs2 <- cType One' e2 ty
+          qs2 <- cType Present e2 ty
           return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
       (qs, ) . ty' <$> evalInEnv e2
     ty -> throwError $ InferenceError "_ -> _" ty (e1 :$: e2)
@@ -94,7 +94,7 @@ iType r (PairElim l i t) = do
     zTy@(VTensor p xTy yTy) -> do
       z <- asks $ bind Zero zTy
       local (erased . with z)
-            (cType Zero' (cSubst 0 (Free $ bndName z) t) VUniverse)
+            (cType Erased (cSubst 0 (Free $ bndName z) t) VUniverse)
         >>= checkErased
       let r' = extend r
       x <- asks $ bind (p S.* r') xTy
@@ -121,7 +121,7 @@ iType r (MUnitElim l i t) = do
     xTy@VMUnitType -> do
       x <- asks $ bind Zero xTy
       local (erased . with x)
-            (cType Zero' (cSubst 0 (Free $ bndName x) t) VUniverse)
+            (cType Erased (cSubst 0 (Free $ bndName x) t) VUniverse)
         >>= checkErased
       tu  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) t)
       qs2 <- cType r i tu
@@ -141,7 +141,7 @@ iType r (Snd i) = do
 iType _ i@(Bound _) = error $ "internal: Trying to infer type of " <> show i
 
 -- | Check the type and count the resource usage of the term.
-cType :: ZeroOne -> CTerm -> Type -> Judgement Usage
+cType :: Relevance -> CTerm -> Type -> Judgment Usage
 cType r (Inf e) v = do
   (qs, v') <- iType r e
   unless (quote0 v == quote0 v') (throwError $ InferenceError (pretty v) v' e)
@@ -155,10 +155,10 @@ cType r (Pair e1 e2) (VTensor p ty ty') = do
   let r' = extend r
   if p S.* r' == Zero
     then do
-      _ <- cType Zero' e1 ty
+      _ <- cType Erased e1 ty
       rest
     else do
-      qs1 <- cType One' e1 ty
+      qs1 <- cType Present e1 ty
       qs2 <- rest
       return $ Map.unionWith (S.+) qs2 (Map.map (p S.* r' S.*) qs1)
   where rest = evalInEnv e1 >>= (cType r e2 . ty')
@@ -190,9 +190,9 @@ cType _ val                ty         = throwError $ CheckError ty val
 -- | Generic typing rule that check terms containing a dependent function type,
 -- dependent tensor product type, or a dependent with type
 cTypeDependent
-  :: String -> ZeroOne -> CTerm -> CTerm -> CTerm -> Judgement Usage
+  :: String -> Relevance -> CTerm -> CTerm -> CTerm -> Judgment Usage
 cTypeDependent loc r t tyt tyt' = do
-  unless (r == Zero') (throwError . ErasureError t $ extend r)
+  unless (r == Erased) (throwError . ErasureError t $ extend r)
   local erased $ do
     cType r tyt VUniverse >>= checkErased
     x <- asks (flip $ bind Zero) <*> evalInEnv tyt
@@ -200,7 +200,7 @@ cTypeDependent loc r t tyt tyt' = do
       $   cType r (cSubst 0 (Free $ bndName x) tyt') VUniverse
       >>= checkVar loc (bndName x)
 
-checkVar :: String -> Name -> Usage -> Judgement Usage
+checkVar :: String -> Name -> Usage -> Judgment Usage
 checkVar loc n qs = do
   env <- asks typeEnv
   let (q, qs') = splitVar n qs
@@ -225,7 +225,7 @@ checkMultiplicity env = toMaybe . mapMaybe notEnough . Map.toList
 
 -- | Checks that the usages returned from typing an expression in the erased
 -- context are all Zero.
-checkErased :: Usage -> Judgement ()
+checkErased :: Usage -> Judgment ()
 checkErased qs = do
   let bad = Map.filter (/= Zero) qs
   unless

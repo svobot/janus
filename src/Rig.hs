@@ -25,9 +25,9 @@ Zero <: Many = True
 One  <: Many = True
 x    <: y    = x == y
 
-data ZeroOne = Zero' | One' deriving (Eq)
+data Relevance = Erased | Present deriving (Eq)
 
-extend :: S.Semiring s => ZeroOne -> s
-extend Zero' = S.zero
-extend One'  = S.one
+extend :: S.Semiring s => Relevance -> s
+extend Erased  = S.zero
+extend Present = S.one
 
