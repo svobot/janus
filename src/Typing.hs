@@ -65,7 +65,7 @@ evalInEnv t = asks (cEval t . (, []) . fst . cfgGlobalContext)
 -- | Infer the type and count the resource usage of the term.
 iType :: ZeroOne -> ITerm -> Judgement (Usage, Type)
 iType r (Ann e tyt) = do
-  _  <- local erased $ cType Zero' tyt VUniverse
+  local erased (cType Zero' tyt VUniverse) >>= checkErased
   ty <- evalInEnv tyt
   qs <- cType r e ty
   return (qs, ty)
@@ -92,9 +92,10 @@ iType r (PairElim l i t) = do
   (qs1, lTy) <- iType r l
   case lTy of
     zTy@(VTensor p xTy yTy) -> do
-      z   <- asks $ bind Zero zTy
-      qs3 <- local (erased . with z)
-        $ cType Zero' (cSubst 0 (Free $ bndName z) t) VUniverse
+      z <- asks $ bind Zero zTy
+      local (erased . with z)
+            (cType Zero' (cSubst 0 (Free $ bndName z) t) VUniverse)
+        >>= checkErased
       let r' = extend r
       x <- asks $ bind (p S.* r') xTy
       local (with x) $ do
@@ -107,7 +108,7 @@ iType r (PairElim l i t) = do
             (cSubst 1 (Free $ bndName x) . cSubst 0 (Free $ bndName y) $ i)
             txy
           qs <-
-            pure (Map.unionsWith (S.+) [qs1, qs2, qs3])
+            pure (Map.unionWith (S.+) qs1 qs2)
             >>= checkVar "First element of the pair elimination"  (bndName x)
             >>= checkVar "Second element of the pair elimination" (bndName y)
           (qs, ) <$> evalInEnv (cSubst 0 l t)
@@ -118,12 +119,13 @@ iType r (MUnitElim l i t) = do
   (qs1, lTy) <- iType r l
   case lTy of
     xTy@VMUnitType -> do
-      x   <- asks $ bind Zero xTy
-      qs3 <- local (erased . with x)
-        $ cType Zero' (cSubst 0 (Free $ bndName x) t) VUniverse
+      x <- asks $ bind Zero xTy
+      local (erased . with x)
+            (cType Zero' (cSubst 0 (Free $ bndName x) t) VUniverse)
+        >>= checkErased
       tu  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) t)
       qs2 <- cType r i tu
-      let qs = Map.unionsWith (S.+) [qs1, qs2, qs3]
+      let qs = Map.unionWith (S.+) qs1 qs2
       (qs, ) <$> evalInEnv (cSubst 0 l t)
     ty -> throwError $ InferenceError (pretty MUnitType) ty (MUnitElim l i t)
 iType r (Fst i) = do
@@ -192,7 +194,7 @@ cTypeDependent
 cTypeDependent loc r t tyt tyt' = do
   unless (r == Zero') (throwError . ErasureError t $ extend r)
   local erased $ do
-    _ <- cType r tyt VUniverse
+    cType r tyt VUniverse >>= checkErased
     x <- asks (flip $ bind Zero) <*> evalInEnv tyt
     local (with x)
       $   cType r (cSubst 0 (Free $ bndName x) tyt') VUniverse
@@ -221,3 +223,17 @@ checkMultiplicity env = toMaybe . mapMaybe notEnough . Map.toList
   toMaybe [] = Nothing
   toMaybe es = Just es
 
+-- | Checks that the usages returned from typing an expression in the erased
+-- context are all Zero.
+checkErased :: Usage -> Judgement ()
+checkErased qs = do
+  let bad = Map.filter (/= Zero) qs
+  unless
+    (Map.null bad)
+    (  error
+    $  "internal: Variables used in the erased context: \n"
+    <> Map.foldrWithKey
+         (\k v -> (<> "    " <> show k <> " used " <> show v <> "-times\n"))
+         ""
+         bad
+    )
