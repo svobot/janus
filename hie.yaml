@@ -1,2 +1,10 @@
 cradle:
-  stack:
+  cabal:
+    - path: "./src"
+      component: "lib:LambdaPi"
+
+    - path: "./app/Main.hs"
+      component: "LambdaPi:exe:LambdaPic"
+
+    - path: "./test"
+      component: "LambdaPi:test:test"
