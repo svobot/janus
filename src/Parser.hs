@@ -1,17 +1,13 @@
 module Parser
   ( Binding
   , Stmt(..)
-  , eval
-  , file
-  , iTerm
+  , evalParser
+  , fileParser
   , keywords
-  , parseIO
-  , stmt
-  , lang
+  , typeParser
   ) where
 
 import           Control.Monad                  ( foldM )
-import           Control.Monad.Trans            ( liftIO )
 import           Data.Char                      ( isAlpha )
 import           Data.List                      ( elemIndex )
 import           Prelude                 hiding ( pi )
@@ -24,49 +20,6 @@ import           Types                   hiding ( Binding )
 import qualified Types                         as T
                                                 ( Binding(..) )
 
-lang :: P.TokenParser u
-lang = P.makeTokenParser $ haskellStyle
-  { P.identStart = satisfy (\c -> notElem @[] c "λ∀" && isAlpha c) <|> char '_'
-  , P.reservedNames = keywords ++ ["<>", "()"]
-  , P.reservedOpNames = [ ":"
-                        , "="
-                        , "\\"
-                        , "λ"
-                        , "."
-                        , "->"
-                        , "*"
-                        , "&"
-                        , "@"
-                        , "∀"
-                        , ","
-                        ]
-  }
-
-keywords :: [String]
-keywords =
-  [ "forall"
-  , "let"
-  , "assume"
-  , "putStrLn"
-  , "out"
-  , "in"
-  , "U"
-  , "I"
-  , "fst"
-  , "snd"
-  , "T"
-  ]
-
-identifier :: CharParser String
-identifier = P.identifier lang
-
-reserved :: String -> CharParser ()
-reserved = P.reserved lang
-
-reservedOp :: String -> CharParser ()
-reservedOp = P.reservedOp lang
-
-type CharParser = GenParser Char ()
 type Binding = T.Binding String ZeroOneMany CTerm
 
 data Stmt
@@ -77,10 +30,35 @@ data Stmt
   | Out String      --  more lhs2TeX hacking, allow to print to files
   deriving (Show, Eq)
 
-parseIO :: String -> CharParser a -> String -> Repl (Maybe a)
-parseIO f p x = case parse (P.whiteSpace lang *> p <* eof) f x of
-  Left  e -> liftIO $ print e >> return Nothing
-  Right r -> return (Just r)
+lang :: P.TokenParser u
+lang = P.makeTokenParser $ haskellStyle
+  { P.identStart = satisfy (\c -> notElem @[] c "λ∀" && isAlpha c) <|> char '_'
+  , P.reservedNames = keywords ++ ["<>", "()"]
+  , P.reservedOpNames = "->" : map pure ":=\\λ.*&@∀,"
+  }
+
+keywords :: [String]
+keywords = words "forall let assume putStrLn out in U I fst snd T"
+
+evalParser :: String -> Either ParseError Stmt
+evalParser = parse (P.whiteSpace lang *> stmt <* eof) "<interactive>"
+
+typeParser :: String -> Either ParseError (ZeroOneMany, ITerm)
+typeParser = parse (P.whiteSpace lang *> eval (,) <* eof) "<interactive>"
+
+fileParser :: SourceName -> String -> Either ParseError [Stmt]
+fileParser = parse (P.whiteSpace lang *> many stmt <* eof)
+
+type CharParser = GenParser Char ()
+
+identifier :: CharParser String
+identifier = P.identifier lang
+
+reserved :: String -> CharParser ()
+reserved = P.reserved lang
+
+reservedOp :: String -> CharParser ()
+reservedOp = P.reservedOp lang
 
 stmt :: CharParser Stmt
 stmt = choice [define, assume, putstr, out, eval Eval]
@@ -98,9 +76,6 @@ stmt = choice [define, assume, putstr, out, eval Eval]
 
 eval :: (ZeroOneMany -> ITerm -> a) -> CharParser a
 eval f = f <$> option Many rig <*> iTerm []
-
-file :: String -> String -> Repl (Maybe [Stmt])
-file name = parseIO name $ many stmt
 
 rig :: CharParser ZeroOneMany
 rig = choice [Zero <$ reserved "0", One <$ reserved "1", Many <$ reserved "w"]

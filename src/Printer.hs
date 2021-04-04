@@ -2,14 +2,15 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Printer
-  ( Pretty
+  ( Doc
+  , Pretty
   , (<+>)
   , add
   , hardlines
   , mult
+  , pretty
   , render
   , renderString
-  , pretty
   , var
   ) where
 

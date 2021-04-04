@@ -17,16 +17,24 @@ data TestCase = TestCase
   , res   :: TestResult
   }
 
-newtype TestResult =  TR (Result CTerm)
+newtype TestResult =  TestResult (Result CTerm)
 
 instance Eq TestResult where
-  (TR (Left  te)) == (TR (Left  te')) = show te == show te'
-  (TR (Right ty)) == (TR (Right ty')) = ty == ty'
-  _               == _                = False
+  (TestResult (Left  te)) == (TestResult (Left  te')) = show te == show te'
+  (TestResult (Right ty)) == (TestResult (Right ty')) = ty == ty'
+  _                       == _                        = False
 
 instance Show TestResult where
-  show (TR (Left  te)) = show te
-  show (TR (Right ty)) = show ty
+  show (TestResult (Left  te)) = show te
+  show (TestResult (Right ty)) = show ty
+
+spec :: Spec
+spec = mapM_ run cases
+ where
+  run tc =
+    it (desc tc)
+      $          TestResult (quote0 <$> liftA3 iType0 ctx multi expr tc)
+      `shouldBe` res tc
 
 cases :: [TestCase]
 cases =
@@ -39,7 +47,7 @@ cases =
     :$: ifg "a"
     :$: ifg "x"
     )
-    (TR . return $ ifg "a")
+    (TestResult . return $ ifg "a")
   , TestCase
     "Constant function application"
     -- 1 ((λa b x y. x)
@@ -70,7 +78,7 @@ cases =
         )
     :$: ifg "y"
     )
-    (TR . return $ ifg "a")
+    (TestResult . return $ ifg "a")
   , TestCase
     "Second projection of dependent multiplicative pair"
     -- 1 let _ @ x, y = (a, x) : (0 _ : U) * a in y : a
@@ -81,7 +89,7 @@ cases =
       (ib 0)
       (ifg "a")
     )
-    (TR . return $ ifg "a")
+    (TestResult . return $ ifg "a")
   , TestCase
     "Linear swap"
     -- 1 ((\p. let z @ x, y = p in (y, x) : (1 _ : b) * a) : (1 _ : (1 _ : a) * b) -> (1 _ : b) * a) (x, y)
@@ -102,7 +110,7 @@ cases =
         )
     :$: Pair (ifg "x") (ifg "y")
     )
-    (TR . return $ Tensor One (ifg "b") (ifg "a"))
+    (TestResult . return $ Tensor One (ifg "b") (ifg "a"))
   , TestCase
     "Second projection of dependent additive pair"
     -- 1 ((\p. snd p) : (1 _ : (_ : a) & b) -> b) <x, y>
@@ -112,7 +120,7 @@ cases =
             (Pi One (With (ifg "a") (ifg "b")) (ifg "b"))
     :$: Angles (ifg "x") (ifg "y")
     )
-    (TR . throwError $ MultiplicityError
+    (TestResult . throwError $ MultiplicityError
       Nothing
       [ (Global "x", vfree $ Global "a", Many, One)
       , (Global "y", vfree $ Global "b", Many, One)
@@ -132,12 +140,4 @@ cases =
       , Binding (Global "y") One  (VNeutral . NFree $ Global "b")
       ]
     )
-run :: TestCase -> Spec
-run tc =
-  it (desc tc)
-    $          TR (quote0 <$> liftA3 iType0 ctx multi expr tc)
-    `shouldBe` res tc
-
-spec :: Spec
-spec = mapM_ run cases
 

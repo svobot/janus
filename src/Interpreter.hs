@@ -1,15 +1,19 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LiberalTypeSynonyms #-}
 
 module Interpreter
-  ( repl
+  ( IState(..)
+  , MonadAbstractIO(..)
+  , compilePhrase
+  , repl
   ) where
 
 import           Control.Exception              ( IOException
                                                 , try
                                                 )
 import           Control.Monad.State            ( MonadIO
-                                                , MonadState
+                                                , MonadState(..)
+                                                , StateT
                                                 , evalStateT
                                                 , forM_
                                                 , gets
@@ -31,26 +35,35 @@ import           Data.List                      ( dropWhileEnd
 import           Data.Maybe                     ( isNothing )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
-import           Parser                         ( Stmt(..) )
-import qualified Parser                        as Parse
+import           Parser
 import           Printer
 import           Rig
 import           System.Console.Repline  hiding ( options )
+import           Text.Parsec                    ( ParseError )
 import           Types
 import           Typing
 
-data CmdInfo = CmdInfo
-  { cmdNames  :: [String]
-  , cmdArgs   :: Maybe String
-  , cmdDesc   :: String
-  , cmdAction :: Cmd Repl
+class (Monad m) => MonadAbstractIO m where
+  output :: String -> m ()
+  outputDoc :: Doc -> m ()
+  outputFile :: FilePath -> T.Text -> m ()
+
+instance (Monad m, MonadIO m) => MonadAbstractIO (HaskelineT m) where
+  output     = liftIO . putStrLn
+  outputDoc  = liftIO . T.putStrLn . render
+  outputFile = (liftIO .) . T.writeFile
+
+data IState = IState
+  { outFile :: String
+  , context :: Context
   }
 
--- Evaluation : handle each line user inputs
-compilePhrase :: Cmd Repl
-compilePhrase x = do
-  x' <- Parse.parseIO "<interactive>" Parse.stmt x
-  mapM_ handleStmt x'
+type Repl = HaskelineT (StateT IState IO)
+
+type AbstractRepl m = (MonadState IState m, MonadAbstractIO m)
+
+commandPrefix :: Char
+commandPrefix = ':'
 
 -- Prefix tab completeter
 defaultMatcher
@@ -74,34 +87,14 @@ byWord :: (Monad m, MonadState IState m) => WordCompleter m
 byWord n = do
   env <- gets $ snd . context
   let scope = [ s | Global s <- reverse . nub $ map bndName env ]
-  return . filter (n `isPrefixOf`) $ scope ++ Parse.keywords
+  return . filter (n `isPrefixOf`) $ scope ++ keywords
 
-options :: [CmdInfo] -> [(String, Cmd Repl)]
-options = concatMap $ traverse (,) <$> cmdNames <*> cmdAction
-
-ini :: Repl ()
-ini = liftIO $ putStrLn "Interpreter for Lambda-Pi.\nType :? for help."
-
-final :: Repl ExitDecision
-final = do
-  liftIO $ putStrLn "Leaving Lambda-Pi interpreter."
-  return Exit
-
-commandPrefix :: Char
-commandPrefix = ':'
-
-repl :: IO ()
-repl = flip evalStateT (IState "" ([], [])) $ evalRepl
-  (const $ pure ">>> ")
-  compilePhrase
-  (options commands)
-  (Just commandPrefix)
-  Nothing
-  (Combine (Prefix (wordCompleter byWord) defaultMatcher)
-           (Word commandCompleter)
-  )
-  ini
-  final
+data CmdInfo = CmdInfo
+  { cmdNames  :: [String]
+  , cmdArgs   :: Maybe String
+  , cmdDesc   :: String
+  , cmdAction :: Cmd Repl
+  }
 
 -- Commands
 commands :: [CmdInfo]
@@ -112,6 +105,9 @@ commands =
   , CmdInfo ["quit"] Nothing "exit interpreter" (const abort)
   , CmdInfo ["help", "?"] Nothing "display this list of commands" help
   ]
+
+options :: [CmdInfo] -> [(String, Cmd Repl)]
+options = concatMap $ traverse (,) <$> cmdNames <*> cmdAction
 
 help :: Cmd Repl
 help _ = liftIO $ do
@@ -133,7 +129,7 @@ help _ = liftIO $ do
 
 typeOf :: Cmd Repl
 typeOf s = do
-  mx  <- Parse.parseIO "<interactive>" (Parse.eval (,)) s
+  mx  <- parseIO typeParser s
   ctx <- gets context
   t   <- maybe (return Nothing) (uncurry (iinfer ctx)) mx
   mapM_ (liftIO . T.putStrLn . render . pretty) t
@@ -146,64 +142,89 @@ browse _ = do
     . map (\b -> b { bndName = vfree $ bndName b })
     $ nubBy ((==) `on` bndName) env
 
+-- Evaluation : handle each line user inputs
+compilePhrase :: AbstractRepl m => String -> m ()
+compilePhrase x = do
+  x' <- parseIO evalParser x
+  mapM_ handleStmt x'
+
 compileFile :: Cmd Repl
 compileFile f = do
   x' <-
     liftIO
-    . ((try @IOException) . readFile)
+    . (try @IOException . readFile)
     . dropWhile isSpace
     . dropWhileEnd isSpace
     $ f
   case x' of
     Left  e -> liftIO $ print e
-    Right x -> Parse.file f x >>= mapM_ (mapM_ handleStmt)
+    Right x -> parseIO (fileParser f) x >>= mapM_ (mapM_ handleStmt)
 
-handleStmt :: Stmt -> Repl ()
+iinfer :: AbstractRepl m => Context -> ZeroOneMany -> ITerm -> m (Maybe Type)
+iinfer g r t = case iType0 g r t of
+  Left  e -> outputDoc (pretty e) >> return Nothing
+  Right v -> return (Just v)
+
+parseIO :: MonadAbstractIO m => (a -> Either ParseError b) -> a -> m (Maybe b)
+parseIO p x = case p x of
+  Left  e -> output (show e) >> return Nothing
+  Right r -> return (Just r)
+
+handleStmt :: AbstractRepl m => Stmt -> m ()
 handleStmt stmt = case stmt of
   Assume bs  -> mapM_ assume bs
   Let q x e  -> checkEval q (Just x) e
   Eval q e   -> checkEval q Nothing e
-  PutStrLn x -> liftIO $ putStrLn x
+  PutStrLn x -> output x
   Out      f -> modify $ \st -> st { outFile = f }
  where
   mapContext f = \st -> st { context = f $ context st }
 
-  checkEval :: ZeroOneMany -> Maybe String -> ITerm -> Repl ()
-  checkEval q mn t = do
-    ctx <- gets context
-    mty <- iinfer ctx q t
-    forM_
-      mty
-      (\ty -> do
-        let val = iEval t (fst ctx, [])
-        let outtext =
-              render
-                $   pretty q
-                <+> maybe mempty ((<+> "= ") . var . pretty . T.pack) mn
-                <>  pretty (Ann (quote0 val) (quote0 ty))
-        liftIO . T.putStrLn $ outtext
-        out <- gets outFile
-        unless
-          (null out)
-          (do
-            let process = T.unlines . map ("< " <>) . T.lines
-            liftIO . T.writeFile out $ process outtext
-            modify $ \st -> st { outFile = "" }
-          )
-        forM_
-          mn
-          (\n -> modify . mapContext $ bimap ((Global n, val) :)
-                                             (Binding (Global n) q ty :)
-          )
-      )
-
-  assume :: Parse.Binding -> Repl ()
   assume (Binding x q t) = do
     let annt = Ann t Universe
     ctx <- gets context
     mty <- iinfer ctx Zero annt
     unless (isNothing mty) $ do
       let val = iEval annt (fst ctx, [])
-      liftIO . T.putStrLn . render . pretty $ Binding (vfree $ Global x) q val
+      outputDoc . pretty $ Binding (vfree $ Global x) q val
       modify . mapContext $ second (Binding (Global x) q val :)
+
+  checkEval q mn t = do
+    ctx <- gets context
+    mty <- iinfer ctx q t
+    forM_ mty $ \ty -> do
+      let val = iEval t (fst ctx, [])
+      let outdoc =
+            pretty q
+              <+> maybe mempty ((<+> "= ") . var . pretty . T.pack) mn
+              <>  pretty (Ann (quote0 val) (quote0 ty))
+      outputDoc outdoc
+      out <- gets outFile
+      unless (null out) $ do
+        let process = T.unlines . map ("< " <>) . T.lines
+        outputFile out . process $ render outdoc
+        modify $ \st -> st { outFile = "" }
+      forM_ mn $ \n -> modify . mapContext $ bimap ((Global n, val) :)
+                                                   (Binding (Global n) q ty :)
+
+ini :: Repl ()
+ini = liftIO $ putStrLn "Interpreter for Lambda-Pi.\nType :? for help."
+
+final :: Repl ExitDecision
+final = do
+  liftIO $ putStrLn "Leaving Lambda-Pi interpreter."
+  return Exit
+
+repl :: IO ()
+repl = flip evalStateT (IState "" ([], [])) $ evalRepl
+  (const $ pure ">>> ")
+  compilePhrase
+  (options commands)
+  (Just commandPrefix)
+  Nothing
+  (Combine (Prefix (wordCompleter byWord) defaultMatcher)
+           (Word commandCompleter)
+  )
+  ini
+  final
 

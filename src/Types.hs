@@ -1,18 +1,10 @@
 module Types where
 
-import           Control.Monad.State            ( StateT )
 import           Data.Bifunctor                 ( second )
 import           Data.Text.Prettyprint.Doc      ( Doc )
 import           Data.Text.Prettyprint.Doc.Render.Terminal
                                                 ( AnsiStyle )
 import           Rig
-import           System.Console.Repline         ( HaskelineT )
-
-type Repl a = HaskelineT (StateT IState IO) a
-data IState = IState
-  { outFile :: String
-  , context :: Context
-  }
 
 data Name
    =  Global String

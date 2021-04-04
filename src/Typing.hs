@@ -1,11 +1,9 @@
 module Typing
-  ( iinfer
-  , iType0
+  ( iType0
   ) where
 
 import           Control.Monad.Except           ( throwError )
-import           Control.Monad.Reader           ( MonadIO(liftIO)
-                                                , MonadReader(local)
+import           Control.Monad.Reader           ( MonadReader(local)
                                                 , ReaderT(runReaderT)
                                                 , asks
                                                 , unless
@@ -18,7 +16,6 @@ import           Data.Maybe                     ( fromMaybe
                                                 , mapMaybe
                                                 )
 import qualified Data.Semiring                 as S
-import qualified Data.Text.IO                  as T
 import           Printer
 import           Rig
 import           Types
@@ -29,11 +26,6 @@ data TypingConfig = TypingConfig
   , cfgBoundLocals   :: TypeEnv
   }
 type Judgment = ReaderT TypingConfig Result
-
-iinfer :: Context -> ZeroOneMany -> ITerm -> Repl (Maybe Type)
-iinfer g r t = case iType0 g r t of
-  Left  e -> liftIO (T.putStrLn . render $ pretty e) >> return Nothing
-  Right v -> return (Just v)
 
 iType0 :: Context -> ZeroOneMany -> ITerm -> Result Type
 iType0 g r t = do
@@ -237,3 +229,4 @@ checkErased qs = do
          ""
          bad
     )
+

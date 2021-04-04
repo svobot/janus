@@ -6,30 +6,24 @@ import           Data.Bifunctor                 ( first )
 import           Parser
 import           Rig
 import           Test.Hspec
-import           Text.Parsec                    ( ParseError
-                                                , eof
-                                                , many
-                                                , parse
-                                                )
-import           Text.Parsec.String             ( GenParser )
-import           Text.Parsec.Token              ( whiteSpace )
+import           Text.Parsec                    ( ParseError )
 import           Types
 
-newtype TestResult a = TR (Either (Maybe ParseError) a)
+newtype TestResult a = TestResult (Either (Maybe ParseError) a)
 
 instance (Eq a) => Eq (TestResult a) where
-  (TR (Right x)) == (TR (Right y)) = x == y
-  (TR (Left  _)) == (TR (Left  _)) = True
-  _              == _              = False
+  (TestResult (Right x)) == (TestResult (Right y)) = x == y
+  (TestResult (Left  _)) == (TestResult (Left  _)) = True
+  _                      == _                      = False
 
 instance (Show a) => Show (TestResult a) where
-  show (TR x) = either (maybe "Parse error" show) show x
+  show (TestResult x) = either (maybe "Parse error" show) show x
 
 success :: a -> TestResult a
-success = TR . return
+success = TestResult . return
 
 err :: TestResult a
-err = TR $ Left Nothing
+err = TestResult $ Left Nothing
 
 data TestCase a = TestCase
   { desc :: String
@@ -37,7 +31,13 @@ data TestCase a = TestCase
   , res  :: TestResult a
   }
 
-type CharParser = GenParser Char ()
+spec :: Spec
+spec = do
+  describe "Statement" $ mapM_ (run evalParser) stmtCases
+  describe "File" $ mapM_ (run $ fileParser "<test>") fileCases
+ where
+  run p tc = it (desc tc) $ val p tc `shouldBe` res tc
+  val p tc = TestResult . first Just . p $ expr tc
 
 fg :: String -> ITerm
 fg = Free . Global
@@ -191,15 +191,4 @@ fileCases =
         ]
       )
   ]
-
-run :: (Eq a, Show a) => CharParser a -> TestCase a -> SpecWith ()
-run p tc = it (desc tc) $ val `shouldBe` res tc
- where
-  val = TR . first Just . parse p' "<test>" $ expr tc
-  p'  = whiteSpace lang *> p <* eof
-
-spec :: Spec
-spec = do
-  describe "Statement" $ mapM_ (run stmt) stmtCases
-  describe "File" $ mapM_ (run $ many stmt) fileCases
 
