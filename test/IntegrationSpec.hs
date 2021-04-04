@@ -17,6 +17,9 @@ import           Control.Monad.State            ( MonadState(..)
                                                 , modify
                                                 )
 import           Data.Bifunctor                 ( second )
+import           Data.String                    ( IsString
+                                                , fromString
+                                                )
 import           Interpreter
 import           Printer
 import           Test.Hspec                     ( Spec
@@ -37,10 +40,23 @@ instance (Monad m) => MonadAbstractIO (TestIO m) where
   outputDoc  = output . renderString
   outputFile = undefined
 
+-- New type is used to coerce hspec into printing mismatched results across
+-- multiple lines.
+newtype TestResult = TestResult String
+
+instance IsString TestResult where
+  fromString = TestResult
+
+instance Show TestResult where
+  show (TestResult s) = s
+
+instance Eq TestResult where
+  x == y = show x == show y
+
 data TestCase = TestCase
   { desc   :: String
   , input  :: [String]
-  , result :: String
+  , result :: TestResult
   }
 
 spec :: Spec
@@ -56,7 +72,7 @@ spec = do
 
   run c = it (desc c) $ do
     (_, out) <- evalTestCase $ input c
-    head out `shouldBe` result c
+    (TestResult . head) out `shouldBe` result c
 
 cases :: [TestCase]
 cases =
