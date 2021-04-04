@@ -1,101 +1,87 @@
-cabal-version: 1.12
+cabal-version:         2.4
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
---
--- see: https://github.com/sol/hpack
---
--- hash: 38c961aa572aa8c98499931214db5a65aea5ea3475d193e2c0e53e34b35666fc
-
-name:           LambdaPi
-version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/LambdaPi#readme>
-homepage:       https://github.com/githubuser/LambdaPi#readme
-bug-reports:    https://github.com/githubuser/LambdaPi/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2020 Author name here
-license:        BSD3
-license-file:   LICENSE
-build-type:     Simple
-extra-source-files:
-    README.md
-    ChangeLog.md
+name:                  LambdaPi
+version:               0.1.0.0
+synopsis:              An interpreter with Quantitative Types and Additive Pairs
+description:
+  An interpreter with Quantitative Types and Additive Pairs
+  with longer description
+category:              Language, Compilers/Interpreters
+homepage:              https://github.com/svobot/LambdaPi
+author:                Tomáš Svoboda
+maintainer:            Tomáš Svoboda <svoboda@posteo.net>
+license:               BSD-3-Clause
+license-file:          LICENSE
+copyright:             Copyright (C) 2021 Tomáš Svoboda
+build-type:            Simple
+extra-source-files:    README.md
+                       ChangeLog.md
 
 source-repository head
-  type: git
-  location: https://github.com/githubuser/LambdaPi
+  type:                git
+  location:            https://github.com/svobot/LambdaPi
+
+common common
+  default-language:    Haskell2010
+  ghc-options:         -Weverything
+                       -Wno-all-missed-specialisations
+                       -Wno-implicit-prelude
+                       -Wno-missing-import-lists
+                       -Wno-missing-local-signatures
+                       -Wno-monomorphism-restriction
+                       -Wno-safe
+                       -Wno-unsafe
+  if (impl(ghc >= 8.8))
+    ghc-options:       -Wno-missing-deriving-strategies
+  if (impl(ghc >= 8.10))
+    ghc-options:       -Wno-missing-safe-haskell-mode
+                       -Wno-prepositive-qualified-module
+  default-extensions:  LambdaCase
+                     , OverloadedStrings
+                     , TupleSections
+                     , TypeApplications
+  build-depends:       base ^>=4.14
+
+common threaded
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
 
 library
-  exposed-modules:
-      Interpreter
-      Parser
-      Printer
-      Rig
-      Types
-      Typing
-  other-modules:
-      Paths_LambdaPi
-  hs-source-dirs:
-      src
-  default-extensions: LambdaCase, OverloadedStrings, TupleSections, TypeApplications
-  ghc-options: -Wall -Wincomplete-uni-patterns
-  build-depends:
-      base >=4.7 && <5
-    , containers
-    , hspec
-    , mtl
-    , parsec
-    , prettyprinter
-    , prettyprinter-ansi-terminal
-    , repline
-    , semirings
-    , text
-  default-language: Haskell2010
+  import:              common
+  build-depends:       containers
+                     , mtl
+                     , parsec
+                     , prettyprinter
+                     , prettyprinter-ansi-terminal
+                     , repline ^>=0.4
+                     , semirings
+                     , text
+  exposed-modules:     Interpreter
+                     , Parser
+                     , Printer
+                     , Rig
+                     , Types
+                     , Typing
+  other-modules:       Paths_LambdaPi
+  autogen-modules:     Paths_LambdaPi
+  hs-source-dirs:      src
 
-executable LambdaPi-exe
-  main-is: Main.hs
-  other-modules:
-      Paths_LambdaPi
-  hs-source-dirs:
-      app
-  default-extensions: LambdaCase, OverloadedStrings, TupleSections, TypeApplications
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      LambdaPi
-    , base >=4.7 && <5
-    , containers
-    , hspec
-    , mtl
-    , parsec
-    , prettyprinter
-    , prettyprinter-ansi-terminal
-    , repline
-    , semirings
-    , text
-  default-language: Haskell2010
+executable LambdaPic
+  import:              common, threaded
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  build-depends:       LambdaPi
 
-test-suite LambdaPi-test
-  type: exitcode-stdio-1.0
-  main-is: Spec.hs
-  other-modules:
-      IntegrationSpec
-      ParseSpec
-      TypeSpec
-      Paths_LambdaPi
-  hs-source-dirs:
-      test
-  default-extensions: LambdaCase, OverloadedStrings, TupleSections, TypeApplications
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      LambdaPi
-    , base >=4.7 && <5
-    , containers
-    , hspec
-    , mtl
-    , parsec
-    , prettyprinter
-    , prettyprinter-ansi-terminal
-    , repline
-    , semirings
-    , text
-  default-language: Haskell2010
+test-suite test
+  import:              common, threaded
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  other-modules:       IntegrationSpec
+                     , ParseSpec
+                     , TypeSpec
+  build-depends:       LambdaPi
+                     , hspec
+                     , mtl
+                     , parsec
+  ghc-options:         -Wno-missing-export-lists
+
