@@ -1,4 +1,9 @@
-module Rig where
+module Rig
+  ( Relevance(..)
+  , ZeroOneMany(..)
+  , (<:)
+  , extend
+  ) where
 
 import qualified Data.Semiring                 as S
 

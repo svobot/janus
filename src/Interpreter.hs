@@ -66,8 +66,7 @@ commandPrefix :: Char
 commandPrefix = ':'
 
 -- Prefix tab completeter
-defaultMatcher
-  :: (MonadIO m, MonadState IState m) => [(String, CompletionFunc m)]
+defaultMatcher :: (MonadIO m) => [(String, CompletionFunc m)]
 defaultMatcher =
   [ (commandPrefix : "load ", fileCompleter)
   , (commandPrefix : "l "   , fileCompleter)
@@ -83,7 +82,7 @@ commandCompleter n =
     $ commands
 
 -- Default tab completer
-byWord :: (Monad m, MonadState IState m) => WordCompleter m
+byWord :: (MonadState IState m) => WordCompleter m
 byWord n = do
   env <- gets $ snd . context
   let scope = [ s | Global s <- reverse . nub $ map bndName env ]
