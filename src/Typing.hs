@@ -169,21 +169,22 @@ cType r (Angles e1 e2) (VWith ty ty') = do
   lub Zero Zero = Zero
   lub One  One  = One
   lub _    _    = Many
-cType r t@(Pi     _ t1 t2) VUniverse  = cTypeDependent "Pi type" r t t1 t2
-cType r t@(Tensor _ t1 t2) VUniverse  = cTypeDependent "Tensor type" r t t1 t2
-cType r t@(With t1 t2    ) VUniverse  = cTypeDependent "With type" r t t1 t2
-cType _ Universe           VUniverse  = return Map.empty
+cType r t@(Pi     _ t1 t2) VUniverse  = cDepType "Pi type" r t t1 t2
+cType r t@(Tensor _ t1 t2) VUniverse  = cDepType "Tensor type" r t t1 t2
+cType r t@(With t1 t2    ) VUniverse  = cDepType "With type" r t t1 t2
+cType r t@Universe         VUniverse  = cAtomType r t
 cType _ MUnit              VMUnitType = return Map.empty
-cType _ MUnitType          VUniverse  = return Map.empty
+cType r t@MUnitType        VUniverse  = cAtomType r t
 cType _ AUnit              VAUnitType = return Map.empty
-cType _ AUnitType          VUniverse  = return Map.empty
+cType r t@AUnitType        VUniverse  = cAtomType r t
 cType _ val                ty         = throwError $ CheckError ty val
 
--- | Generic typing rule that check terms containing a dependent function type,
--- dependent tensor product type, or a dependent with type
-cTypeDependent
-  :: String -> Relevance -> CTerm -> CTerm -> CTerm -> Judgment Usage
-cTypeDependent loc r t tyt tyt' = do
+-- | Check the type of dependent types.
+--
+-- Generic typing rule that check terms containing one of: dependent function
+-- type, dependent multiplicative pair type, or dependent additive pair type.
+cDepType :: String -> Relevance -> CTerm -> CTerm -> CTerm -> Judgment Usage
+cDepType loc r t tyt tyt' = do
   unless (r == Erased) (throwError . ErasureError t $ extend r)
   local erased $ do
     cType r tyt VUniverse >>= checkErased
@@ -191,6 +192,12 @@ cTypeDependent loc r t tyt tyt' = do
     local (with x)
       $   cType r (cSubst 0 (Free $ bndName x) tyt') VUniverse
       >>= checkVar loc (bndName x)
+
+-- | Check the type of atomic types.
+cAtomType :: Relevance -> CTerm -> Judgment Usage
+cAtomType r t = case r of
+  Erased  -> return Map.empty
+  Present -> throwError . ErasureError t $ extend r
 
 checkVar :: String -> Name -> Usage -> Judgment Usage
 checkVar loc n qs = do
