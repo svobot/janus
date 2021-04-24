@@ -71,13 +71,13 @@ iType r (e1 :$: e2) = do
   case si of
     VPi p ty ty' -> do
       let r' = extend r
-      qs <- if p S.* r' == Zero
-        then do
-          _ <- cType Erased e2 ty
+      qs <- case p S.* r' of
+        Zero -> do
+          cType Erased e2 ty >>= checkErased
           return qs1
-        else do
+        pr -> do
           qs2 <- cType Present e2 ty
-          return $ Map.unionWith (S.+) qs1 (Map.map (p S.* r' S.*) qs2)
+          return $ Map.unionWith (S.+) qs1 (Map.map (pr S.*) qs2)
       (qs, ) . ty' <$> evalInEnv e2
     ty -> throwError $ InferenceError "_ -> _" ty (e1 :$: e2)
 iType r (PairElim l i t) = do
@@ -145,14 +145,14 @@ cType r (Lam e) (VPi p ty ty') = do
     >>= checkVar "Lambda abstraction" (bndName x)
 cType r (Pair e1 e2) (VTensor p ty ty') = do
   let r' = extend r
-  if p S.* r' == Zero
-    then do
-      _ <- cType Erased e1 ty
+  case p S.* r' of
+    Zero -> do
+      cType Erased e1 ty >>= checkErased
       rest
-    else do
+    pr -> do
       qs1 <- cType Present e1 ty
       qs2 <- rest
-      return $ Map.unionWith (S.+) qs2 (Map.map (p S.* r' S.*) qs1)
+      return $ Map.unionWith (S.+) qs2 (Map.map (pr S.*) qs1)
   where rest = evalInEnv e1 >>= (cType r e2 . ty')
 cType r (Angles e1 e2) (VWith ty ty') = do
   qs1 <- cType r e1 ty
