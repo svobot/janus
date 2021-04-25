@@ -25,7 +25,7 @@ import           Data.Bifunctor                 ( second )
 import           Data.Text.Prettyprint.Doc      ( Doc )
 import           Data.Text.Prettyprint.Doc.Render.Terminal
                                                 ( AnsiStyle )
-import           Rig
+import           Semiring
 
 data Name
    =  Global String
@@ -108,6 +108,9 @@ type TypeEnv = [Binding Name ZeroOneMany Type]
 type ValueEnv = [(Name, Value)]
 type BoundEnv = [Value]
 type Context = (ValueEnv, TypeEnv)
+
+forget :: TypeEnv -> TypeEnv
+forget = map (\b -> b { bndUsage = zero })
 
 vfree :: Name -> Value
 vfree n = VNeutral (NFree n)
@@ -228,7 +231,4 @@ neutralQuote ii (NSnd n) = Snd (neutralQuote ii n)
 boundfree :: Int -> Name -> ITerm
 boundfree ii (Quote k) = Bound ((ii - k - 1) `max` 0)
 boundfree _  x         = Free x
-
-forget :: TypeEnv -> TypeEnv
-forget = map (\b -> b { bndUsage = Zero })
 

@@ -37,7 +37,7 @@ import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
 import           Parser
 import           Printer
-import           Rig
+import           Semiring
 import           System.Console.Repline  hiding ( options )
 import           Text.Parsec                    ( ParseError )
 import           Types

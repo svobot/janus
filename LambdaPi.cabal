@@ -53,12 +53,11 @@ library
                      , prettyprinter
                      , prettyprinter-ansi-terminal
                      , repline ^>=0.4
-                     , semirings
                      , text
   exposed-modules:     Interpreter
                      , Parser
                      , Printer
-                     , Rig
+                     , Semiring
                      , Types
                      , Typing
   other-modules:       Paths_LambdaPi

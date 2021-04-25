@@ -15,9 +15,8 @@ import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe
                                                 , mapMaybe
                                                 )
-import qualified Data.Semiring                 as S
 import           Printer
-import           Rig
+import           Semiring
 import           Types
 
 type Usage = Map.Map Name ZeroOneMany
@@ -29,15 +28,10 @@ type Judgment = ReaderT TypingConfig Result
 
 iType0 :: Context -> ZeroOneMany -> ITerm -> Result Type
 iType0 g r t = do
-  (qs, tp) <- first (Map.map (r S.*))
-    <$> runReaderT (iType (restrict r) t) (TypingConfig g [])
+  (qs, tp) <- first (Map.map (r .*.))
+    <$> runReaderT (iType (relevance r) t) (TypingConfig g [])
   mapM_ (throwError . MultiplicityError Nothing) $ checkMultiplicity (snd g) qs
   return tp
- where
-  restrict :: ZeroOneMany -> Relevance
-  restrict Zero = Erased
-  restrict One  = Present
-  restrict Many = Present
 
 erased :: TypingConfig -> TypingConfig
 erased (TypingConfig (vs, ts) bs) = TypingConfig (vs, forget ts) (forget bs)
@@ -70,26 +64,25 @@ iType r (e1 :$: e2) = do
   (qs1, si) <- iType r e1
   case si of
     VPi p ty ty' -> do
-      let r' = extend r
-      qs <- case p S.* r' of
+      qs <- case p .*. extend r of
         Zero -> do
           cType Erased e2 ty >>= checkErased
           return qs1
         pr -> do
           qs2 <- cType Present e2 ty
-          return $ Map.unionWith (S.+) qs1 (Map.map (pr S.*) qs2)
+          return $ Map.unionWith (.+.) qs1 (Map.map (pr .*.) qs2)
       (qs, ) . ty' <$> evalInEnv e2
     ty -> throwError $ InferenceError "_ -> _" ty (e1 :$: e2)
 iType r (PairElim l i t) = do
   (qs1, lTy) <- iType r l
   case lTy of
     zTy@(VTensor p xTy yTy) -> do
-      z <- asks $ bind Zero zTy
+      z <- asks $ bind zero zTy
       local (erased . with z)
             (cType Erased (cSubst 0 (Free $ bndName z) t) VUniverse)
         >>= checkErased
       let r' = extend r
-      x <- asks $ bind (p S.* r') xTy
+      x <- asks $ bind (p .*. r') xTy
       local (with x) $ do
         y <- asks $ bind r' (yTy . vfree $ bndName x)
         local (with y) $ do
@@ -100,7 +93,7 @@ iType r (PairElim l i t) = do
             (cSubst 1 (Free $ bndName x) . cSubst 0 (Free $ bndName y) $ i)
             txy
           qs <-
-            pure (Map.unionWith (S.+) qs1 qs2)
+            pure (Map.unionWith (.+.) qs1 qs2)
             >>= checkVar "First element of the pair elimination"  (bndName x)
             >>= checkVar "Second element of the pair elimination" (bndName y)
           (qs, ) <$> evalInEnv (cSubst 0 l t)
@@ -111,13 +104,13 @@ iType r (MUnitElim l i t) = do
   (qs1, lTy) <- iType r l
   case lTy of
     xTy@VMUnitType -> do
-      x <- asks $ bind Zero xTy
+      x <- asks $ bind zero xTy
       local (erased . with x)
             (cType Erased (cSubst 0 (Free $ bndName x) t) VUniverse)
         >>= checkErased
       tu  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) t)
       qs2 <- cType r i tu
-      let qs = Map.unionWith (S.+) qs1 qs2
+      let qs = Map.unionWith (.+.) qs1 qs2
       (qs, ) <$> evalInEnv (cSubst 0 l t)
     ty -> throwError $ InferenceError (pretty MUnitType) ty (MUnitElim l i t)
 iType r (Fst i) = do
@@ -139,20 +132,19 @@ cType r (Inf e) v = do
   unless (quote0 v == quote0 v') (throwError $ InferenceError (pretty v) v' e)
   return qs
 cType r (Lam e) (VPi p ty ty') = do
-  x <- asks $ bind (p S.* extend r) ty
+  x <- asks $ bind (p .*. extend r) ty
   local (with x)
     $   cType r (cSubst 0 (Free $ bndName x) e) (ty' . vfree $ bndName x)
     >>= checkVar "Lambda abstraction" (bndName x)
 cType r (Pair e1 e2) (VTensor p ty ty') = do
-  let r' = extend r
-  case p S.* r' of
+  case p .*. extend r of
     Zero -> do
       cType Erased e1 ty >>= checkErased
       rest
     pr -> do
       qs1 <- cType Present e1 ty
       qs2 <- rest
-      return $ Map.unionWith (S.+) qs2 (Map.map (pr S.*) qs1)
+      return $ Map.unionWith (.+.) qs2 (Map.map (pr .*.) qs1)
   where rest = evalInEnv e1 >>= (cType r e2 . ty')
 cType r (Angles e1 e2) (VWith ty ty') = do
   qs1 <- cType r e1 ty
@@ -160,22 +152,18 @@ cType r (Angles e1 e2) (VWith ty ty') = do
   -- For every resource that is used anywhere in the pair, take the least upper
   -- bound of the resource usages in both elements of the pair. The element that
   -- is missing a usage of a resource is considered to use it zero-times.
-  return $ Map.merge (Map.mapMissing (const $ lub Zero))
-                     (Map.mapMissing (const $ lub Zero))
+  return $ Map.merge (Map.mapMissing (const $ lub zero))
+                     (Map.mapMissing (const $ lub zero))
                      (Map.zipWithMatched (const lub))
                      qs1
                      qs2
- where
-  lub Zero Zero = Zero
-  lub One  One  = One
-  lub _    _    = Many
+cType _ MUnit              VMUnitType = return Map.empty
+cType _ AUnit              VAUnitType = return Map.empty
 cType r t@(Pi     _ t1 t2) VUniverse  = cDepType "Pi type" r t t1 t2
 cType r t@(Tensor _ t1 t2) VUniverse  = cDepType "Tensor type" r t t1 t2
 cType r t@(With t1 t2    ) VUniverse  = cDepType "With type" r t t1 t2
 cType r t@Universe         VUniverse  = cAtomType r t
-cType _ MUnit              VMUnitType = return Map.empty
 cType r t@MUnitType        VUniverse  = cAtomType r t
-cType _ AUnit              VAUnitType = return Map.empty
 cType r t@AUnitType        VUniverse  = cAtomType r t
 cType _ val                ty         = throwError $ CheckError ty val
 
@@ -188,7 +176,7 @@ cDepType loc r t tyt tyt' = do
   unless (r == Erased) (throwError . ErasureError t $ extend r)
   local erased $ do
     cType r tyt VUniverse >>= checkErased
-    x <- asks (flip $ bind Zero) <*> evalInEnv tyt
+    x <- asks (flip $ bind zero) <*> evalInEnv tyt
     local (with x)
       $   cType r (cSubst 0 (Free $ bndName x) tyt') VUniverse
       >>= checkVar loc (bndName x)
@@ -208,25 +196,27 @@ checkVar loc n qs = do
   return qs'
  where
   splitVar :: Name -> Usage -> (ZeroOneMany, Usage)
-  splitVar = (first (fromMaybe Zero) .) . Map.alterF (, Nothing)
+  splitVar = (first (fromMaybe zero) .) . Map.alterF (, Nothing)
 
 checkMultiplicity
   :: TypeEnv -> Usage -> Maybe [(Name, Type, ZeroOneMany, ZeroOneMany)]
 checkMultiplicity env = toMaybe . mapMaybe notEnough . Map.toList
  where
   notEnough (n, q) = case find ((== n) . bndName) env of
-    Just b | q <: bndUsage b -> Nothing
-           | otherwise       -> Just (n, bndType b, q, bndUsage b)
+    Just b | q `fitsIn` bndUsage b -> Nothing
+           | otherwise             -> Just (n, bndType b, q, bndUsage b)
     Nothing ->
       error $ "internal: Unknown " <> show n <> " used " <> show q <> "-times"
   toMaybe [] = Nothing
   toMaybe es = Just es
 
--- | Checks that the usages returned from typing an expression in the erased
--- context are all Zero.
+-- | Check that all usages are zero.
+--
+-- Having a non-zero usage of a variable in the erased context means that there
+-- is something wrong with the type checking algorithm; throw an error.
 checkErased :: Usage -> Judgment ()
 checkErased qs = do
-  let bad = Map.filter (/= Zero) qs
+  let bad = Map.filter (/= zero) qs
   unless
     (Map.null bad)
     (  error

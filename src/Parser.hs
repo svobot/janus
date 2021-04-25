@@ -11,7 +11,7 @@ import           Control.Monad                  ( foldM )
 import           Data.Char                      ( isAlpha )
 import           Data.List                      ( elemIndex )
 import           Prelude                 hiding ( pi )
-import           Rig                            ( ZeroOneMany(..) )
+import           Semiring                       ( ZeroOneMany(..) )
 import           Text.Parsec
 import           Text.Parsec.Language           ( haskellStyle )
 import           Text.Parsec.String             ( GenParser )

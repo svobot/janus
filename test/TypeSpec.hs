@@ -4,7 +4,7 @@ module TypeSpec
 
 import           Control.Applicative            ( liftA3 )
 import           Control.Monad.Except           ( throwError )
-import           Rig
+import           Semiring
 import           Test.Hspec
 import           Types
 import           Typing

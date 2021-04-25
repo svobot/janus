@@ -4,7 +4,7 @@ module ParseSpec
 
 import           Data.Bifunctor                 ( first )
 import           Parser
-import           Rig
+import           Semiring
 import           Test.Hspec
 import           Text.Parsec                    ( ParseError )
 import           Types

@@ -35,7 +35,7 @@ import qualified Data.Text.Prettyprint.Doc.Render.String
                                                as PPS
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal
                                                as Term
-import           Rig                            ( ZeroOneMany(..) )
+import           Semiring                       ( ZeroOneMany(..) )
 import           Types
 
 type Doc = PP.Doc Term.AnsiStyle
