@@ -87,13 +87,13 @@ stmtCases =
       , "               : ((λu . a) : (0 _ : (0 z : U) * z) -> U) p"
       ]
     )
-    (success . Eval Many $ PairElim
-      (Ann (Pair (ifg "x") (Inf $ fg "f" :$: ifg "y" :$: ifg "z"))
-           (Tensor Zero (ifg "a") (ib 0))
+    (success . Eval Many $ MPairElim
+      (Ann (MPair (ifg "x") (Inf $ fg "f" :$: ifg "y" :$: ifg "z"))
+           (MPairType Zero (ifg "a") (ib 0))
       )
       (ib 0)
       (Inf
-        (   Ann (Lam (ifg "a")) (Pi Zero (Tensor Zero Universe (ib 0)) Universe)
+        (Ann (Lam (ifg "a")) (Pi Zero (MPairType Zero Universe (ib 0)) Universe)
         :$: ib 0
         )
       )
@@ -109,15 +109,18 @@ stmtCases =
     "Additive pair"
     "let p = <x, f y> : (x : a) & f x"
     (success . Let Many "p" $ Ann
-      (Angles (ifg "x") (Inf $ fg "f" :$: ifg "y"))
-      (With (ifg "a") (Inf $ fg "f" :$: ib 0))
+      (APair (ifg "x") (Inf $ fg "f" :$: ifg "y"))
+      (APairType (ifg "a") (Inf $ fg "f" :$: ib 0))
     )
   , TestCase
     "Additive pair elimination"
     "1 λp. (fst p, snd p) : ∀ (p : (_ : a) & b) . (_ : a) * b"
     (success . Eval One $ Ann
-      (Lam (Pair (Inf (Fst (Bound 0))) (Inf (Snd (Bound 0)))))
-      (Pi Many (With (ifg "a") (ifg "b")) (Tensor Many (ifg "a") (ifg "b")))
+      (Lam (MPair (Inf (Fst (Bound 0))) (Inf (Snd (Bound 0)))))
+      (Pi Many
+          (APairType (ifg "a") (ifg "b"))
+          (MPairType Many (ifg "a") (ifg "b"))
+      )
     )
   , TestCase
     "Units"
@@ -144,11 +147,11 @@ stmtCases =
             (Lam (Lam (Inf (Ann (ib 1) MUnitType))))
             (Pi One
                 MUnitType
-                (Pi Many (Tensor Many MUnitType AUnitType) MUnitType)
+                (Pi Many (MPairType Many MUnitType AUnitType) MUnitType)
             )
         :$: MUnit
         )
-    :$: Pair MUnit AUnit
+    :$: MPair MUnit AUnit
     )
   , TestCase "Missing parenthesis" "f : (1 _ : a) -> U x" err
   , TestCase
@@ -160,19 +163,21 @@ stmtCases =
     "0 ((0 x : a) -> b) : U"
     (success . Eval Zero $ Ann (Pi Zero (ifg "a") (ifg "b")) Universe)
   , TestCase
-    "Annotated Tensor type"
+    "Annotated MPairType type"
     "0 (0 x : a) * b : U"
-    (success . Eval Zero $ Ann (Tensor Zero (ifg "a") (ifg "b")) Universe)
+    (success . Eval Zero $ Ann (MPairType Zero (ifg "a") (ifg "b")) Universe)
   , TestCase
-    "Annotated Tensor type in parentheses"
+    "Annotated MPairType type in parentheses"
     "0 ((0 x : a) * b) : U"
-    (success . Eval Zero $ Ann (Tensor Zero (ifg "a") (ifg "b")) Universe)
-  , TestCase "Annotated With type"
-             "0 (x : a) & b : U"
-             (success . Eval Zero $ Ann (With (ifg "a") (ifg "b")) Universe)
-  , TestCase "Annotated With type in parentheses"
-             "0 ((x : a) & b) : U"
-             (success . Eval Zero $ Ann (With (ifg "a") (ifg "b")) Universe)
+    (success . Eval Zero $ Ann (MPairType Zero (ifg "a") (ifg "b")) Universe)
+  , TestCase
+    "Annotated APairType type"
+    "0 (x : a) & b : U"
+    (success . Eval Zero $ Ann (APairType (ifg "a") (ifg "b")) Universe)
+  , TestCase
+    "Annotated APairType type in parentheses"
+    "0 ((x : a) & b) : U"
+    (success . Eval Zero $ Ann (APairType (ifg "a") (ifg "b")) Universe)
   ]
 
 fileCases :: [TestCase [Stmt]]
@@ -186,7 +191,7 @@ fileCases =
         ]
       )
       (success
-        [ Let One "v" $ PairElim (fg "p") (ib 1) (ifg "a")
+        [ Let One "v" $ MPairElim (fg "p") (ib 1) (ifg "a")
         , Let Many "u" $ MUnitElim (Ann MUnit MUnitType) (ifg "x") (ifg "a")
         ]
       )

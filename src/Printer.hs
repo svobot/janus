@@ -169,7 +169,7 @@ iPrint _ (Free  n) = do
   return . return $ pretty n
 iPrint p (i :$: c) = (<*>) . (fmt <$>) <$> iPrint 2 i <*> cPrint 3 c
   where fmt f x = parensIf (p > 2) . align $ sep [f, x]
-iPrint p (PairElim l i t) = do
+iPrint p (MPairElim l i t) = do
   letPart  <- iPrint 0 l
   inPart   <- cPrint 0 i
   typePart <- cPrint 0 t
@@ -247,17 +247,17 @@ cPrint p (Pi q c c') = cPrintDependent fmt c c'
  where
   fmt name l r = align . group . parensIf (p > 0) $ sep
     ["(" <> pretty (Binding name q l) <> ")" <+> "->", r]
-cPrint p (Tensor q c c') = cPrintDependent fmt c c'
+cPrint p (MPairType q c c') = cPrintDependent fmt c c'
  where
   fmt name l r = align . group . parensIf (p > 0) $ sep
     [mult "(" <> pretty (Binding name q l) <> mult ")" <+> mult "*", r]
-cPrint p (With c c') = cPrintDependent fmt c c'
+cPrint p (APairType c c') = cPrintDependent fmt c c'
  where
   fmt name l r = align . group . parensIf (p > 0) $ sep
     [add "(" <> pretty (Binding @_ @Text name "" l) <> add ")" <+> add "&", r]
-cPrint _ (Pair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
+cPrint _ (MPair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = mult "(" <> l <> mult "," <+> r <> mult ")"
-cPrint _ (Angles c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
+cPrint _ (APair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = add "<" <> l <> add "," <+> r <> add ">"
 cPrint _ Universe  = return . return $ "U"
 cPrint _ MUnit     = return . return $ mult "()"

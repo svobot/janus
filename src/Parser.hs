@@ -100,7 +100,7 @@ iTermInner e = foldl (:$:) <$> inner e <*> many (cTermWith inner e)
     (do
         x <- identifier
         y <- reservedOp "," *> identifier
-        rest PairElim ([y, x] ++ e) (z : e)
+        rest MPairElim ([y, x] ++ e) (z : e)
       )
       <|> (mUnit *> rest MUnitElim e (z : e))
   fstElim = Fst <$> (reserved "fst" *> inner e)
@@ -146,18 +146,18 @@ cTermInner e = choice
     reservedOp "."
     p <- cTerm (map bndName xs ++ e)
     foldM (\a x -> return $ Pi (bndUsage x) (bndType x) a) p xs
-  pair   = P.parens lang $ Pair <$> cTerm e <* reservedOp "," <*> cTerm e
+  pair   = P.parens lang $ MPair <$> cTerm e <* reservedOp "," <*> cTerm e
   tensor = do
     T.Binding x q t <- try $ bind e <* reservedOp "*"
-    Tensor q t <$> cTermWith iTermInner (x : e)
+    MPairType q t <$> cTermWith iTermInner (x : e)
   mUnitType = MUnitType <$ reserved "I"
-  angles    = P.angles lang $ Angles <$> cTerm e <* reservedOp "," <*> cTerm e
+  angles    = P.angles lang $ APair <$> cTerm e <* reservedOp "," <*> cTerm e
   with      = do
     (x, t) <-
       try
       $  P.parens lang ((,) <$> identifier <* reservedOp ":" <*> cTerm e)
       <* reservedOp "&"
-    With t <$> cTermWith iTermInner (x : e)
+    APairType t <$> cTermWith iTermInner (x : e)
   aUnit     = AUnit <$ reserved "<>"
   aUnitType = AUnitType <$ reserved "T"
 

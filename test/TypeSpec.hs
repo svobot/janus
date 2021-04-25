@@ -84,8 +84,8 @@ cases =
     -- 1 let _ @ x, y = (a, x) : (0 _ : U) * a in y : a
     abxyContext
     One
-    (PairElim
-      (Ann (Pair (ifg "a") (ifg "x")) (Tensor Zero Universe (ifg "a")))
+    (MPairElim
+      (Ann (MPair (ifg "a") (ifg "x")) (MPairType Zero Universe (ifg "a")))
       (ib 0)
       (ifg "a")
     )
@@ -98,27 +98,27 @@ cases =
     (   Ann
         (Lam
           (Inf
-            (PairElim (Bound 0)
-                      (Pair (ib 0) (ib 1))
-                      (Tensor One (ifg "b") (ifg "a"))
+            (MPairElim (Bound 0)
+                       (MPair (ib 0) (ib 1))
+                       (MPairType One (ifg "b") (ifg "a"))
             )
           )
         )
         (Pi One
-            (Tensor One (ifg "a") (ifg "b"))
-            (Tensor One (ifg "b") (ifg "a"))
+            (MPairType One (ifg "a") (ifg "b"))
+            (MPairType One (ifg "b") (ifg "a"))
         )
-    :$: Pair (ifg "x") (ifg "y")
+    :$: MPair (ifg "x") (ifg "y")
     )
-    (TestResult . return $ Tensor One (ifg "b") (ifg "a"))
+    (TestResult . return $ MPairType One (ifg "b") (ifg "a"))
   , TestCase
     "Second projection of dependent additive pair"
     -- 1 ((\p. snd p) : (1 _ : (_ : a) & b) -> b) <x, y>
     abxyContext
     One
     (   Ann (Lam (Inf (Snd (Bound 0))))
-            (Pi One (With (ifg "a") (ifg "b")) (ifg "b"))
-    :$: Angles (ifg "x") (ifg "y")
+            (Pi One (APairType (ifg "a") (ifg "b")) (ifg "b"))
+    :$: APair (ifg "x") (ifg "y")
     )
     (TestResult . throwError $ MultiplicityError
       Nothing

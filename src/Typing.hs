@@ -73,10 +73,10 @@ iType r (e1 :$: e2) = do
           return $ Map.unionWith (.+.) qs1 (Map.map (pr .*.) qs2)
       (qs, ) . ty' <$> evalInEnv e2
     ty -> throwError $ InferenceError "_ -> _" ty (e1 :$: e2)
-iType r (PairElim l i t) = do
+iType r (MPairElim l i t) = do
   (qs1, lTy) <- iType r l
   case lTy of
-    zTy@(VTensor p xTy yTy) -> do
+    zTy@(VMPairType p xTy yTy) -> do
       z <- asks $ bind zero zTy
       local (erased . with z)
             (cType Erased (cSubst 0 (Free $ bndName z) t) VUniverse)
@@ -87,7 +87,7 @@ iType r (PairElim l i t) = do
         y <- asks $ bind r' (yTy . vfree $ bndName x)
         local (with y) $ do
           txy <- evalInEnv
-            (cSubst 0 (Ann (Pair (ifn x) (ifn y)) (quote0 zTy)) t)
+            (cSubst 0 (Ann (MPair (ifn x) (ifn y)) (quote0 zTy)) t)
           qs2 <- cType
             r
             (cSubst 1 (Free $ bndName x) . cSubst 0 (Free $ bndName y) $ i)
@@ -98,7 +98,7 @@ iType r (PairElim l i t) = do
             >>= checkVar "Second element of the pair elimination" (bndName y)
           (qs, ) <$> evalInEnv (cSubst 0 l t)
     ty -> throwError
-      $ InferenceError ("_" <+> mult "*" <+> "_") ty (PairElim l i t)
+      $ InferenceError ("_" <+> mult "*" <+> "_") ty (MPairElim l i t)
   where ifn = Inf . Free . bndName
 iType r (MUnitElim l i t) = do
   (qs1, lTy) <- iType r l
@@ -116,12 +116,12 @@ iType r (MUnitElim l i t) = do
 iType r (Fst i) = do
   (qs, ty) <- iType r i
   case ty of
-    (VWith s _) -> return (qs, s)
+    (VAPairType s _) -> return (qs, s)
     _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Fst i)
 iType r (Snd i) = do
   (qs, ty) <- iType r i
   case ty of
-    (VWith _ t) -> (qs, ) . t <$> evalInEnv (Inf $ Fst i)
+    (VAPairType _ t) -> (qs, ) . t <$> evalInEnv (Inf $ Fst i)
     _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Snd i)
 iType _ i@(Bound _) = error $ "internal: Trying to infer type of " <> show i
 
@@ -136,7 +136,7 @@ cType r (Lam e) (VPi p ty ty') = do
   local (with x)
     $   cType r (cSubst 0 (Free $ bndName x) e) (ty' . vfree $ bndName x)
     >>= checkVar "Lambda abstraction" (bndName x)
-cType r (Pair e1 e2) (VTensor p ty ty') = do
+cType r (MPair e1 e2) (VMPairType p ty ty') = do
   case p .*. extend r of
     Zero -> do
       cType Erased e1 ty >>= checkErased
@@ -146,7 +146,7 @@ cType r (Pair e1 e2) (VTensor p ty ty') = do
       qs2 <- rest
       return $ Map.unionWith (.+.) qs2 (Map.map (pr .*.) qs1)
   where rest = evalInEnv e1 >>= (cType r e2 . ty')
-cType r (Angles e1 e2) (VWith ty ty') = do
+cType r (APair e1 e2) (VAPairType ty ty') = do
   qs1 <- cType r e1 ty
   qs2 <- evalInEnv e1 >>= (cType r e2 . ty')
   -- For every resource that is used anywhere in the pair, take the least upper
@@ -157,15 +157,15 @@ cType r (Angles e1 e2) (VWith ty ty') = do
                      (Map.zipWithMatched (const lub))
                      qs1
                      qs2
-cType _ MUnit              VMUnitType = return Map.empty
-cType _ AUnit              VAUnitType = return Map.empty
-cType r t@(Pi     _ t1 t2) VUniverse  = cDepType "Pi type" r t t1 t2
-cType r t@(Tensor _ t1 t2) VUniverse  = cDepType "Tensor type" r t t1 t2
-cType r t@(With t1 t2    ) VUniverse  = cDepType "With type" r t t1 t2
-cType r t@Universe         VUniverse  = cAtomType r t
-cType r t@MUnitType        VUniverse  = cAtomType r t
-cType r t@AUnitType        VUniverse  = cAtomType r t
-cType _ val                ty         = throwError $ CheckError ty val
+cType _ MUnit                 VMUnitType = return Map.empty
+cType _ AUnit                 VAUnitType = return Map.empty
+cType r t@(Pi        _ t1 t2) VUniverse  = cDepType "Pi type" r t t1 t2
+cType r t@(MPairType _ t1 t2) VUniverse  = cDepType "Tensor type" r t t1 t2
+cType r t@(APairType t1 t2  ) VUniverse  = cDepType "With type" r t t1 t2
+cType r t@Universe            VUniverse  = cAtomType r t
+cType r t@MUnitType           VUniverse  = cAtomType r t
+cType r t@AUnitType           VUniverse  = cAtomType r t
+cType _ val                   ty         = throwError $ CheckError ty val
 
 -- | Check the type of dependent types.
 --

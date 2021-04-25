@@ -35,15 +35,15 @@ data Name
 
 data CTerm
    =  Inf ITerm
-   |  Lam CTerm
    |  Universe
+   |  Lam CTerm
    |  Pi ZeroOneMany CTerm CTerm
-   |  Pair CTerm CTerm
-   |  Tensor ZeroOneMany CTerm CTerm
+   |  MPair CTerm CTerm
+   |  MPairType ZeroOneMany CTerm CTerm
    |  MUnit
    |  MUnitType
-   |  Angles CTerm CTerm
-   |  With CTerm CTerm
+   |  APair CTerm CTerm
+   |  APairType CTerm CTerm
    |  AUnit
    |  AUnitType
   deriving (Show, Eq)
@@ -53,23 +53,23 @@ data ITerm
    |  Bound Int
    |  Free Name
    |  ITerm :$: CTerm
-   |  PairElim ITerm CTerm CTerm
+   |  MPairElim ITerm CTerm CTerm
    |  MUnitElim ITerm CTerm CTerm
    |  Fst ITerm
    |  Snd ITerm
   deriving (Show, Eq)
 
 data Value
-   =  VLam (Value -> Value)
-   |  VUniverse
-   |  VPi ZeroOneMany Value (Value -> Value)
+   =  VUniverse
    |  VNeutral Neutral
-   |  VPair Value Value
-   |  VTensor ZeroOneMany Value (Value -> Value)
+   |  VLam (Value -> Value)
+   |  VPi ZeroOneMany Value (Value -> Value)
+   |  VMPair Value Value
+   |  VMPairType ZeroOneMany Value (Value -> Value)
    |  VMUnit
    |  VMUnitType
-   |  VAngles Value Value
-   |  VWith Value (Value -> Value)
+   |  VAPair Value Value
+   |  VAPairType Value (Value -> Value)
    |  VAUnit
    |  VAUnitType
 
@@ -79,7 +79,7 @@ instance Show Value where
 data Neutral
    =  NFree Name
    |  NApp Neutral Value
-   |  NPairElim Neutral (Value -> Value -> Value) (Value -> Value)
+   |  NMPairElim Neutral (Value -> Value -> Value) (Value -> Value)
    |  NMUnitElim Neutral Value (Value -> Value)
    |  NFst Neutral
    |  NSnd Neutral
@@ -120,15 +120,16 @@ cEval (Inf ii)      d = iEval ii d
 cEval (Lam c )      d = VLam (\x -> cEval c $ second (x :) d)
 cEval Universe      _ = VUniverse
 cEval (Pi p ty ty') d = VPi p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
-cEval (Pair c c'  ) d = VPair (cEval c d) (cEval c' d)
-cEval (Tensor p ty ty') d =
-  VTensor p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
-cEval MUnit           _ = VMUnit
-cEval MUnitType       _ = VMUnitType
-cEval (Angles c  c' ) d = VAngles (cEval c d) (cEval c' d)
-cEval (With   ty ty') d = VWith (cEval ty d) (\x -> cEval ty' $ second (x :) d)
-cEval AUnit           _ = VAUnit
-cEval AUnitType       _ = VAUnitType
+cEval (MPair c c' ) d = VMPair (cEval c d) (cEval c' d)
+cEval (MPairType p ty ty') d =
+  VMPairType p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
+cEval MUnit        _ = VMUnit
+cEval MUnitType    _ = VMUnitType
+cEval (APair c c') d = VAPair (cEval c d) (cEval c' d)
+cEval (APairType ty ty') d =
+  VAPairType (cEval ty d) (\x -> cEval ty' $ second (x :) d)
+cEval AUnit     _ = VAUnit
+cEval AUnitType _ = VAUnitType
 
 iEval :: ITerm -> (ValueEnv, BoundEnv) -> Value
 iEval (Ann c _) d = cEval c d
@@ -142,9 +143,9 @@ iEval (i :$: c ) d = case iEval i d of
   v            -> error
     ("internal: Unable to apply " <> show v <> " to the value " <> show val)
   where val = cEval c d
-iEval (PairElim i c c') d = case iEval i d of
-  (VPair x y ) -> cEval c (second ([y, x] ++) d)
-  (VNeutral n) -> VNeutral $ NPairElim
+iEval (MPairElim i c c') d = case iEval i d of
+  (VMPair x y) -> cEval c (second ([y, x] ++) d)
+  (VNeutral n) -> VNeutral $ NMPairElim
     n
     (\x y -> cEval c $ second ([y, x] ++) d)
     (\z -> cEval c' $ second (z :) d)
@@ -157,14 +158,14 @@ iEval (MUnitElim i c c') d = case iEval i d of
   v -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a unit")
 iEval (Fst i) d = case iEval i d of
-  (VAngles x _) -> x
-  (VNeutral n ) -> VNeutral $ NFst n
-  v             -> error
+  (VAPair x _) -> x
+  (VNeutral n) -> VNeutral $ NFst n
+  v            -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
 iEval (Snd i) d = case iEval i d of
-  (VAngles _ y) -> y
-  (VNeutral n ) -> VNeutral $ NSnd n
-  v             -> error
+  (VAPair _ y) -> y
+  (VNeutral n) -> VNeutral $ NSnd n
+  v            -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
 
 iSubst :: Int -> ITerm -> ITerm -> ITerm
@@ -172,8 +173,8 @@ iSubst ii i' (Ann c c') = Ann (cSubst ii i' c) (cSubst ii i' c')
 iSubst ii i' (Bound j ) = if ii == j then i' else Bound j
 iSubst _  _  (Free  y ) = Free y
 iSubst ii i' (i :$: c ) = iSubst ii i' i :$: cSubst ii i' c
-iSubst ii r (PairElim i c c') =
-  PairElim (iSubst ii r i) (cSubst (ii + 2) r c) (cSubst (ii + 1) r c')
+iSubst ii r (MPairElim i c c') =
+  MPairElim (iSubst ii r i) (cSubst (ii + 2) r c) (cSubst (ii + 1) r c')
 iSubst ii r (MUnitElim i c c') =
   MUnitElim (iSubst ii r i) (cSubst ii r c) (cSubst (ii + 1) r c')
 iSubst ii r (Fst i) = Fst (iSubst ii r i)
@@ -184,15 +185,16 @@ cSubst ii i' (Inf i)       = Inf (iSubst ii i' i)
 cSubst ii i' (Lam c)       = Lam (cSubst (ii + 1) i' c)
 cSubst _  _  Universe      = Universe
 cSubst ii r  (Pi p ty ty') = Pi p (cSubst ii r ty) (cSubst (ii + 1) r ty')
-cSubst ii r  (Pair c c'  ) = Pair (cSubst ii r c) (cSubst ii r c')
-cSubst ii r (Tensor p ty ty') =
-  Tensor p (cSubst ii r ty) (cSubst (ii + 1) r ty')
-cSubst _  _ MUnit           = MUnit
-cSubst _  _ MUnitType       = MUnitType
-cSubst ii r (Angles c  c' ) = Angles (cSubst ii r c) (cSubst ii r c')
-cSubst ii r (With   ty ty') = With (cSubst ii r ty) (cSubst (ii + 1) r ty')
-cSubst _  _ AUnit           = AUnit
-cSubst _  _ AUnitType       = AUnitType
+cSubst ii r  (MPair c c' ) = MPair (cSubst ii r c) (cSubst ii r c')
+cSubst ii r (MPairType p ty ty') =
+  MPairType p (cSubst ii r ty) (cSubst (ii + 1) r ty')
+cSubst _  _ MUnit        = MUnit
+cSubst _  _ MUnitType    = MUnitType
+cSubst ii r (APair c c') = APair (cSubst ii r c) (cSubst ii r c')
+cSubst ii r (APairType ty ty') =
+  APairType (cSubst ii r ty) (cSubst (ii + 1) r ty')
+cSubst _ _ AUnit     = AUnit
+cSubst _ _ AUnitType = AUnitType
 
 quote0 :: Value -> CTerm
 quote0 = quote 0
@@ -202,22 +204,22 @@ quote ii (VLam t)  = Lam (quote (ii + 1) (t . vfree $ Quote ii))
 quote _  VUniverse = Universe
 quote ii (VPi p v f) =
   Pi p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
-quote ii (VNeutral n) = Inf $ neutralQuote ii n
-quote ii (VPair v v') = Pair (quote ii v) (quote ii v')
-quote ii (VTensor p v f) =
-  Tensor p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
-quote _  VMUnit         = MUnit
-quote _  VMUnitType     = MUnitType
-quote ii (VAngles v v') = Angles (quote ii v) (quote ii v')
-quote ii (VWith v f) =
-  With (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
+quote ii (VNeutral n ) = Inf $ neutralQuote ii n
+quote ii (VMPair v v') = MPair (quote ii v) (quote ii v')
+quote ii (VMPairType p v f) =
+  MPairType p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
+quote _  VMUnit        = MUnit
+quote _  VMUnitType    = MUnitType
+quote ii (VAPair v v') = APair (quote ii v) (quote ii v')
+quote ii (VAPairType v f) =
+  APairType (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
 quote _ VAUnit     = AUnit
 quote _ VAUnitType = AUnitType
 
 neutralQuote :: Int -> Neutral -> ITerm
-neutralQuote ii (NFree v         ) = boundfree ii v
-neutralQuote ii (NApp n v        ) = neutralQuote ii n :$: quote ii v
-neutralQuote ii (NPairElim n v v') = PairElim
+neutralQuote ii (NFree v          ) = boundfree ii v
+neutralQuote ii (NApp n v         ) = neutralQuote ii n :$: quote ii v
+neutralQuote ii (NMPairElim n v v') = MPairElim
   (neutralQuote ii n)
   (quote (ii + 2) $ v (vfree $ Quote ii) (vfree $ Quote (ii + 1)))
   (quote (ii + 1) (v' . vfree $ Quote ii))
