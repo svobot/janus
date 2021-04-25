@@ -1,10 +1,10 @@
 cradle:
   cabal:
     - path: "./src"
-      component: "lib:LambdaPi"
+      component: "lib:janus"
 
     - path: "./app/Main.hs"
-      component: "LambdaPi:exe:LambdaPic"
+      component: "janus:exe:janusc"
 
     - path: "./test"
-      component: "LambdaPi:test:test"
+      component: "janus:test:test"

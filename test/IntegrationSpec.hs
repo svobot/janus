@@ -20,8 +20,8 @@ import           Data.Bifunctor                 ( second )
 import           Data.String                    ( IsString
                                                 , fromString
                                                 )
-import           Interpreter
-import           Printer
+import           Janus.Interpreter
+import           Janus.Printer
 import           Test.Hspec                     ( Spec
                                                 , describe
                                                 , it

@@ -1,4 +1,4 @@
-module Types
+module Janus.Types
   ( Binding(..)
   , BoundEnv
   , Context
@@ -25,7 +25,7 @@ import           Data.Bifunctor                 ( second )
 import           Data.Text.Prettyprint.Doc      ( Doc )
 import           Data.Text.Prettyprint.Doc.Render.Terminal
                                                 ( AnsiStyle )
-import           Semiring
+import           Janus.Semiring
 
 data Name
    =  Global String

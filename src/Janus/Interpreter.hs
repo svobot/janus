@@ -1,7 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Interpreter
+module Janus.Interpreter
   ( IState(..)
   , MonadAbstractIO(..)
   , compilePhrase
@@ -35,13 +35,13 @@ import           Data.List                      ( dropWhileEnd
 import           Data.Maybe                     ( isNothing )
 import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
-import           Parser
-import           Printer
-import           Semiring
+import           Janus.Parser
+import           Janus.Printer
+import           Janus.Semiring
+import           Janus.Types
+import           Janus.Typing
 import           System.Console.Repline  hiding ( options )
 import           Text.Parsec                    ( ParseError )
-import           Types
-import           Typing
 
 class (Monad m) => MonadAbstractIO m where
   output :: String -> m ()
@@ -207,11 +207,11 @@ handleStmt stmt = case stmt of
                                                    (Binding (Global n) q ty :)
 
 ini :: Repl ()
-ini = liftIO $ putStrLn "Interpreter for Lambda-Pi.\nType :? for help."
+ini = liftIO $ putStrLn "Interpreter for Janus.\nType :? for help."
 
 final :: Repl ExitDecision
 final = do
-  liftIO $ putStrLn "Leaving Lambda-Pi interpreter."
+  liftIO $ putStrLn "Leaving Janus interpreter."
   return Exit
 
 repl :: IO ()

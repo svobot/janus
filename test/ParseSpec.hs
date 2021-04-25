@@ -3,11 +3,11 @@ module ParseSpec
   ) where
 
 import           Data.Bifunctor                 ( first )
-import           Parser
-import           Semiring
+import           Janus.Parser
+import           Janus.Semiring
+import           Janus.Types
 import           Test.Hspec
 import           Text.Parsec                    ( ParseError )
-import           Types
 
 newtype TestResult a = TestResult (Either (Maybe ParseError) a)
 

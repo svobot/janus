@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Printer
+module Janus.Printer
   ( Doc
   , Pretty
   , (<+>)
@@ -35,8 +35,8 @@ import qualified Data.Text.Prettyprint.Doc.Render.String
                                                as PPS
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal
                                                as Term
-import           Semiring                       ( ZeroOneMany(..) )
-import           Types
+import           Janus.Semiring                       ( ZeroOneMany(..) )
+import           Janus.Types
 
 type Doc = PP.Doc Term.AnsiStyle
 

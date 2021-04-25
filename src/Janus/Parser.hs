@@ -1,4 +1,4 @@
-module Parser
+module Janus.Parser
   ( Binding
   , Stmt(..)
   , evalParser
@@ -11,13 +11,13 @@ import           Control.Monad                  ( foldM )
 import           Data.Char                      ( isAlpha )
 import           Data.List                      ( elemIndex )
 import           Prelude                 hiding ( pi )
-import           Semiring                       ( ZeroOneMany(..) )
+import           Janus.Semiring                       ( ZeroOneMany(..) )
 import           Text.Parsec
 import           Text.Parsec.Language           ( haskellStyle )
 import           Text.Parsec.String             ( GenParser )
 import qualified Text.Parsec.Token             as P
-import           Types                   hiding ( Binding )
-import qualified Types                         as T
+import           Janus.Types                   hiding ( Binding )
+import qualified Janus.Types                         as T
                                                 ( Binding(..) )
 
 type Binding = T.Binding String ZeroOneMany CTerm

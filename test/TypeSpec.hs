@@ -4,10 +4,10 @@ module TypeSpec
 
 import           Control.Applicative            ( liftA3 )
 import           Control.Monad.Except           ( throwError )
-import           Semiring
+import           Janus.Semiring
+import           Janus.Types
+import           Janus.Typing
 import           Test.Hspec
-import           Types
-import           Typing
 
 data TestCase = TestCase
   { desc  :: String

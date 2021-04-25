@@ -1,4 +1,4 @@
-module Semiring
+module Janus.Semiring
   ( Relevance(..)
   , Semiring(..)
   , ZeroOneMany(..)

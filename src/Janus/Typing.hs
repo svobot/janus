@@ -1,4 +1,4 @@
-module Typing
+module Janus.Typing
   ( iType0
   ) where
 
@@ -15,9 +15,9 @@ import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe
                                                 , mapMaybe
                                                 )
-import           Printer
-import           Semiring
-import           Types
+import           Janus.Printer
+import           Janus.Semiring
+import           Janus.Types
 
 type Usage = Map.Map Name ZeroOneMany
 data TypingConfig = TypingConfig

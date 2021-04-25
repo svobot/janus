@@ -1,13 +1,13 @@
 cabal-version:         2.4
 
-name:                  LambdaPi
+name:                  janus
 version:               0.1.0.0
 synopsis:              An interpreter with Quantitative Types and Additive Pairs
 description:
   An interpreter with Quantitative Types and Additive Pairs
   with longer description
 category:              Language, Compilers/Interpreters
-homepage:              https://github.com/svobot/LambdaPi
+homepage:              https://github.com/svobot/janus
 author:                Tomáš Svoboda
 maintainer:            Tomáš Svoboda <svoboda@posteo.net>
 license:               BSD-3-Clause
@@ -19,7 +19,7 @@ extra-source-files:    README.md
 
 source-repository head
   type:                git
-  location:            https://github.com/svobot/LambdaPi
+  location:            https://github.com/svobot/janus
 
 common common
   default-language:    Haskell2010
@@ -54,21 +54,21 @@ library
                      , prettyprinter-ansi-terminal
                      , repline ^>=0.4
                      , text
-  exposed-modules:     Interpreter
-                     , Parser
-                     , Printer
-                     , Semiring
-                     , Types
-                     , Typing
-  other-modules:       Paths_LambdaPi
-  autogen-modules:     Paths_LambdaPi
+  exposed-modules:     Janus.Interpreter
+                     , Janus.Parser
+                     , Janus.Printer
+                     , Janus.Semiring
+                     , Janus.Types
+                     , Janus.Typing
+  other-modules:       Paths_janus
+  autogen-modules:     Paths_janus
   hs-source-dirs:      src
 
-executable LambdaPic
+executable janusc
   import:              common, threaded
   hs-source-dirs:      app
   main-is:             Main.hs
-  build-depends:       LambdaPi
+  build-depends:       janus
 
 test-suite test
   import:              common, threaded
@@ -78,7 +78,7 @@ test-suite test
   other-modules:       IntegrationSpec
                      , ParseSpec
                      , TypeSpec
-  build-depends:       LambdaPi
+  build-depends:       janus
                      , hspec
                      , mtl
                      , parsec

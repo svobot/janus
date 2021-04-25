@@ -1,4 +1,4 @@
-# LambdaPi
+# Janus
 
 A λ-calculus interpreter with Quantitative Types and Additive Pairs
 
