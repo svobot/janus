@@ -14,8 +14,8 @@ license:               BSD-3-Clause
 license-file:          LICENSE
 copyright:             Copyright (C) 2021 Tomáš Svoboda
 build-type:            Simple
+data-files:            lib/Prelude.jns
 extra-source-files:    README.md
-                       ChangeLog.md
 
 source-repository head
   type:                git
