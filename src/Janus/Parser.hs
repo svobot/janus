@@ -7,18 +7,20 @@ module Janus.Parser
   , typeParser
   ) where
 
-import           Control.Monad                  ( foldM )
+import           Control.Monad                  ( foldM
+                                                , liftM2
+                                                )
 import           Data.Char                      ( isAlpha )
 import           Data.List                      ( elemIndex )
+import           Janus.Semiring                 ( ZeroOneMany(..) )
+import           Janus.Types             hiding ( Binding )
+import qualified Janus.Types                   as T
+                                                ( Binding(..) )
 import           Prelude                 hiding ( pi )
-import           Janus.Semiring                       ( ZeroOneMany(..) )
 import           Text.Parsec
 import           Text.Parsec.Language           ( haskellStyle )
 import           Text.Parsec.String             ( GenParser )
 import qualified Text.Parsec.Token             as P
-import           Janus.Types                   hiding ( Binding )
-import qualified Janus.Types                         as T
-                                                ( Binding(..) )
 
 type Binding = T.Binding String ZeroOneMany CTerm
 
@@ -32,13 +34,14 @@ data Stmt
 
 lang :: P.TokenParser u
 lang = P.makeTokenParser $ haskellStyle
-  { P.identStart = satisfy (\c -> notElem @[] c "λ∀" && isAlpha c) <|> char '_'
-  , P.reservedNames = keywords ++ ["<>", "()"]
-  , P.reservedOpNames = "->" : map pure ":=\\λ.*&@∀,"
+  { P.identStart      = satisfy (\c -> notElem @[] c "λ∀ω𝘜" && isAlpha c)
+                          <|> char '_'
+  , P.reservedNames   = keywords ++ ["<>", "()", "ω", "𝘜", "𝟭ₐ", "⊤"]
+  , P.reservedOpNames = "->" : map pure ":=\\λ.*&@∀,→⊗⟨⟩"
   }
 
 keywords :: [String]
-keywords = words "forall let assume putStrLn out in U I fst snd T"
+keywords = words "assume putStrLn out forall let in U I fst snd T"
 
 evalParser :: String -> Either ParseError Stmt
 evalParser = parse (P.whiteSpace lang *> stmt <* eof) "<interactive>"
@@ -54,31 +57,29 @@ type CharParser = GenParser Char ()
 identifier :: CharParser String
 identifier = P.identifier lang
 
-reserved :: String -> CharParser ()
+reserved, reservedOp :: String -> CharParser ()
 reserved = P.reserved lang
-
-reservedOp :: String -> CharParser ()
 reservedOp = P.reservedOp lang
 
 stmt :: CharParser Stmt
 stmt = choice [define, assume, putstr, out, eval Eval]
  where
   define =
-    try
-        (   Let
-        <$> (reserved "let" *> option Many rig)
-        <*> (identifier <* reserved "=")
-        )
+    try (Let <$> (reserved "let" *> semiring) <*> identifier <* reserved "=")
       <*> iTerm []
   assume = Assume . reverse <$> (reserved "assume" *> bindings False [])
   putstr = PutStrLn <$> (reserved "putStrLn" *> P.stringLiteral lang)
   out    = Out <$> (reserved "out" *> option "" (P.stringLiteral lang))
 
 eval :: (ZeroOneMany -> ITerm -> a) -> CharParser a
-eval f = f <$> option Many rig <*> iTerm []
+eval f = f <$> semiring <*> iTerm []
 
-rig :: CharParser ZeroOneMany
-rig = choice [Zero <$ reserved "0", One <$ reserved "1", Many <$ reserved "w"]
+semiring :: CharParser ZeroOneMany
+semiring = option Many $ choice
+  [ Zero <$ reserved "0"
+  , One <$ reserved "1"
+  , Many <$ (reserved "ω" <|> reserved "w")
+  ]
 
 iTerm :: [String] -> CharParser ITerm
 iTerm e = (cTermInner e >>= ann) <|> do
@@ -119,12 +120,12 @@ cTermInner e = choice
   , universe
   , pi
   , forall
-  , try pair
-  , tensor
+  , try mPair
+  , mPairType
   , mUnit
   , mUnitType
-  , try angles
-  , with
+  , try aPair
+  , aPairType
   , aUnit
   , aUnitType
   , try . P.parens lang $ cTerm e
@@ -136,9 +137,9 @@ cTermInner e = choice
     reservedOp "."
     t <- cTermWith iTermInner (reverse xs ++ e)
     return $ iterate Lam t !! length xs
-  universe = Universe <$ reserved "U"
+  universe = Universe <$ (reserved "𝘜" <|> reserved "U")
   pi       = do
-    T.Binding x q t <- try $ bind e <* reservedOp "->"
+    T.Binding x q t <- try $ bind e <* (reservedOp "→" <|> reservedOp "->")
     Pi q t <$> cTermWith iTermInner (x : e)
   forall = do
     reserved "forall" <|> reservedOp "∀"
@@ -146,20 +147,25 @@ cTermInner e = choice
     reservedOp "."
     p <- cTerm (map bndName xs ++ e)
     foldM (\a x -> return $ Pi (bndUsage x) (bndType x) a) p xs
-  pair   = P.parens lang $ MPair <$> cTerm e <* reservedOp "," <*> cTerm e
-  tensor = do
-    T.Binding x q t <- try $ bind e <* reservedOp "*"
+  mPair     = P.parens lang $ MPair <$> cTerm e <* reservedOp "," <*> cTerm e
+  mPairType = do
+    T.Binding x q t <- try $ bind e <* (reservedOp "⊗" <|> reservedOp "*")
     MPairType q t <$> cTermWith iTermInner (x : e)
-  mUnitType = MUnitType <$ reserved "I"
-  angles    = P.angles lang $ APair <$> cTerm e <* reservedOp "," <*> cTerm e
-  with      = do
+  mUnitType = MUnitType <$ (reserved "𝟭ₐ" <|> reserved "I")
+  aPair =
+    liftM2 (<|>) (between (reservedOp "⟨") (reservedOp "⟩")) (P.angles lang)
+      $   APair
+      <$> cTerm e
+      <*  reservedOp ","
+      <*> cTerm e
+  aPairType = do
     (x, t) <-
       try
       $  P.parens lang ((,) <$> identifier <* reservedOp ":" <*> cTerm e)
       <* reservedOp "&"
     APairType t <$> cTermWith iTermInner (x : e)
-  aUnit     = AUnit <$ reserved "<>"
-  aUnitType = AUnitType <$ reserved "T"
+  aUnit     = AUnit <$ (reserved "⟨⟩" <|> reserved "<>")
+  aUnitType = AUnitType <$ (reserved "⊤" <|> reserved "T")
 
 mUnit :: CharParser CTerm
 mUnit = MUnit <$ reserved "()"
@@ -168,7 +174,7 @@ bind :: [String] -> CharParser Binding
 bind e =
   P.parens lang
     $   flip T.Binding
-    <$> option Many rig
+    <$> semiring
     <*> identifier
     <*  reservedOp ":"
     <*> cTerm e
