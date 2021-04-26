@@ -82,7 +82,7 @@ semiring = option Many $ choice
   ]
 
 iTerm :: [String] -> CharParser ITerm
-iTerm e = (cTermInner e >>= ann) <|> do
+iTerm e = try (cTermInner e >>= ann) <|> do
   t <- iTermInner e
   ann (Inf t) <|> return t
   where ann t = Ann t <$> (reservedOp ":" *> cTerm e)
