@@ -14,7 +14,6 @@ module Janus.Types
   , ValueEnv
   , cEval
   , cSubst
-  , forget
   , iEval
   , iSubst
   , vfree
@@ -108,9 +107,6 @@ type TypeEnv = [Binding Name ZeroOneMany Type]
 type ValueEnv = [(Name, Value)]
 type BoundEnv = [Value]
 type Context = (ValueEnv, TypeEnv)
-
-forget :: TypeEnv -> TypeEnv
-forget = map (\b -> b { bndUsage = zero })
 
 vfree :: Name -> Value
 vfree n = VNeutral (NFree n)
