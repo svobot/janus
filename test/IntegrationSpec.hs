@@ -134,14 +134,14 @@ cases =
     "Duplication of linear argument"
     ["(λx. (x, x) : ∀ (1 _ : I). (1 _ : I) * I) ()"]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
-    \         [Local 0] : I\n\
-    \           Used w-times, but available 1-times."
+    \         [Local 0] : 𝟭ₐ\n\
+    \           Used ω-times, but available 1-times."
   , TestCase "Erased multiplicative usage of linear argument"
              ["(λx. (x, x) : ∀ (1 _ : I). (0 _ : I) * I) ()"]
-             "w ((), ()) : (0 x : I) * I"
+             "ω ((), ()) : (0 x : 𝟭ₐ) ⊗ 𝟭ₐ"
   , TestCase "Additive usage of linear argument"
              ["(λx. <x, x> : ∀ (1 _ : I). (_ : I) & I) ()"]
-             "w <(), ()> : (x : I) & I"
+             "ω ⟨(), ()⟩ : (x : 𝟭ₐ) & 𝟭ₐ"
   , TestCase
     "Exponential elimination"
     [ "assume (0 a : U) (m : a)"
@@ -156,7 +156,7 @@ cases =
       \                . b exp"
     , "ofcElim a (λexp. (w _ : a) * a) (m, ()) (λm'. (m', m'))"
     ]
-    "w (m, m) : (w x : a) * a"
+    "ω (m, m) : (ω x : a) ⊗ a"
   ]
 
 prettyCases :: [TestCase]
@@ -170,7 +170,7 @@ prettyCases =
     \              . a"
     ]
     "0 proj1 = (λx y z. let c @ a, b = z in a : x)\n\
-    \          : ∀ (0 x : U) (0 y : (0 a : x) -> U) (0 z : (0 a : x) * y a) . x"
+    \          : ∀ (0 x : U) (0 y : (0 a : x) → U) (0 z : (0 a : x) ⊗ y a) . x"
   , TestCase
     "Multiplicative pair second element projection"
     [ "let 0 proj1 = λa b p. let z @ x, y = p in x : a\n\
@@ -185,11 +185,11 @@ prettyCases =
     \              . b (proj1 a b p)"
     ]
     "0 proj2 = (λx y z. let c @ a, b = z in b : y (let f @ d, e = c in d : x))\n\
-    \          : ∀ (0 x : U) (0 y : (0 a : x) -> U) (0 z : (0 a : x) * y a)\n\
+    \          : ∀ (0 x : U) (0 y : (0 a : x) → U) (0 z : (0 a : x) ⊗ y a)\n\
     \            . y (let c @ a, b = z in a : x)"
   , TestCase "SKI Calculus (I combinator)"
              ["let w Id = λ_ x. x : ∀ (0 a : U) (1 _ : a) . a"]
-             "w Id = (λx y. y) : ∀ (0 x : U) (1 y : x) . x"
+             "ω Id = (λx y. y) : ∀ (0 x : U) (1 y : x) . x"
   , TestCase
     "SKI Calculus (K combinator)"
     [ "let w K = (λ_ _ x _. x)\n\
@@ -199,8 +199,8 @@ prettyCases =
     \            (w _ : b x)\n\
     \          . a"
     ]
-    "w K = (λx y z a. z)\n\
-    \      : ∀ (0 x : U) (0 y : (0 b : x) -> U) (1 z : x) (w a : y z) . x"
+    "ω K = (λx y z a. z)\n\
+    \      : ∀ (0 x : U) (0 y : (0 b : x) → U) (1 z : x) (ω a : y z) . x"
   , TestCase
     "SKI Calculus (S combinator)"
     [ "let w S = ((λa b c x y z. x z (y z))\n\
@@ -212,13 +212,13 @@ prettyCases =
     \            (w z : a)\n\
     \          . c z (y z))"
     ]
-    "w S = (λx y z a b c. a c (b c))\n\
+    "ω S = (λx y z a b c. a c (b c))\n\
     \      : ∀ (0 x : U)\n\
-    \          (0 y : (0 d : x) -> U)\n\
+    \          (0 y : (0 d : x) → U)\n\
     \          (0 z : ∀ (0 d : x) (0 e : y d) . U)\n\
-    \          (1 a : ∀ (w d : x) (1 e : y d) . z d e)\n\
-    \          (1 b : (w d : x) -> y d)\n\
-    \          (w c : x)\n\
+    \          (1 a : ∀ (ω d : x) (1 e : y d) . z d e)\n\
+    \          (1 b : (ω d : x) → y d)\n\
+    \          (ω c : x)\n\
     \        . z c (b c)"
   ]
 
@@ -231,9 +231,9 @@ withCases =
     ]
     "error: Mismatched multiplicities:\n\
     \         x : a\n\
-    \           Used w-times, but available 1-times.\n\
+    \           Used ω-times, but available 1-times.\n\
     \         y : b\n\
-    \           Used w-times, but available 1-times."
+    \           Used ω-times, but available 1-times."
   , TestCase
     "w <x, y> -> 1 (1 x, x)"
     [ "assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"
@@ -241,9 +241,9 @@ withCases =
     ]
     "error: Mismatched multiplicities:\n\
     \         x : a\n\
-    \           Used w-times, but available 1-times.\n\
+    \           Used ω-times, but available 1-times.\n\
     \         y : b\n\
-    \           Used w-times, but available 1-times."
+    \           Used ω-times, but available 1-times."
   , TestCase
     "1 <x, y> -> 1 (1 x, y)"
     [ "assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"
@@ -251,7 +251,7 @@ withCases =
     ]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
     \         [Local 0] : (x : a) & b\n\
-    \           Used w-times, but available 1-times."
+    \           Used ω-times, but available 1-times."
   , TestCase
     "1 <x, y> -> 1 (1 x, x)"
     [ "assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"
@@ -259,7 +259,7 @@ withCases =
     ]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
     \         [Local 0] : (x : a) & b\n\
-    \           Used w-times, but available 1-times."
+    \           Used ω-times, but available 1-times."
   , TestCase
     "1 <m, y> -> 1 (w n, m)"
     [ "assume (0 a : U) (0 b : U) (1 y : b) (m : a) (n : b)"
@@ -267,7 +267,7 @@ withCases =
     ]
     "error: Mismatched multiplicities:\n\
     \         y : b\n\
-    \           Used w-times, but available 1-times."
+    \           Used ω-times, but available 1-times."
   , TestCase
     "1 <m, y> -> w (w n, m)"
     [ "assume (0 a : U) (0 b : U) (1 y : b) (m : a) (n : b)"
@@ -275,6 +275,6 @@ withCases =
     ]
     "error: Mismatched multiplicities:\n\
     \         y : b\n\
-    \           Used w-times, but available 1-times."
+    \           Used ω-times, but available 1-times."
   ]
 

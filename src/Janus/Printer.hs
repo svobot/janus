@@ -35,7 +35,7 @@ import qualified Data.Text.Prettyprint.Doc.Render.String
                                                as PPS
 import qualified Data.Text.Prettyprint.Doc.Render.Terminal
                                                as Term
-import           Janus.Semiring                       ( ZeroOneMany(..) )
+import           Janus.Semiring                 ( ZeroOneMany(..) )
 import           Janus.Types
 
 type Doc = PP.Doc Term.AnsiStyle
@@ -46,7 +46,7 @@ class Pretty a where
 instance Pretty Doc where
   pretty = id
 
-instance  Pretty Text where
+instance Pretty Text where
   pretty = PP.pretty
 
 instance Pretty Name where
@@ -65,7 +65,7 @@ instance Pretty Value where
 instance Pretty ZeroOneMany where
   pretty Zero = annotate (Term.color Term.Magenta <> Term.bold) "0"
   pretty One  = annotate (Term.color Term.Magenta <> Term.bold) "1"
-  pretty Many = annotate (Term.color Term.Magenta <> Term.bold) "w"
+  pretty Many = annotate (Term.color Term.Magenta <> Term.bold) "ω"
 
 instance (Pretty n, Pretty q, Pretty t) => Pretty (Binding n q t) where
   pretty (Binding n q t) = align . group . PP.width (pretty q) $ \case
@@ -128,7 +128,9 @@ parensIf True  = parens
 parensIf False = id
 
 type Printer doc = Writer FreeVars (Reader (NameEnv doc) doc)
+
 type FreeVars = Set.Set String
+
 data NameEnv doc = NameEnv
   { fresh :: [doc]
   , bound :: [doc]
@@ -143,7 +145,7 @@ runPrinter printer term = runReader r (NameEnv freshNames [])
   freshNames =
     [ PP.pretty $ c : n
     | n <- "" : map show [1 :: Int ..]
-    , c <- ['x', 'y', 'z'] ++ ['a' .. 'w']
+    , c <- ['x', 'y', 'z'] ++ ['a' .. 'v']
     , (c : n) `Set.notMember` freeVars
     ]
 
@@ -246,11 +248,11 @@ cPrint p (Pi q1 d1 (Pi q2 d2 r)) =
 cPrint p (Pi q c c') = cPrintDependent fmt c c'
  where
   fmt name l r = align . group . parensIf (p > 0) $ sep
-    ["(" <> pretty (Binding name q l) <> ")" <+> "->", r]
+    ["(" <> pretty (Binding name q l) <> ")" <+> "→", r]
 cPrint p (MPairType q c c') = cPrintDependent fmt c c'
  where
   fmt name l r = align . group . parensIf (p > 0) $ sep
-    [mult "(" <> pretty (Binding name q l) <> mult ")" <+> mult "*", r]
+    [mult "(" <> pretty (Binding name q l) <> mult ")" <+> mult "⊗", r]
 cPrint p (APairType c c') = cPrintDependent fmt c c'
  where
   fmt name l r = align . group . parensIf (p > 0) $ sep
@@ -258,12 +260,12 @@ cPrint p (APairType c c') = cPrintDependent fmt c c'
 cPrint _ (MPair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = mult "(" <> l <> mult "," <+> r <> mult ")"
 cPrint _ (APair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
-  where fmt l r = add "<" <> l <> add "," <+> r <> add ">"
+  where fmt l r = add "⟨" <> l <> add "," <+> r <> add "⟩"
 cPrint _ Universe  = return . return $ "U"
 cPrint _ MUnit     = return . return $ mult "()"
-cPrint _ MUnitType = return . return $ mult "I"
-cPrint _ AUnit     = return . return $ add "<>"
-cPrint _ AUnitType = return . return $ add "T"
+cPrint _ MUnitType = return . return $ mult "𝟭ₐ"
+cPrint _ AUnit     = return . return $ add "⟨⟩"
+cPrint _ AUnitType = return . return $ add "⊤"
 
 cPrintDependent :: (Doc -> Doc -> Doc -> Doc) -> CTerm -> CTerm -> Printer Doc
 cPrintDependent fmt l r = do
