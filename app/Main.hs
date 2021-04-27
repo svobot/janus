@@ -2,7 +2,8 @@ module Main
   ( main
   ) where
 
-import           Janus.Interpreter
+import           Janus.REPL
 
 main :: IO ()
 main = repl
+

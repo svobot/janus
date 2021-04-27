@@ -1,7 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Janus.Interpreter
+module Janus.REPL
   ( IState(..)
   , MonadAbstractIO(..)
   , compilePhrase

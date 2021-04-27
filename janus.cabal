@@ -54,9 +54,9 @@ library
                      , prettyprinter-ansi-terminal
                      , repline ^>=0.4
                      , text
-  exposed-modules:     Janus.Interpreter
-                     , Janus.Parser
+  exposed-modules:     Janus.Parser
                      , Janus.Printer
+                     , Janus.REPL
                      , Janus.Semiring
                      , Janus.Types
                      , Janus.Typing
