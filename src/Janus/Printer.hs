@@ -77,7 +77,7 @@ instance Pretty TypeError where
   pretty err = annotate (Term.color Term.Red <> Term.bold) "error:"
     <+> align (go err)
    where
-    go (MultiplicityError loc es) =
+    go (UsageError loc es) =
       hardlines
         $ (  "Mismatched multiplicities"
           <> maybe emptyDoc ((" " <>) . parens . PP.pretty) loc

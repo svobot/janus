@@ -160,7 +160,7 @@ compileFile f = do
     Right x -> parseIO (fileParser f) x >>= mapM_ (mapM_ handleStmt)
 
 iinfer :: AbstractRepl m => Context -> ZeroOneMany -> ITerm -> m (Maybe Type)
-iinfer g r t = case iType0 g r t of
+iinfer g r t = case synthesise g r t of
   Left  e -> outputDoc (pretty e) >> return Nothing
   Right v -> return (Just v)
 

@@ -33,7 +33,7 @@ spec = mapM_ run cases
  where
   run tc =
     it (desc tc)
-      $          TestResult (quote0 <$> liftA3 iType0 ctx multi expr tc)
+      $          TestResult (quote0 <$> liftA3 synthesise ctx multi expr tc)
       `shouldBe` res tc
 
 cases :: [TestCase]
@@ -120,7 +120,7 @@ cases =
             (Pi One (APairType (ifg "a") (ifg "b")) (ifg "b"))
     :$: APair (ifg "x") (ifg "y")
     )
-    (TestResult . throwError $ MultiplicityError
+    (TestResult . throwError $ UsageError
       Nothing
       [ (Global "x", vfree $ Global "a", Many, One)
       , (Global "y", vfree $ Global "b", Many, One)

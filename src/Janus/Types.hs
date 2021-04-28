@@ -94,7 +94,7 @@ instance (Show n, Show u, Show t) => Show (Binding n u t) where
   show (Binding n u t) = show u <> " " <> show n <> " : " <> show t
 
 data TypeError
-   =  MultiplicityError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
+   =  UsageError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
    |  ErasureError CTerm ZeroOneMany
    |  InferenceError (Doc AnsiStyle) Type ITerm
    |  CheckError Type CTerm
