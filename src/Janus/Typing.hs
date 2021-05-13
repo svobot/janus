@@ -1,3 +1,7 @@
+-- | Implementation of the typing algorithm.
+--
+-- This module exports single function, @synthesise@, which implements
+-- the derivation of type synthesis judgment.
 module Janus.Typing
   ( synthesise
   ) where
@@ -20,13 +24,18 @@ import           Janus.Printer
 import           Janus.Semiring
 import           Janus.Types
 
+-- | Record of bound variables.
 data TypingConfig = TypingConfig
-  { cfgGlobalContext :: Context
-  , cfgBoundLocals   :: TypeEnv
+  { cfgGlobalContext :: Context -- ^ Variables which have been bound in some
+                                -- previous term.
+  , cfgBoundLocals   :: TypeEnv -- ^ Variables which have a binding occurrence
+                                -- in the currently judged term.
   }
 
+-- | A monad transformer which carries the context for the typing algorithm.
 type Judgment = ReaderT TypingConfig Result
 
+-- | Record of how much of each variable is consumed in a term.
 type Usage = Map.Map Name ZeroOneMany
 
 -- | Add new variable binding to the local environment.
@@ -67,12 +76,13 @@ checkUsage env = toMaybe . mapMaybe notEnough . Map.toList
   toMaybe [] = Nothing
   toMaybe es = Just es
 
--- | Create a local variable with a fresh name
+-- | Create a local variable with a fresh name.
 newLocalVar :: a -> b -> Judgment (Binding Name a b)
 newLocalVar s ty = do
   i <- asks $ length . cfgBoundLocals
   return $ Binding (Local i) s ty
 
+-- | Evaluate the term in context provided by the judgment.
 evalInEnv :: CTerm -> Judgment Value
 evalInEnv m = asks (cEval m . (, []) . fst . cfgGlobalContext)
 
@@ -100,13 +110,10 @@ synthType s (m :$: n) = do
   (qs1, si) <- synthType s m
   case si of
     VPi p ty ty' -> do
-      qs <- case p .*. extend s of
-        Zero -> do
-          checkTypeErased n ty
-          return qs1
-        pr -> do
-          qs2 <- checkType Present n ty
-          return $ Map.unionWith (.+.) qs1 (Map.map (pr .*.) qs2)
+      qs <- case extend s .*. p of
+        Zero -> checkTypeErased n ty >> return qs1
+        sp ->
+          Map.unionWith (.+.) qs1 . Map.map (sp .*.) <$> checkType Present n ty
       (qs, ) . ty' <$> evalInEnv n
     ty -> throwError $ InferenceError "_ -> _" ty (m :$: n)
 synthType s (MPairElim m n o) = do
@@ -114,20 +121,16 @@ synthType s (MPairElim m n o) = do
   case mTy of
     zTy@(VMPairType p xTy yTy) -> do
       z <- newLocalVar zero zTy
-      local (with z) (checkTypeErased (cSubst 0 (Free $ bndName z) o) VUniverse)
+      local (with z) $ checkTypeErased (cSubst 0 (Free $ bndName z) o) VUniverse
       let s' = extend s
       x  <- newLocalVar (p .*. s') xTy
-      qs <- withLocalVar
-        "First element of the pair elimination"
-        x
-        (do
-          y <- newLocalVar s' (yTy . vfree $ bndName x)
-          withLocalVar "Second element of the pair elimination" y $ do
-            oxy <- evalInEnv
-              (cSubst 0 (Ann (MPair (ifn x) (ifn y)) (quote0 zTy)) o)
-            qs2 <- checkTypeSubst x y oxy
-            return (Map.unionWith (.+.) qs1 qs2)
-        )
+      qs <- withLocalVar "First element of the pair elimination" x $ do
+        y <- newLocalVar s' (yTy . vfree $ bndName x)
+        withLocalVar "Second element of the pair elimination" y $ do
+          oxy <- evalInEnv
+            $ cSubst 0 (Ann (MPair (ifn x) (ifn y)) $ quote0 zTy) o
+          qs2 <- checkTypeSubst x y oxy
+          return $ Map.unionWith (.+.) qs1 qs2
       (qs, ) <$> evalInEnv (cSubst 0 m o)
     ty -> throwError
       $ InferenceError ("_" <+> mult "*" <+> "_") ty (MPairElim m n o)
@@ -140,23 +143,22 @@ synthType s (MPairElim m n o) = do
 synthType s (MUnitElim m n o) = do
   (qs1, mTy) <- synthType s m
   case mTy of
-    uTy@VMUnitType -> do
-      u <- newLocalVar zero uTy
-      local (with u) (checkTypeErased (cSubst 0 (Free $ bndName u) o) VUniverse)
-      ou  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) o)
-      qs2 <- checkType s n ou
-      let qs = Map.unionWith (.+.) qs1 qs2
-      (qs, ) <$> evalInEnv (cSubst 0 m o)
+    xTy@VMUnitType -> do
+      x <- newLocalVar zero xTy
+      local (with x) $ checkTypeErased (cSubst 0 (Free $ bndName x) o) VUniverse
+      ox  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) o)
+      qs2 <- checkType s n ox
+      (Map.unionWith (.+.) qs1 qs2, ) <$> evalInEnv (cSubst 0 m o)
     ty -> throwError $ InferenceError (pretty MUnitType) ty (MUnitElim m n o)
 synthType s (Fst m) = do
   (qs, ty) <- synthType s m
   case ty of
-    (VAPairType t1 _) -> return (qs, t1)
+    VAPairType t1 _ -> return (qs, t1)
     _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Fst m)
 synthType s (Snd m) = do
   (qs, ty) <- synthType s m
   case ty of
-    (VAPairType _ t2) -> (qs, ) . t2 <$> evalInEnv (Inf $ Fst m)
+    VAPairType _ t2 -> (qs, ) . t2 <$> evalInEnv (Inf $ Fst m)
     _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Snd m)
 synthType _ i@(Bound _) =
   error $ "internal: Trying to infer type of " <> show i
@@ -173,14 +175,12 @@ checkType s (Lam m) (VPi p ty ty') = do
   withLocalVar "Lambda abstraction" x
     $ checkType s (cSubst 0 (Free $ bndName x) m) (ty' . vfree $ bndName x)
 checkType s (MPair m n) (VMPairType p t1 t2) = do
-  case p .*. extend s of
-    Zero -> do
-      checkTypeErased m t1
-      rest
-    pr -> do
-      qs1 <- checkType Present m t1
-      qs2 <- rest
-      return $ Map.unionWith (.+.) qs2 (Map.map (pr .*.) qs1)
+  case extend s .*. p of
+    Zero -> checkTypeErased m t1 >> rest
+    sp ->
+      Map.unionWith (.+.)
+        <$> (Map.map (sp .*.) <$> checkType Present m t1)
+        <*> rest
   where rest = evalInEnv m >>= (checkType s n . t2)
 checkType s (APair m n) (VAPairType t1 t2) = do
   qs1 <- checkType s m t1
@@ -193,27 +193,24 @@ checkType s (APair m n) (VAPairType t1 t2) = do
                      (Map.zipWithMatched (const lub))
                      qs1
                      qs2
-checkType _ MUnit VMUnitType = return Map.empty
-checkType _ AUnit VAUnitType = return Map.empty
-checkType s ty@(Pi _ t1 t2) VUniverse =
-  checkTypeDep "Dependent function type" s ty t1 t2
-checkType s ty@(MPairType _ t1 t2) VUniverse =
-  checkTypeDep "Multiplicative pair type" s ty t1 t2
-checkType s ty@(APairType t1 t2) VUniverse =
-  checkTypeDep "Additive pair type" s ty t1 t2
-checkType s ty@Universe  VUniverse = checkTypeAtom s ty
-checkType s ty@MUnitType VUniverse = checkTypeAtom s ty
-checkType s ty@AUnitType VUniverse = checkTypeAtom s ty
-checkType _ m            ty        = throwError $ CheckError ty m
+checkType _ MUnit                  VMUnitType = return Map.empty
+checkType _ AUnit                  VAUnitType = return Map.empty
+checkType s ty@(Pi        _ t1 t2) VUniverse  = checkTypeDep s ty t1 t2
+checkType s ty@(MPairType _ t1 t2) VUniverse  = checkTypeDep s ty t1 t2
+checkType s ty@(APairType t1 t2  ) VUniverse  = checkTypeDep s ty t1 t2
+checkType s ty@Universe            VUniverse  = checkTypeAtom s ty
+checkType s ty@MUnitType           VUniverse  = checkTypeAtom s ty
+checkType s ty@AUnitType           VUniverse  = checkTypeAtom s ty
+checkType _ m                      ty         = throwError $ CheckError ty m
 
 -- | Type-check a dependent type.
-checkTypeDep
-  :: String -> Relevance -> CTerm -> CTerm -> CTerm -> Judgment Usage
-checkTypeDep loc s ty t1 t2 = case s of
+checkTypeDep :: Relevance -> CTerm -> CTerm -> CTerm -> Judgment Usage
+checkTypeDep s ty t1 t2 = case s of
   Erased -> do
     checkTypeErased t1 VUniverse
     x <- evalInEnv t1 >>= newLocalVar zero
-    withLocalVar loc x $ checkType s (cSubst 0 (Free $ bndName x) t2) VUniverse
+    local (with x) $ checkTypeErased (cSubst 0 (Free $ bndName x) t2) VUniverse
+    return Map.empty
   -- Types cannot consume any resources, so the judgment fails if the typing
   -- is not done in the erased context.
   Present -> throwError . ErasureError ty $ extend s
