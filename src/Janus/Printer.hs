@@ -37,6 +37,7 @@ import qualified Data.Text.Prettyprint.Doc.Render.Terminal
                                                as Term
 import           Janus.Semiring                 ( ZeroOneMany(..) )
 import           Janus.Types
+import           Janus.Typing
 
 type Doc = PP.Doc Term.AnsiStyle
 
@@ -73,6 +74,12 @@ instance (Pretty n, Pretty q, Pretty t) => Pretty (Binding n q t) where
     _ -> " " <> rest
     where rest = var (pretty n) <> line <> ":" <+> pretty t
 
+instance Pretty ExpectedType where
+  pretty FnAppExp     = "_ -> _"
+  pretty MPairExp     = "_" <+> mult "*" <+> "_"
+  pretty APairExp     = "_" <+> add "&" <+> "_"
+  pretty (TypeExp ty) = pretty ty
+
 instance Pretty TypeError where
   pretty err = annotate (Term.color Term.Red <> Term.bold) "error:"
     <+> align (go err)
@@ -101,7 +108,7 @@ instance Pretty TypeError where
         <+> pretty m
         <>  "-times outside erased context."
     go (InferenceError expected actual expr) = hardlines
-      [ "Couldn't match expected type" <+> squotes expected
+      [ "Couldn't match expected type" <+> squotes (pretty expected)
       , indent 12 ("with actual type" <+> squotes (pretty actual))
       , "In the expression:" <+> pretty expr
       ]
@@ -110,9 +117,6 @@ instance Pretty TypeError where
       , "In the expression:" <+> pretty expr
       ]
     go (UnknownVarError n) = "Variable not in scope: " <> pretty (Free n)
-
-instance Show TypeError where
-  show = renderString . pretty
 
 render :: Doc -> Text
 render = Term.renderStrict . layoutSmart defaultLayoutOptions

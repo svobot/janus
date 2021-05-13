@@ -143,9 +143,7 @@ browse _ = do
 
 -- Evaluation : handle each line user inputs
 compilePhrase :: AbstractRepl m => String -> m ()
-compilePhrase x = do
-  x' <- parseIO evalParser x
-  mapM_ handleStmt x'
+compilePhrase x = parseIO evalParser x >>= mapM_ handleStmt
 
 compileFile :: Cmd Repl
 compileFile f = do
@@ -184,7 +182,7 @@ handleStmt stmt = case stmt of
     ctx <- gets context
     mty <- iinfer ctx Zero annt
     unless (isNothing mty) $ do
-      let val = iEval annt (fst ctx, [])
+      let val = iEval (fst ctx, []) annt
       outputDoc . pretty $ Binding (vfree $ Global x) q val
       modify . mapContext $ second (Binding (Global x) q val :)
 
@@ -192,7 +190,7 @@ handleStmt stmt = case stmt of
     ctx <- gets context
     mty <- iinfer ctx q t
     forM_ mty $ \ty -> do
-      let val = iEval t (fst ctx, [])
+      let val = iEval (fst ctx, []) t
       let outdoc =
             pretty q
               <+> maybe mempty ((<+> "= ") . var . pretty . T.pack) mn

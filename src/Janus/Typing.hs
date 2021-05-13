@@ -3,7 +3,10 @@
 -- This module exports single function, @synthesise@, which implements
 -- the derivation of type synthesis judgment.
 module Janus.Typing
-  ( synthesise
+  ( ExpectedType(..)
+  , Result
+  , TypeError(..)
+  , synthesise
   ) where
 
 import           Control.Monad.Except           ( throwError )
@@ -20,7 +23,6 @@ import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe
                                                 , mapMaybe
                                                 )
-import           Janus.Printer
 import           Janus.Semiring
 import           Janus.Types
 
@@ -32,12 +34,6 @@ data TypingConfig = TypingConfig
                                 -- in the currently judged term.
   }
 
--- | A monad transformer which carries the context for the typing algorithm.
-type Judgment = ReaderT TypingConfig Result
-
--- | Record of how much of each variable is consumed in a term.
-type Usage = Map.Map Name ZeroOneMany
-
 -- | Add new variable binding to the local environment.
 with :: Binding Name ZeroOneMany Type -> TypingConfig -> TypingConfig
 with b cfg = cfg { cfgBoundLocals = b : cfgBoundLocals cfg }
@@ -45,6 +41,22 @@ with b cfg = cfg { cfgBoundLocals = b : cfgBoundLocals cfg }
 -- | Get the type bindings of the local and global variables.
 typeEnv :: TypingConfig -> TypeEnv
 typeEnv (TypingConfig (_, globals) locals) = locals ++ globals
+
+-- | A monad transformer which carries the context for the typing algorithm.
+type Judgment = ReaderT TypingConfig Result
+
+-- | Record of how much of each variable is consumed in a term.
+type Usage = Map.Map Name ZeroOneMany
+
+-- | Evaluate the term in context provided by the judgment.
+evalInEnv :: CTerm -> Judgment Value
+evalInEnv m = asks (flip cEval m . (, []) . fst . cfgGlobalContext)
+
+-- | Create a local variable with a fresh name.
+newLocalVar :: a -> b -> Judgment (Binding Name a b)
+newLocalVar s ty = do
+  i <- asks $ length . cfgBoundLocals
+  return $ Binding (Local i) s ty
 
 -- | Extend the typing context with a local variable.
 withLocalVar
@@ -76,15 +88,16 @@ checkUsage env = toMaybe . mapMaybe notEnough . Map.toList
   toMaybe [] = Nothing
   toMaybe es = Just es
 
--- | Create a local variable with a fresh name.
-newLocalVar :: a -> b -> Judgment (Binding Name a b)
-newLocalVar s ty = do
-  i <- asks $ length . cfgBoundLocals
-  return $ Binding (Local i) s ty
+data ExpectedType = FnAppExp | MPairExp | APairExp | TypeExp Type
 
--- | Evaluate the term in context provided by the judgment.
-evalInEnv :: CTerm -> Judgment Value
-evalInEnv m = asks (cEval m . (, []) . fst . cfgGlobalContext)
+data TypeError
+   =  UsageError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
+   |  ErasureError CTerm ZeroOneMany
+   |  InferenceError ExpectedType Type ITerm
+   |  CheckError Type CTerm
+   |  UnknownVarError Name
+
+type Result = Either TypeError
 
 -- | Synthesise the type of a term.
 synthesise :: Context -> ZeroOneMany -> ITerm -> Result Type
@@ -115,7 +128,7 @@ synthType s (m :$: n) = do
         sp ->
           Map.unionWith (.+.) qs1 . Map.map (sp .*.) <$> checkType Present n ty
       (qs, ) . ty' <$> evalInEnv n
-    ty -> throwError $ InferenceError "_ -> _" ty (m :$: n)
+    ty -> throwError $ InferenceError FnAppExp ty (m :$: n)
 synthType s (MPairElim m n o) = do
   (qs1, mTy) <- synthType s m
   case mTy of
@@ -132,8 +145,7 @@ synthType s (MPairElim m n o) = do
           qs2 <- checkTypeSubst x y oxy
           return $ Map.unionWith (.+.) qs1 qs2
       (qs, ) <$> evalInEnv (cSubst 0 m o)
-    ty -> throwError
-      $ InferenceError ("_" <+> mult "*" <+> "_") ty (MPairElim m n o)
+    ty -> throwError $ InferenceError MPairExp ty (MPairElim m n o)
  where
   ifn = Inf . Free . bndName
   checkTypeSubst x y oxy = checkType
@@ -149,17 +161,17 @@ synthType s (MUnitElim m n o) = do
       ox  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) o)
       qs2 <- checkType s n ox
       (Map.unionWith (.+.) qs1 qs2, ) <$> evalInEnv (cSubst 0 m o)
-    ty -> throwError $ InferenceError (pretty MUnitType) ty (MUnitElim m n o)
+    ty -> throwError $ InferenceError (TypeExp VMUnitType) ty (MUnitElim m n o)
 synthType s (Fst m) = do
   (qs, ty) <- synthType s m
   case ty of
     VAPairType t1 _ -> return (qs, t1)
-    _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Fst m)
+    _               -> throwError $ InferenceError APairExp ty (Fst m)
 synthType s (Snd m) = do
   (qs, ty) <- synthType s m
   case ty of
     VAPairType _ t2 -> (qs, ) . t2 <$> evalInEnv (Inf $ Fst m)
-    _ -> throwError $ InferenceError ("_" <+> add "&" <+> "_") ty (Snd m)
+    _               -> throwError $ InferenceError APairExp ty (Snd m)
 synthType _ i@(Bound _) =
   error $ "internal: Trying to infer type of " <> show i
 
@@ -168,7 +180,7 @@ checkType :: Relevance -> CTerm -> Type -> Judgment Usage
 checkType s (Inf m) ty = do
   (qs, ty') <- synthType s m
   unless (((==) `on` quote0) ty ty')
-         (throwError $ InferenceError (pretty ty) ty' m)
+         (throwError $ InferenceError (TypeExp ty) ty' m)
   return qs
 checkType s (Lam m) (VPi p ty ty') = do
   x <- newLocalVar (p .*. extend s) ty

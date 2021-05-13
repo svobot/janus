@@ -4,6 +4,8 @@ module TypeSpec
 
 import           Control.Applicative            ( liftA3 )
 import           Control.Monad.Except           ( throwError )
+import           Data.Function                  ( on )
+import           Janus.Printer
 import           Janus.Semiring
 import           Janus.Types
 import           Janus.Typing
@@ -20,12 +22,13 @@ data TestCase = TestCase
 newtype TestResult =  TestResult (Result CTerm)
 
 instance Eq TestResult where
-  (TestResult (Left  te)) == (TestResult (Left  te')) = show te == show te'
+  (TestResult (Left te)) == (TestResult (Left te')) =
+    ((==) `on` (renderString . pretty)) te te'
   (TestResult (Right ty)) == (TestResult (Right ty')) = ty == ty'
   _                       == _                        = False
 
 instance Show TestResult where
-  show (TestResult (Left  te)) = show te
+  show (TestResult (Left  te)) = renderString $ pretty te
   show (TestResult (Right ty)) = show ty
 
 spec :: Spec

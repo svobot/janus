@@ -1,3 +1,5 @@
+-- | Definitions of data types which are used throughout the code and functions
+-- for substitution on and beta-reduction of terms.
 module Janus.Types
   ( Binding(..)
   , BoundEnv
@@ -6,24 +8,18 @@ module Janus.Types
   , ITerm(..)
   , Name(..)
   , Neutral(..)
-  , Result
   , Type
   , TypeEnv
-  , TypeError(..)
   , Value(..)
   , ValueEnv
   , cEval
   , cSubst
   , iEval
-  , iSubst
   , vfree
   , quote0
   ) where
 
 import           Data.Bifunctor                 ( second )
-import           Data.Text.Prettyprint.Doc      ( Doc )
-import           Data.Text.Prettyprint.Doc.Render.Terminal
-                                                ( AnsiStyle )
 import           Janus.Semiring
 
 data Name
@@ -93,14 +89,6 @@ data Binding n u t = Binding
 instance (Show n, Show u, Show t) => Show (Binding n u t) where
   show (Binding n u t) = show u <> " " <> show n <> " : " <> show t
 
-data TypeError
-   =  UsageError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
-   |  ErasureError CTerm ZeroOneMany
-   |  InferenceError (Doc AnsiStyle) Type ITerm
-   |  CheckError Type CTerm
-   |  UnknownVarError Name
-
-type Result = Either TypeError
 type Type = Value
 
 type TypeEnv = [Binding Name ZeroOneMany Type]
@@ -111,59 +99,72 @@ type Context = (ValueEnv, TypeEnv)
 vfree :: Name -> Value
 vfree n = VNeutral (NFree n)
 
-cEval :: CTerm -> (ValueEnv, BoundEnv) -> Value
-cEval (Inf ii)      d = iEval ii d
-cEval (Lam c )      d = VLam (\x -> cEval c $ second (x :) d)
-cEval Universe      _ = VUniverse
-cEval (Pi p ty ty') d = VPi p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
-cEval (MPair c c' ) d = VMPair (cEval c d) (cEval c' d)
-cEval (MPairType p ty ty') d =
-  VMPairType p (cEval ty d) (\x -> cEval ty' $ second (x :) d)
-cEval MUnit        _ = VMUnit
-cEval MUnitType    _ = VMUnitType
-cEval (APair c c') d = VAPair (cEval c d) (cEval c' d)
-cEval (APairType ty ty') d =
-  VAPairType (cEval ty d) (\x -> cEval ty' $ second (x :) d)
-cEval AUnit     _ = VAUnit
-cEval AUnitType _ = VAUnitType
+-- | Evaluate a type-checkable term in a given context.
+--
+-- Context is a pair in which first element contains values of global variables
+-- and second element contains values of local variables.
+cEval :: (ValueEnv, BoundEnv) -> CTerm -> Value
+cEval ctx (Inf ii) = iEval ctx ii
+cEval ctx (Lam c ) = VLam (\x -> cEval (second (x :) ctx) c)
+cEval _   Universe = VUniverse
+cEval ctx (Pi p ty ty') =
+  VPi p (cEval ctx ty) (\x -> cEval (second (x :) ctx) ty')
+cEval ctx (MPair c c') = VMPair (cEval ctx c) (cEval ctx c')
+cEval ctx (MPairType p ty ty') =
+  VMPairType p (cEval ctx ty) (\x -> cEval (second (x :) ctx) ty')
+cEval _   MUnit        = VMUnit
+cEval _   MUnitType    = VMUnitType
+cEval ctx (APair c c') = VAPair (cEval ctx c) (cEval ctx c')
+cEval ctx (APairType ty ty') =
+  VAPairType (cEval ctx ty) (\x -> cEval (second (x :) ctx) ty')
+cEval _ AUnit     = VAUnit
+cEval _ AUnitType = VAUnitType
 
-iEval :: ITerm -> (ValueEnv, BoundEnv) -> Value
-iEval (Ann c _) d = cEval c d
-iEval (Free x ) d = case lookup x (fst d) of
+-- | Evaluate a type-synthesising term in a given context.
+--
+-- Context is a pair in which first element contains values of global variables
+-- and second element contains values of local variables.
+iEval :: (ValueEnv, BoundEnv) -> ITerm -> Value
+iEval ctx (Ann c _) = cEval ctx c
+iEval ctx (Free x ) = case lookup x (fst ctx) of
   Nothing -> vfree x
   Just v  -> v
-iEval (Bound ii) d = snd d !! ii
-iEval (i :$: c ) d = case iEval i d of
-  (VLam     f) -> f val
-  (VNeutral n) -> VNeutral (NApp n val)
-  v            -> error
+iEval ctx (Bound ii) = snd ctx !! ii
+iEval ctx (i :$: c ) = case iEval ctx i of
+  VLam     f -> f val
+  VNeutral n -> VNeutral (NApp n val)
+  v          -> error
     ("internal: Unable to apply " <> show v <> " to the value " <> show val)
-  where val = cEval c d
-iEval (MPairElim i c c') d = case iEval i d of
-  (VMPair x y) -> cEval c (second ([y, x] ++) d)
-  (VNeutral n) -> VNeutral $ NMPairElim
+  where val = cEval ctx c
+iEval ctx (MPairElim i c c') = case iEval ctx i of
+  VMPair x y -> cEval (second ([y, x] ++) ctx) c
+  VNeutral n -> VNeutral $ NMPairElim
     n
-    (\x y -> cEval c $ second ([y, x] ++) d)
-    (\z -> cEval c' $ second (z :) d)
+    (\x y -> cEval (second ([y, x] ++) ctx) c)
+    (\z -> cEval (second (z :) ctx) c')
   v -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
-iEval (MUnitElim i c c') d = case iEval i d of
-  VMUnit -> cEval c d
-  (VNeutral n) ->
-    VNeutral $ NMUnitElim n (cEval c d) (\x -> cEval c' $ second (x :) d)
+iEval ctx (MUnitElim i c c') = case iEval ctx i of
+  VMUnit -> cEval ctx c
+  VNeutral n ->
+    VNeutral $ NMUnitElim n (cEval ctx c) (\x -> cEval (second (x :) ctx) c')
   v -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a unit")
-iEval (Fst i) d = case iEval i d of
-  (VAPair x _) -> x
-  (VNeutral n) -> VNeutral $ NFst n
-  v            -> error
+iEval ctx (Fst i) = case iEval ctx i of
+  VAPair x _ -> x
+  VNeutral n -> VNeutral $ NFst n
+  v          -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
-iEval (Snd i) d = case iEval i d of
-  (VAPair _ y) -> y
-  (VNeutral n) -> VNeutral $ NSnd n
-  v            -> error
+iEval ctx (Snd i) = case iEval ctx i of
+  VAPair _ y -> y
+  VNeutral n -> VNeutral $ NSnd n
+  v          -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
 
+-- | Substitution on type-synthesising terms.
+--
+-- @iSubst i m n@ replaces all occurrences of bound variable @i@ in the term @n@
+-- with the term @m@.
 iSubst :: Int -> ITerm -> ITerm -> ITerm
 iSubst ii i' (Ann c c') = Ann (cSubst ii i' c) (cSubst ii i' c')
 iSubst ii i' (Bound j ) = if ii == j then i' else Bound j
@@ -176,6 +177,10 @@ iSubst ii r (MUnitElim i c c') =
 iSubst ii r (Fst i) = Fst (iSubst ii r i)
 iSubst ii r (Snd i) = Snd (iSubst ii r i)
 
+-- | Substitution on type-checkable terms.
+--
+-- @cSubst i m n@ replaces all occurrences of bound variable @i@ in the term @n@
+-- with the term @m@.
 cSubst :: Int -> ITerm -> CTerm -> CTerm
 cSubst ii i' (Inf i)       = Inf (iSubst ii i' i)
 cSubst ii i' (Lam c)       = Lam (cSubst (ii + 1) i' c)
@@ -192,6 +197,11 @@ cSubst ii r (APairType ty ty') =
 cSubst _ _ AUnit     = AUnit
 cSubst _ _ AUnitType = AUnitType
 
+-- | Convert a value to a term.
+--
+-- This conversion is necessary because 'Value' uses higher-order abstract
+-- syntax, i.e. Haskell functions, to represent data members, so to show or
+-- equate them they are first converted to terms.
 quote0 :: Value -> CTerm
 quote0 = quote 0
 
@@ -213,7 +223,8 @@ quote _ VAUnit     = AUnit
 quote _ VAUnitType = AUnitType
 
 neutralQuote :: Int -> Neutral -> ITerm
-neutralQuote ii (NFree v          ) = boundfree ii v
+neutralQuote ii (NFree (Quote k)  ) = Bound ((ii - k - 1) `max` 0)
+neutralQuote _  (NFree x          ) = Free x
 neutralQuote ii (NApp n v         ) = neutralQuote ii n :$: quote ii v
 neutralQuote ii (NMPairElim n v v') = MPairElim
   (neutralQuote ii n)
@@ -225,8 +236,4 @@ neutralQuote ii (NMUnitElim n v v') = MUnitElim
   (quote (ii + 1) (v' . vfree $ Quote ii))
 neutralQuote ii (NFst n) = Fst (neutralQuote ii n)
 neutralQuote ii (NSnd n) = Snd (neutralQuote ii n)
-
-boundfree :: Int -> Name -> ITerm
-boundfree ii (Quote k) = Bound ((ii - k - 1) `max` 0)
-boundfree _  x         = Free x
 
