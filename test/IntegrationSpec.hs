@@ -134,14 +134,14 @@ cases =
     "Duplication of linear argument"
     ["(λx. (x, x) : ∀ (1 _ : I). (1 _ : I) * I) ()"]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
-    \         [Local 0] : 𝟭ₐ\n\
+    \         [Local 0] : 𝟭ₘ\n\
     \           Used ω-times, but available 1-times."
   , TestCase "Erased multiplicative usage of linear argument"
              ["(λx. (x, x) : ∀ (1 _ : I). (0 _ : I) * I) ()"]
-             "ω ((), ()) : (0 x : 𝟭ₐ) ⊗ 𝟭ₐ"
+             "ω ((), ()) : (0 x : 𝟭ₘ) ⊗ 𝟭ₘ"
   , TestCase "Additive usage of linear argument"
              ["(λx. <x, x> : ∀ (1 _ : I). (_ : I) & I) ()"]
-             "ω ⟨(), ()⟩ : (x : 𝟭ₐ) & 𝟭ₐ"
+             "ω ⟨(), ()⟩ : (x : 𝟭ₘ) & 𝟭ₘ"
   , TestCase
     "Exponential elimination"
     [ "assume (0 a : U) (m : a)"

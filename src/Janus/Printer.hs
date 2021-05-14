@@ -267,7 +267,7 @@ cPrint _ (APair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = add "⟨" <> l <> add "," <+> r <> add "⟩"
 cPrint _ Universe  = return . return $ "U"
 cPrint _ MUnit     = return . return $ mult "()"
-cPrint _ MUnitType = return . return $ mult "𝟭ₐ"
+cPrint _ MUnitType = return . return $ mult "𝟭ₘ"
 cPrint _ AUnit     = return . return $ add "⟨⟩"
 cPrint _ AUnitType = return . return $ add "⊤"
 

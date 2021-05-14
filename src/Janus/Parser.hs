@@ -151,7 +151,7 @@ cTermInner e = choice
   mPairType = do
     T.Binding x q t <- try $ bind e <* (reservedOp "⊗" <|> reservedOp "*")
     MPairType q t <$> cTermWith iTermInner (x : e)
-  mUnitType = MUnitType <$ (reserved "𝟭ₐ" <|> reserved "I")
+  mUnitType = MUnitType <$ (reserved "𝟭ₘ" <|> reserved "I")
   aPair =
     liftM2 (<|>) (between (reservedOp "⟨") (reservedOp "⟩")) (P.angles lang)
       $   APair
