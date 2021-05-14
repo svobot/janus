@@ -1,3 +1,4 @@
+-- | Semiring class and instance definitions
 module Janus.Semiring
   ( Relevance(..)
   , Semiring(..)
@@ -5,15 +6,40 @@ module Janus.Semiring
   , extend
   ) where
 
-data Relevance = Erased | Present deriving (Eq)
+-- | Splits terms into computationally relevant ones and ones that can be used
+-- only to form types.
+data Relevance
+   = -- | Expression has a computational presence.
+     Erased
+   | -- | Expression is only available for formation of types.
+     Present
+  deriving (Eq)
 
+-- | The 'Semiring' class defines the basic operations over a semiring, a set
+-- with two binary operations, '.+.' and '.*.', and two constants, 'zero' and
+-- 'one'.
+--
+-- Instances of 'Semiring' should satisfy the following:
+--
+-- [Addition associativity]  @(a '.+.' b) '.+.' c  =  a '.+.' (b '.+.' c)@
+-- [Addition identity] @'zero' '.+.' a  =  a@
+-- [Addition commutativity]  @a '.+.' b  =  b '.+.' a@
+-- [Multiplication associativity]  @(a '.*.' b) '.*.' c  =  a '.*.' (b '.*.' c)@
+-- [Multiplication identity] @'one' '.*.' a  =  a  =  a '.*.' 'one'@
+-- [Multiplication annihilation] @'zero' '.*.' a  =  'zero'  =  a '.*.' 'zero'@
+-- [Left distributivity] @a '.*.' (b '.+.' c)  =  (a '.*.' b) '.+.' (a '.*.' c)@
+-- [Right distributivity] @(a '.+.' b) '.*.' c  =  (a '.*.' c) '.+.' (b '.*.' c)@
 class Eq s => Semiring s where
-  (.+.), (.*.), lub :: s -> s -> s
+  (.+.), (.*.) :: s -> s -> s
   infixr 6 .+.
   infixr 7 .*.
 
+  -- | Least upper bound of two elements.
+  lub :: s -> s -> s
+
   zero, one :: s
 
+  -- | Compare two elements using the partial ordering.
   fitsIn :: s -> s -> Bool
 
   relevance :: s -> Relevance
