@@ -107,7 +107,7 @@ instance Pretty TypeError where
         <+> "used"
         <+> pretty m
         <>  "-times outside erased context."
-    go (InferenceError expected actual expr) = hardlines
+    go (TypeClashError expected actual expr) = hardlines
       [ "Couldn't match expected type" <+> squotes (pretty expected)
       , indent 12 ("with actual type" <+> squotes (pretty actual))
       , "In the expression:" <+> pretty expr

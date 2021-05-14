@@ -2,16 +2,13 @@
 -- for substitution on and beta-reduction of terms.
 module Janus.Types
   ( Binding(..)
-  , BoundEnv
   , Context
   , CTerm(..)
   , ITerm(..)
-  , Name(..)
-  , Neutral(..)
+  , Name(Global, Local)
   , Type
   , TypeEnv
   , Value(..)
-  , ValueEnv
   , cEval
   , cSubst
   , iEval
@@ -22,38 +19,83 @@ module Janus.Types
 import           Data.Bifunctor                 ( second )
 import           Janus.Semiring
 
+-- | Variable name.
 data Name
-   =  Global String
-   |  Local Int
-   |  Quote Int
+   = -- | Variable that has no binding occurrence in the term, represented by
+     -- its 'String' name.
+     Global String
+   | -- | Variable that has a binding occurrence in the term, represented as
+     -- De Bruijn index.
+     Local Int
+   | -- | Internal constructor used when converting values to terms.
+     Quote Int
   deriving (Show, Eq, Ord)
 
+-- | Type-checkable term.
 data CTerm
-   =  Inf ITerm
-   |  Universe
-   |  Lam CTerm
-   |  Pi ZeroOneMany CTerm CTerm
-   |  MPair CTerm CTerm
-   |  MPairType ZeroOneMany CTerm CTerm
-   |  MUnit
-   |  MUnitType
-   |  APair CTerm CTerm
-   |  APairType CTerm CTerm
-   |  AUnit
-   |  AUnitType
+   = -- | Type-synthesising term is also type-checkable.
+     Inf ITerm
+   | -- | Type of types.
+     Universe
+   | -- | Function abstraction.
+     Lam
+       CTerm -- ^ Body of the function.
+   | -- | Dependent function type.
+     Pi
+       ZeroOneMany -- ^ Multiplicity of the function parameter.
+       CTerm -- ^ Type of the function parameter.
+       CTerm -- ^ Type of the function body.
+   | -- | Dependent multiplicative pair.
+     MPair CTerm CTerm
+   | -- | Dependent multiplicative pair type.
+     MPairType
+       ZeroOneMany -- ^ Multiplicity of the first pair element.
+       CTerm -- ^ Type of the first pair element.
+       CTerm -- ^ Type of the second pair element.
+   | -- | Multiplicative unit.
+     MUnit
+   | -- | Multiplicative unit type.
+     MUnitType
+   | -- | Additive pair.
+     APair CTerm CTerm
+   | -- | Additive pair type.
+     APairType CTerm CTerm
+   | -- | Additive unit.
+     AUnit
+   | -- | Additive unit type.
+     AUnitType
   deriving (Show, Eq)
 
+-- | Type-synthesising term.
 data ITerm
-   =  Ann CTerm CTerm
-   |  Bound Int
-   |  Free Name
-   |  ITerm :$: CTerm
-   |  MPairElim ITerm CTerm CTerm
-   |  MUnitElim ITerm CTerm CTerm
-   |  Fst ITerm
-   |  Snd ITerm
+   = -- | Type-annotated term.
+     Ann
+       CTerm -- ^ Term.
+       CTerm -- ^ Type annotation.
+   | -- De Bruijn index representation of a variable that is bound in the term.
+     Bound Int
+   | -- Free variable represented by its name.
+     Free Name
+   | -- | Function application.
+     ITerm :$: CTerm
+   | -- | Multiplicative pair eliminator.
+     MPairElim
+       ITerm -- ^ Term evaluating into a pair.
+       CTerm -- ^ Term evaluating into the result of the elimination, which has
+             -- the two elements of the pair bound.
+       CTerm -- ^ Type annotation of the result of elimination.
+   | -- | Multiplicative unit eliminator.
+     MUnitElim
+       ITerm -- ^ Term evaluating into a unit.
+       CTerm -- ^ Term evaluating into the result of the elimination.
+       CTerm -- ^ Type annotation of the result of elimination.
+   | -- | Additive pair eliminator evaluating into the first element.
+     Fst ITerm
+   | -- | Additive pair eliminator evaluating into the second element.
+     Snd ITerm
   deriving (Show, Eq)
 
+-- | A term that has been beta-reduced to its normal form.
 data Value
    =  VUniverse
    |  VNeutral Neutral
@@ -71,6 +113,7 @@ data Value
 instance Show Value where
   show = show . quote0
 
+-- | A term whose further beta-reduction depends on a variable.
 data Neutral
    =  NFree Name
    |  NApp Neutral Value
@@ -79,6 +122,7 @@ data Neutral
    |  NFst Neutral
    |  NSnd Neutral
 
+-- | A context element grouping a variable name, its type, and quantity.
 data Binding n u t = Binding
   { bndName  :: n
   , bndUsage :: u
@@ -97,7 +141,7 @@ type BoundEnv = [Value]
 type Context = (ValueEnv, TypeEnv)
 
 vfree :: Name -> Value
-vfree n = VNeutral (NFree n)
+vfree = VNeutral . NFree
 
 -- | Evaluate a type-checkable term in a given context.
 --
@@ -132,7 +176,7 @@ iEval ctx (Free x ) = case lookup x (fst ctx) of
 iEval ctx (Bound ii) = snd ctx !! ii
 iEval ctx (i :$: c ) = case iEval ctx i of
   VLam     f -> f val
-  VNeutral n -> VNeutral (NApp n val)
+  VNeutral n -> VNeutral $ NApp n val
   v          -> error
     ("internal: Unable to apply " <> show v <> " to the value " <> show val)
   where val = cEval ctx c
@@ -206,34 +250,33 @@ quote0 :: Value -> CTerm
 quote0 = quote 0
 
 quote :: Int -> Value -> CTerm
-quote ii (VLam t)  = Lam (quote (ii + 1) (t . vfree $ Quote ii))
-quote _  VUniverse = Universe
-quote ii (VPi p v f) =
-  Pi p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
+quote ii (VLam t)      = Lam $ quote (ii + 1) (t $ quoteArg ii)
+quote _  VUniverse     = Universe
+quote ii (VPi p v f  ) = Pi p (quote ii v) $ quote (ii + 1) (f $ quoteArg ii)
 quote ii (VNeutral n ) = Inf $ neutralQuote ii n
 quote ii (VMPair v v') = MPair (quote ii v) (quote ii v')
 quote ii (VMPairType p v f) =
-  MPairType p (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
+  MPairType p (quote ii v) $ quote (ii + 1) (f $ quoteArg ii)
 quote _  VMUnit        = MUnit
 quote _  VMUnitType    = MUnitType
 quote ii (VAPair v v') = APair (quote ii v) (quote ii v')
 quote ii (VAPairType v f) =
-  APairType (quote ii v) (quote (ii + 1) (f . vfree $ Quote ii))
+  APairType (quote ii v) $ quote (ii + 1) (f $ quoteArg ii)
 quote _ VAUnit     = AUnit
 quote _ VAUnitType = AUnitType
 
 neutralQuote :: Int -> Neutral -> ITerm
-neutralQuote ii (NFree (Quote k)  ) = Bound ((ii - k - 1) `max` 0)
+neutralQuote ii (NFree (Quote k)  ) = Bound $ (ii - k - 1) `max` 0
 neutralQuote _  (NFree x          ) = Free x
 neutralQuote ii (NApp n v         ) = neutralQuote ii n :$: quote ii v
 neutralQuote ii (NMPairElim n v v') = MPairElim
   (neutralQuote ii n)
-  (quote (ii + 2) $ v (vfree $ Quote ii) (vfree $ Quote (ii + 1)))
-  (quote (ii + 1) (v' . vfree $ Quote ii))
-neutralQuote ii (NMUnitElim n v v') = MUnitElim
-  (neutralQuote ii n)
-  (quote ii v)
-  (quote (ii + 1) (v' . vfree $ Quote ii))
-neutralQuote ii (NFst n) = Fst (neutralQuote ii n)
-neutralQuote ii (NSnd n) = Snd (neutralQuote ii n)
+  (quote (ii + 2) $ v (quoteArg ii) (quoteArg $ ii + 1))
+  (quote (ii + 1) (v' $ quoteArg ii))
+neutralQuote ii (NMUnitElim n v v') =
+  MUnitElim (neutralQuote ii n) (quote ii v) $ quote (ii + 1) (v' $ quoteArg ii)
+neutralQuote ii (NFst n) = Fst $ neutralQuote ii n
+neutralQuote ii (NSnd n) = Snd $ neutralQuote ii n
 
+quoteArg :: Int -> Value
+quoteArg = vfree . Quote

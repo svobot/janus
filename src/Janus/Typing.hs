@@ -1,7 +1,7 @@
 -- | Implementation of the typing algorithm.
 --
--- This module exports single function, @synthesise@, which implements
--- the derivation of type synthesis judgment.
+-- This module exports the @synthesise@ function, which synthesises the type of
+-- a given term, according to the typing rules described in our paper.
 module Janus.Typing
   ( ExpectedType(..)
   , Result
@@ -28,10 +28,10 @@ import           Janus.Types
 
 -- | Record of bound variables.
 data TypingConfig = TypingConfig
-  { cfgGlobalContext :: Context -- ^ Variables which have been bound in some
-                                -- previous term.
-  , cfgBoundLocals   :: TypeEnv -- ^ Variables which have a binding occurrence
-                                -- in the currently judged term.
+  { -- | Variables which have been bound in some previous term.
+    cfgGlobalContext :: Context
+  , -- | Variables which have a binding occurrence in the currently judged term.
+    cfgBoundLocals   :: TypeEnv
   }
 
 -- | Add new variable binding to the local environment.
@@ -88,18 +88,29 @@ checkUsage env = toMaybe . mapMaybe notEnough . Map.toList
   toMaybe [] = Nothing
   toMaybe es = Just es
 
+-- | Expected type of a term during a type clash error.
 data ExpectedType = FnAppExp | MPairExp | APairExp | TypeExp Type
 
+-- | Errors that can arise during the typing algorithm.
 data TypeError
-   =  UsageError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
-   |  ErasureError CTerm ZeroOneMany
-   |  InferenceError ExpectedType Type ITerm
-   |  CheckError Type CTerm
-   |  UnknownVarError Name
+   = -- | Usage of a variable in the term is incompatible with the available
+     -- quantity of that variable in the context. We can report list of multiple
+     -- incompatible variables at once.
+     UsageError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
+   | -- | Type has a computational presence.
+     ErasureError CTerm ZeroOneMany
+   | -- | Type synthesised from the term doesn't match type the rule expects.
+     TypeClashError ExpectedType Type ITerm
+   | -- | No typing rule was applicable for the given combination of term and
+     -- type.
+     CheckError Type CTerm
+   | -- | Term uses a variable that is missing in the context.
+     UnknownVarError Name
 
 type Result = Either TypeError
 
--- | Synthesise the type of a term.
+-- | Synthesise the type of a term and check that context has appropriate
+-- resources available for the term.
 synthesise :: Context -> ZeroOneMany -> ITerm -> Result Type
 synthesise ctx s m = do
   (qs, tp) <- first (Map.map (s .*.))
@@ -128,13 +139,13 @@ synthType s (m :$: n) = do
         sp ->
           Map.unionWith (.+.) qs1 . Map.map (sp .*.) <$> checkType Present n ty
       (qs, ) . ty' <$> evalInEnv n
-    ty -> throwError $ InferenceError FnAppExp ty (m :$: n)
+    ty -> throwError $ TypeClashError FnAppExp ty (m :$: n)
 synthType s (MPairElim m n o) = do
   (qs1, mTy) <- synthType s m
   case mTy of
     zTy@(VMPairType p xTy yTy) -> do
       z <- newLocalVar zero zTy
-      local (with z) $ checkTypeErased (cSubst 0 (Free $ bndName z) o) VUniverse
+      local (with z) $ checkTypeErased (sub 0 z o) VUniverse
       let s' = extend s
       x  <- newLocalVar (p .*. s') xTy
       qs <- withLocalVar "First element of the pair elimination" x $ do
@@ -142,16 +153,13 @@ synthType s (MPairElim m n o) = do
         withLocalVar "Second element of the pair elimination" y $ do
           oxy <- evalInEnv
             $ cSubst 0 (Ann (MPair (ifn x) (ifn y)) $ quote0 zTy) o
-          qs2 <- checkTypeSubst x y oxy
+          qs2 <- checkType s (sub 1 x . sub 0 y $ n) oxy
           return $ Map.unionWith (.+.) qs1 qs2
       (qs, ) <$> evalInEnv (cSubst 0 m o)
-    ty -> throwError $ InferenceError MPairExp ty (MPairElim m n o)
+    ty -> throwError $ TypeClashError MPairExp ty (MPairElim m n o)
  where
   ifn = Inf . Free . bndName
-  checkTypeSubst x y oxy = checkType
-    s
-    (cSubst 1 (Free $ bndName x) . cSubst 0 (Free $ bndName y) $ n)
-    oxy
+  sub i = cSubst i . Free . bndName
 synthType s (MUnitElim m n o) = do
   (qs1, mTy) <- synthType s m
   case mTy of
@@ -161,17 +169,17 @@ synthType s (MUnitElim m n o) = do
       ox  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) o)
       qs2 <- checkType s n ox
       (Map.unionWith (.+.) qs1 qs2, ) <$> evalInEnv (cSubst 0 m o)
-    ty -> throwError $ InferenceError (TypeExp VMUnitType) ty (MUnitElim m n o)
+    ty -> throwError $ TypeClashError (TypeExp VMUnitType) ty (MUnitElim m n o)
 synthType s (Fst m) = do
   (qs, ty) <- synthType s m
   case ty of
     VAPairType t1 _ -> return (qs, t1)
-    _               -> throwError $ InferenceError APairExp ty (Fst m)
+    _               -> throwError $ TypeClashError APairExp ty (Fst m)
 synthType s (Snd m) = do
   (qs, ty) <- synthType s m
   case ty of
     VAPairType _ t2 -> (qs, ) . t2 <$> evalInEnv (Inf $ Fst m)
-    _               -> throwError $ InferenceError APairExp ty (Snd m)
+    _               -> throwError $ TypeClashError APairExp ty (Snd m)
 synthType _ i@(Bound _) =
   error $ "internal: Trying to infer type of " <> show i
 
@@ -180,7 +188,7 @@ checkType :: Relevance -> CTerm -> Type -> Judgment Usage
 checkType s (Inf m) ty = do
   (qs, ty') <- synthType s m
   unless (((==) `on` quote0) ty ty')
-         (throwError $ InferenceError (TypeExp ty) ty' m)
+         (throwError $ TypeClashError (TypeExp ty) ty' m)
   return qs
 checkType s (Lam m) (VPi p ty ty') = do
   x <- newLocalVar (p .*. extend s) ty
@@ -241,11 +249,11 @@ checkTypeErased m ty = do
   errs <- Map.filter (/= zero) <$> checkType Erased m ty
   -- Having a non-zero usage of a variable in the erased context means that
   -- there is something wrong with the type checking algorithm; throw an error.
-  unless (Map.null errs)
-    . error
-    . unlines
+  unless (Map.null errs) $ error
+    ( unlines
     $ "internal: Variables used in the erased context:"
     : [ "    " <> show k <> " used " <> show q <> "-times"
       | (k, q) <- Map.toList errs
       ]
+    )
 

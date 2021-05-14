@@ -58,8 +58,8 @@ cases =
     ( []
     , [ Binding (Global "a") Zero VUniverse
       , Binding (Global "b") Zero VUniverse
-      , Binding (Global "x") One  (VNeutral . NFree $ Global "a")
-      , Binding (Global "y") Many (VNeutral . NFree $ Global "b")
+      , Binding (Global "x") One  (vfree $ Global "a")
+      , Binding (Global "y") Many (vfree $ Global "b")
       ]
     )
     One
@@ -139,8 +139,8 @@ cases =
     ( []
     , [ Binding (Global "a") Zero VUniverse
       , Binding (Global "b") Zero VUniverse
-      , Binding (Global "x") One  (VNeutral . NFree $ Global "a")
-      , Binding (Global "y") One  (VNeutral . NFree $ Global "b")
+      , Binding (Global "x") One  (vfree $ Global "a")
+      , Binding (Global "y") One  (vfree $ Global "b")
       ]
     )
 
