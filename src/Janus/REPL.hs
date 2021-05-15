@@ -304,11 +304,8 @@ handleStmt stmt = case stmt of
     ctx <- gets context
     mty <- iinfer ctx q t
     forM_ mty $ \ty -> do
-      let val = iEval (fst ctx, []) t
-      let outdoc =
-            pretty q
-              <+> maybe mempty ((<+> "= ") . var . pretty . T.pack) mn
-              <>  pretty (Ann (quote0 val) (quote0 ty))
+      let val    = iEval (fst ctx, []) t
+      let outdoc = prettyResult q mn val ty
       outputDoc outdoc
       out <- gets outFile
       unless (null out) $ do

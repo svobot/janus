@@ -3,15 +3,10 @@
 
 module Janus.Printer
   ( Doc
-  , Pretty
-  , (<+>)
-  , add
-  , hardlines
-  , mult
-  , pretty
+  , Pretty(..)
   , render
   , renderString
-  , var
+  , prettyResult
   ) where
 
 import           Control.Monad.Reader           ( MonadReader(local)
@@ -25,7 +20,9 @@ import           Control.Monad.Writer.Strict    ( MonadWriter(tell)
                                                 )
 import           Data.List                      ( intersperse )
 import qualified Data.Set                      as Set
-import           Data.Text                      ( Text )
+import           Data.Text                      ( Text
+                                                , pack
+                                                )
 import           Data.Text.Prettyprint.Doc
                                          hiding ( Doc
                                                 , Pretty(..)
@@ -39,8 +36,10 @@ import           Janus.Semiring                 ( ZeroOneMany(..) )
 import           Janus.Types
 import           Janus.Typing
 
+-- | Abstract type of documents annotated with the ANSI terminal colors.
 type Doc = PP.Doc Term.AnsiStyle
 
+-- | Conversion to 'Doc'.
 class Pretty a where
   pretty :: a -> Doc
 
@@ -113,14 +112,25 @@ instance Pretty TypeError where
       , "In the expression:" <+> pretty expr
       ]
     go (CheckError ty expr) = hardlines
-      [ "Could't match expected type" <+> squotes (pretty ty)
+      [ "Couldn't match expected type" <+> squotes (pretty ty)
       , "In the expression:" <+> pretty expr
       ]
     go (UnknownVarError n) = "Variable not in scope: " <> pretty (Free n)
 
+-- | Convert the output of term evaluation into the 'Doc' form.
+prettyResult :: ZeroOneMany -> Maybe String -> Value -> Value -> Doc
+prettyResult q mn val ty =
+  pretty q <+> maybe mempty ((<+> "= ") . var . pretty . pack) mn <> pretty
+    (Ann (quote0 val) (quote0 ty))
+
+-- | Render the document into 'Text' containing the ANSI color escape sequences.
+-- The output of this function is intended to be displayed to the user.
 render :: Doc -> Text
 render = Term.renderStrict . layoutSmart defaultLayoutOptions
 
+-- | Render the document into 'String' with the ANSI color escape sequences
+-- stripped. The output of this function is intended to be used in the
+-- interpreter tests where color would be unnecessarily complicating things.
 renderString :: Doc -> String
 renderString = PPS.renderString . layoutSmart defaultLayoutOptions . unAnnotate
 
@@ -131,6 +141,8 @@ parensIf :: Bool -> Doc -> Doc
 parensIf True  = parens
 parensIf False = id
 
+-- | 'Printer' monad keeps track of used names in a term and makes sure that new
+-- names created when replacing De Bruijn indices of bound variables are unique.
 type Printer doc = Writer FreeVars (Reader (NameEnv doc) doc)
 
 type FreeVars = Set.Set String
@@ -140,6 +152,12 @@ data NameEnv doc = NameEnv
   , bound :: [doc]
   }
 
+-- | Convert a term into a 'Doc'.
+--
+-- 'Writer' first accumulates names of free variables that are used in
+-- the printed document and then creates a 'Reader' environment which
+-- distributes non-clashing names to bound variables that are being converted
+-- from De Bruijn indices.
 runPrinter :: (a -> Printer Doc) -> a -> Doc
 runPrinter printer term = runReader r (NameEnv freshNames [])
  where
@@ -153,13 +171,16 @@ runPrinter printer term = runReader r (NameEnv freshNames [])
     , (c : n) `Set.notMember` freeVars
     ]
 
+-- | Skip binding one variable in the 'Reader' environment.
 skip :: Int -> NameEnv a -> NameEnv a
 skip i env = env { fresh = drop i $ fresh env }
 
+-- | Make a new 'Reader' environment with a new variable bound.
 bind :: NameEnv a -> NameEnv a
 bind (NameEnv (new : fs) bs) = NameEnv fs (new : bs)
 bind _                       = error "internal: No new variable name available."
 
+-- | Make a new 'Reader' environment with multiple new variables bound.
 bindMany :: Int -> NameEnv a -> NameEnv a
 bindMany n (NameEnv as bs) = NameEnv (drop n as) (reverse (take n as) ++ bs)
 
