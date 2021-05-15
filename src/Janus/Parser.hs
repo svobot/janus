@@ -1,3 +1,4 @@
+-- | Parser for the Janus language.
 module Janus.Parser
   ( Binding
   , Stmt(..)
@@ -24,31 +25,37 @@ import qualified Text.Parsec.Token             as P
 
 type Binding = T.Binding String ZeroOneMany CTerm
 
+-- | Statement in the Janus language.
 data Stmt
-  = Let ZeroOneMany String ITerm --  let x = t
-  | Assume [Binding]             --  assume x :: t, assume x :: *
+  = Let ZeroOneMany String ITerm
+  | Assume [Binding]
   | Eval ZeroOneMany ITerm
   | PutStrLn String --  lhs2TeX hacking, allow to print "magic" string
   | Out String      --  more lhs2TeX hacking, allow to print to files
   deriving (Show, Eq)
 
+-- | Language definition derived from the Haskell syntax.
 lang :: P.TokenParser u
 lang = P.makeTokenParser $ haskellStyle
-  { P.identStart      = satisfy (\c -> notElem @[] c "λ∀ω𝘜" && isAlpha c)
+  { P.identStart      = satisfy (\c -> notElem @[] c "λₘω𝘜" && isAlpha c)
                           <|> char '_'
-  , P.reservedNames   = keywords ++ ["<>", "()", "ω", "𝘜", "𝟭ₐ", "⊤"]
+  , P.reservedNames   = keywords ++ ["<>", "()", "ω", "𝘜", "𝟭ₘ", "⊤"]
   , P.reservedOpNames = "->" : map pure ":=\\λ.*&@∀,→⊗⟨⟩"
   }
 
+-- | Keywords reserved in the language.
 keywords :: [String]
 keywords = words "assume putStrLn out forall let in U I fst snd T"
 
+-- | Parse a statement.
 evalParser :: String -> Either ParseError Stmt
 evalParser = parse (P.whiteSpace lang *> stmt <* eof) "<interactive>"
 
+-- | Parse a Janus expression.
 typeParser :: String -> Either ParseError (ZeroOneMany, ITerm)
 typeParser = parse (P.whiteSpace lang *> eval (,) <* eof) "<interactive>"
 
+-- | Parse multiple consecutive statements.
 fileParser :: SourceName -> String -> Either ParseError [Stmt]
 fileParser = parse (P.whiteSpace lang *> many stmt <* eof)
 
@@ -61,6 +68,7 @@ reserved, reservedOp :: String -> CharParser ()
 reserved = P.reserved lang
 reservedOp = P.reservedOp lang
 
+-- | Generate a parser of a single statement.
 stmt :: CharParser Stmt
 stmt = choice [define, assume, putstr, out, eval Eval]
  where
@@ -179,6 +187,7 @@ bind e =
     <*  reservedOp ":"
     <*> cTerm e
 
+-- | Parse multiple consecutive variable bindings.
 bindings :: Bool -> [String] -> CharParser [Binding]
 bindings bound = fmap snd . flip go [] where
   go :: [String] -> [Binding] -> CharParser ([String], [Binding])
