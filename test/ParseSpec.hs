@@ -70,7 +70,7 @@ stmtCases =
   , TestCase
     "Assumption"
     [ "assume (0 a : U) (1 x : a) (many : U)"
-    , "assume (0 a : U) (1 x : a) (ω many : U)"
+    , "assume (0 a : 𝘜) (1 x : a) (ω many : 𝘜)"
     ]
     (good $ Assume
       [ Binding "a"    Zero Universe

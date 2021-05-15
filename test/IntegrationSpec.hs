@@ -79,7 +79,7 @@ cases =
   [ TestCase
     "Identity application"
     [ "assume (0 a : U) (1 x : a)"
-    , "let 1 id = (\\x. \\y. y : (0 x : U) -> (1 y : x) -> x) a x"
+    , "let 1 id = (\\x. \\y. y : (0 x : 𝘜) -> (1 y : x) -> x) a x"
     ]
     "1 id = x : a"
   , TestCase "Unknown variable"
@@ -157,6 +157,19 @@ cases =
     , "ofcElim a (λexp. (w _ : a) * a) (m, ()) (λm'. (m', m'))"
     ]
     "ω (m, m) : (ω x : a) ⊗ a"
+  , TestCase
+    ""
+    [ "assume (0 a : U) (m : a)"
+    , "0 (λi. fst i : (i : (j : U) & j) -> U) <a, m>"
+    ]
+    "0 a : 𝘜"
+  , TestCase "Type erasure"
+             ["let 1 pair = (x : U) & U : U"]
+             "error: Type '(x : 𝘜) & 𝘜' used 1-times outside erased context."
+  , TestCase
+    "Dependent additive pair elimination"
+    ["assume (0 a : U) (0 s : a)", "let 0 res = snd (<a,s> : (a : U) & a)"]
+    "0 res = s : a"
   ]
 
 prettyCases :: [TestCase]
@@ -170,7 +183,7 @@ prettyCases =
     \              . a"
     ]
     "0 proj1 = (λx y z. let c @ a, b = z in a : x)\n\
-    \          : ∀ (0 x : U) (0 y : (0 a : x) → U) (0 z : (0 a : x) ⊗ y a) . x"
+    \          : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (0 z : (0 a : x) ⊗ y a) . x"
   , TestCase
     "Multiplicative pair second element projection"
     [ "let 0 proj1 = λa b p. let z @ x, y = p in x : a\n\
@@ -185,11 +198,11 @@ prettyCases =
     \              . b (proj1 a b p)"
     ]
     "0 proj2 = (λx y z. let c @ a, b = z in b : y (let f @ d, e = c in d : x))\n\
-    \          : ∀ (0 x : U) (0 y : (0 a : x) → U) (0 z : (0 a : x) ⊗ y a)\n\
+    \          : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (0 z : (0 a : x) ⊗ y a)\n\
     \            . y (let c @ a, b = z in a : x)"
   , TestCase "SKI Calculus (I combinator)"
              ["let w Id = λ_ x. x : ∀ (0 a : U) (1 _ : a) . a"]
-             "ω Id = (λx y. y) : ∀ (0 x : U) (1 y : x) . x"
+             "ω Id = (λx y. y) : ∀ (0 x : 𝘜) (1 y : x) . x"
   , TestCase
     "SKI Calculus (K combinator)"
     [ "let w K = (λ_ _ x _. x)\n\
@@ -200,7 +213,7 @@ prettyCases =
     \          . a"
     ]
     "ω K = (λx y z a. z)\n\
-    \      : ∀ (0 x : U) (0 y : (0 b : x) → U) (1 z : x) (ω a : y z) . x"
+    \      : ∀ (0 x : 𝘜) (0 y : (0 b : x) → 𝘜) (1 z : x) (ω a : y z) . x"
   , TestCase
     "SKI Calculus (S combinator)"
     [ "let w S = ((λa b c x y z. x z (y z))\n\
@@ -213,9 +226,9 @@ prettyCases =
     \          . c z (y z))"
     ]
     "ω S = (λx y z a b c. a c (b c))\n\
-    \      : ∀ (0 x : U)\n\
-    \          (0 y : (0 d : x) → U)\n\
-    \          (0 z : ∀ (0 d : x) (0 e : y d) . U)\n\
+    \      : ∀ (0 x : 𝘜)\n\
+    \          (0 y : (0 d : x) → 𝘜)\n\
+    \          (0 z : ∀ (0 d : x) (0 e : y d) . 𝘜)\n\
     \          (1 a : ∀ (ω d : x) (1 e : y d) . z d e)\n\
     \          (1 b : (ω d : x) → y d)\n\
     \          (ω c : x)\n\
