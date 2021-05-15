@@ -75,10 +75,10 @@ instance (Pretty n, Pretty q, Pretty t) => Pretty (Binding n q t) where
     where rest = var (pretty n) <> line <> ":" <+> pretty t
 
 instance Pretty ExpectedType where
-  pretty FnAppExp     = "_ -> _"
-  pretty MPairExp     = "_" <+> mult "*" <+> "_"
-  pretty APairExp     = "_" <+> add "&" <+> "_"
-  pretty (TypeExp ty) = pretty ty
+  pretty SomePi         = "_ -> _"
+  pretty SomeMPair      = "_" <+> mult "*" <+> "_"
+  pretty SomeAPair      = "_" <+> add "&" <+> "_"
+  pretty (KnownType ty) = pretty ty
 
 instance Pretty TypeError where
   pretty err = annotate (Term.color Term.Red <> Term.bold) "error:"

@@ -88,8 +88,8 @@ checkUsage env = toMaybe . mapMaybe notEnough . Map.toList
   toMaybe [] = Nothing
   toMaybe es = Just es
 
--- | Expected type of a term during a type clash error.
-data ExpectedType = FnAppExp | MPairExp | APairExp | TypeExp Type
+-- | Type the term was expected to have during a type clash error.
+data ExpectedType = SomePi | SomeMPair | SomeAPair | KnownType Type
 
 -- | Errors that can arise during the typing algorithm.
 data TypeError
@@ -139,7 +139,7 @@ synthType s (m :$: n) = do
         sp ->
           Map.unionWith (.+.) qs1 . Map.map (sp .*.) <$> checkType Present n ty
       (qs, ) . ty' <$> evalInEnv n
-    ty -> throwError $ TypeClashError FnAppExp ty (m :$: n)
+    ty -> throwError $ TypeClashError SomePi ty (m :$: n)
 synthType s (MPairElim m n o) = do
   (qs1, mTy) <- synthType s m
   case mTy of
@@ -156,7 +156,7 @@ synthType s (MPairElim m n o) = do
           qs2 <- checkType s (sub 1 x . sub 0 y $ n) oxy
           return $ Map.unionWith (.+.) qs1 qs2
       (qs, ) <$> evalInEnv (cSubst 0 m o)
-    ty -> throwError $ TypeClashError MPairExp ty (MPairElim m n o)
+    ty -> throwError $ TypeClashError SomeMPair ty (MPairElim m n o)
  where
   ifn = Inf . Free . bndName
   sub i = cSubst i . Free . bndName
@@ -169,17 +169,18 @@ synthType s (MUnitElim m n o) = do
       ox  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) o)
       qs2 <- checkType s n ox
       (Map.unionWith (.+.) qs1 qs2, ) <$> evalInEnv (cSubst 0 m o)
-    ty -> throwError $ TypeClashError (TypeExp VMUnitType) ty (MUnitElim m n o)
+    ty ->
+      throwError $ TypeClashError (KnownType VMUnitType) ty (MUnitElim m n o)
 synthType s (Fst m) = do
   (qs, ty) <- synthType s m
   case ty of
     VAPairType t1 _ -> return (qs, t1)
-    _               -> throwError $ TypeClashError APairExp ty (Fst m)
+    _               -> throwError $ TypeClashError SomeAPair ty (Fst m)
 synthType s (Snd m) = do
   (qs, ty) <- synthType s m
   case ty of
     VAPairType _ t2 -> (qs, ) . t2 <$> evalInEnv (Inf $ Fst m)
-    _               -> throwError $ TypeClashError APairExp ty (Snd m)
+    _               -> throwError $ TypeClashError SomeAPair ty (Snd m)
 synthType _ i@(Bound _) =
   error $ "internal: Trying to infer type of " <> show i
 
@@ -188,7 +189,7 @@ checkType :: Relevance -> CTerm -> Type -> Judgment Usage
 checkType s (Inf m) ty = do
   (qs, ty') <- synthType s m
   unless (((==) `on` quote0) ty ty')
-         (throwError $ TypeClashError (TypeExp ty) ty' m)
+         (throwError $ TypeClashError (KnownType ty) ty' m)
   return qs
 checkType s (Lam m) (VPi p ty ty') = do
   x <- newLocalVar (p .*. extend s) ty
