@@ -68,7 +68,7 @@ spec = do
   evalTestCase i =
     flip evalStateT (IState "" ([], [])) . flip execStateT (i, []) $ do
       st <- gets fst
-      mapM_ (runIO . compilePhrase) st
+      mapM_ (runIO . compileStmt) st
 
   run c = it (desc c) $ do
     (_, out) <- evalTestCase $ input c
