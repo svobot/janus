@@ -3,11 +3,11 @@
 
 -- | REPL interface for the Janus language.
 --
--- Interpreter recognises commands which specify what action the used requested.
--- The user input takes the form @:command \<args\>@, where a command is
--- identified by the leading colon. Commands can only occur at the beginning of
--- an input and they are followed by arguments to this command. Janus
--- interpreter supports the following commands:
+-- Interpreter reads user's input, evaluates it, and prints the result in
+-- an infinite loop. The input can either be a statement, see below, or
+-- a command. Commands are identified by a leading colon. Some commands expect
+-- arguments, which should follow the command. Janus interpreter supports
+-- the following commands:
 --
 --   * /load/ takes a file path and it opens the file and evaluates its
 --   contents.
@@ -21,44 +21,58 @@
 --
 --   * /help/ shows a short description of the interpreter's features.
 --
--- If no command is specified, interpreter expects the input to be a statement,
--- which is evaluated, and the result is printed out.
+-- For example, the following command loads the contents of the file
+-- /library.jns/:
+--
+-- @
+-- >>> :load library.jns
+-- /... output produced by the evaluation of terms read from the file .../
+-- @
 --
 -- === Statements
 --
--- Interpreter recognises these statements:
+-- If no command is specified, interpreter expects the input to be a statement,
+-- which is evaluated, and the result is printed out. Statements are:
 --
 --   * /assume/ introduces new names and adds them to the context, subsequent
 --   Janus terms will have these variables in scope.
 --
---   > >>> assume ([usage] <var> : <expr>) [...]
---   >                │      │       │       │
---   >                │      │       │       └─── Multiple variables can be added
---   >                │      │       │            to context at the same time.
---   >                │      │       └─────────── Janus term which defines the type.
---   >                │      └─────────────────── Name of the new variable.
---   >                └────────────────────────── Multiplicity of the variable.
---   >                                            This is optional and when omitted,
---   >                                            interpreter defaults to ω.
+-- @
+-- >>> assume (/usage/ /name/ : /term/) /.../
+--               │    │      │     │
+--               │    │      │     └─ Multiple variables can be added
+--               │    │      │        to context at the same time.
+--               │    │      └─────── Janus term which defines the type.
+--               │    └────────────── Name of the new variable.
+--               └─────────────────── Multiplicity of the variable.
+--                                    This is optional and when omitted,
+--                                    interpreter defaults to ω.
+-- @
 --
 --   * /let/ defines a new variable and assigns it a result of evaluated Janus
 --   term.
 --
---   > >>> let [usage] <var> = <expr>
---   >            │      │       │
---   >            │      │       └─── Janus term which creates the value.
---   >            │      └─────────── Name of the new variable.
---   >            └────────────────── Multiplicity of the variable. This is optional
---   >                                and when omitted, interpreter defaults to ω.
+-- @
+-- >>> let /usage/ /name/ = /term/
+--           │    │      │
+--           │    │      └─────────── Janus term which creates the value.
+--           │    └────────────────── Name of the new variable.
+--           └─────────────────────── Multiplicity of the variable.
+--                                    This is optional and when omitted,
+--                                    interpreter defaults to ω.
+-- @
 --
 --   * /eval/ statement is a Janus expression which get evaluated and its result
 --   is printed. /eval/ has no effect on variables in scope.
 --
---   > >>> [usage] <expr>
---   >        │      │
---   >        │      └─── Janus term which creates the value.
---   >        └────────── Multiplicity of the result. This is optional and when
---   >                    omitted, interpreter defaults to ω.
+-- @
+-- >>> /usage/ /term/
+--       │    │
+--       │    └────────────────────── Janus term which creates the value.
+--       └─────────────────────────── Multiplicity of the result.
+--                                    This is optional and when omitted,
+--                                    interpreter defaults to ω.
+-- @
 --
 -- === An example of an interactive programming session
 --
