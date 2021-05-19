@@ -30,8 +30,6 @@ data Stmt
   = Let ZeroOneMany String ITerm
   | Assume [Binding]
   | Eval ZeroOneMany ITerm
-  | PutStrLn String --  lhs2TeX hacking, allow to print "magic" string
-  | Out String      --  more lhs2TeX hacking, allow to print to files
   deriving (Show, Eq)
 
 -- | Language definition derived from the Haskell syntax.
@@ -70,14 +68,12 @@ reservedOp = P.reservedOp lang
 
 -- | Generate a parser of a single statement.
 stmt :: CharParser Stmt
-stmt = choice [define, assume, putstr, out, eval Eval]
+stmt = choice [define, assume, eval Eval]
  where
   define =
     try (Let <$> (reserved "let" *> semiring) <*> identifier <* reserved "=")
       <*> iTerm []
   assume = Assume . reverse <$> (reserved "assume" *> bindings False [])
-  putstr = PutStrLn <$> (reserved "putStrLn" *> P.stringLiteral lang)
-  out    = Out <$> (reserved "out" *> option "" (P.stringLiteral lang))
 
 eval :: (ZeroOneMany -> ITerm -> a) -> CharParser a
 eval f = f <$> semiring <*> iTerm []

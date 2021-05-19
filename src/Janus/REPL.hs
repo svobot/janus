@@ -115,8 +115,8 @@
 -- >           Used ω-times, but available 1-times.
 --
 module Janus.REPL
-  ( IState(..)
-  , MonadAbstractIO(..)
+  ( MonadAbstractIO(..)
+  , AbstractRepl
   , compileStmt
   , repl
   ) where
@@ -146,7 +146,6 @@ import           Data.List                      ( dropWhileEnd
                                                 , nubBy
                                                 )
 import           Data.Maybe                     ( isNothing )
-import qualified Data.Text                     as T
 import qualified Data.Text.IO                  as T
 import           Janus.Parser
 import           Janus.Printer
@@ -161,23 +160,20 @@ import           Text.Parsec                    ( ParseError )
 class (Monad m) => MonadAbstractIO m where
   output :: String -> m ()
   outputDoc :: Doc -> m ()
-  outputFile :: FilePath -> T.Text -> m ()
 
 instance (Monad m, MonadIO m) => MonadAbstractIO (HaskelineT m) where
-  output     = liftIO . putStrLn
-  outputDoc  = liftIO . T.putStrLn . render
-  outputFile = (liftIO .) . T.writeFile
+  output    = liftIO . putStrLn
+  outputDoc = liftIO . T.putStrLn . render
 
--- | State of the interpreter, which holds the types and values of previously
--- evaluated expressions.
-data IState = IState
-  { outFile :: String
-  , context :: Context
-  }
+-- | 'HaskelineT' monad transformer that handles the input and holds the state
+-- of the interpreter.
+--
+-- State contains the context used in typing judgments and values defined by
+-- the /let/ statements.
+type Repl = HaskelineT (StateT Context IO)
 
-type Repl = HaskelineT (StateT IState IO)
-
-type AbstractRepl m = (MonadState IState m, MonadAbstractIO m)
+-- | Type synonym for the constraints on the type of the REPL monad transformer.
+type AbstractRepl m = (MonadState Context m, MonadAbstractIO m)
 
 -- | Character which identifies a command.
 --
@@ -204,9 +200,9 @@ commandCompleter n =
     $ commands
 
 -- | Complete a known variable or a keyword.
-byWord :: (MonadState IState m) => WordCompleter m
+byWord :: (MonadState Context m) => WordCompleter m
 byWord n = do
-  env <- gets $ snd . context
+  env <- gets snd
   let scope = [ s | Global s <- reverse . nub $ map bndName env ]
   return . filter (n `isPrefixOf`) $ scope ++ keywords
 
@@ -250,14 +246,14 @@ help _ = liftIO $ do
 typeOf :: Cmd Repl
 typeOf s = do
   mx  <- parseIO typeParser s
-  ctx <- gets context
+  ctx <- get
   t   <- maybe (return Nothing) (uncurry (iinfer ctx)) mx
   mapM_ (liftIO . T.putStrLn . render . pretty) t
 
 -- | Print types of variables in the context.
 browse :: Cmd Repl
 browse _ = do
-  env <- gets $ snd . context
+  env <- gets snd
   mapM_ (liftIO . T.putStrLn . render . pretty)
     . reverse
     . map (\b -> b { bndName = vfree $ bndName b })
@@ -297,37 +293,27 @@ parseIO p x = case p x of
 -- | Perform an action specified by the statement.
 handleStmt :: AbstractRepl m => Stmt -> m ()
 handleStmt stmt = case stmt of
-  Assume bs  -> mapM_ assume bs
-  Let q x e  -> checkEval q (Just x) e
-  Eval q e   -> checkEval q Nothing e
-  PutStrLn x -> output x
-  Out      f -> modify $ \st -> st { outFile = f }
+  Assume bs -> mapM_ assume bs
+  Let q x e -> checkEval q (Just x) e
+  Eval q e  -> checkEval q Nothing e
  where
-  mapContext f = \st -> st { context = f $ context st }
-
   assume (Binding x q t) = do
     let annt = Ann t Universe
-    ctx <- gets context
+    ctx <- get
     mty <- iinfer ctx Zero annt
     unless (isNothing mty) $ do
       let val = iEval (fst ctx, []) annt
       outputDoc . pretty $ Binding (vfree $ Global x) q val
-      modify . mapContext $ second (Binding (Global x) q val :)
+      modify $ second (Binding (Global x) q val :)
 
   checkEval q mn t = do
-    ctx <- gets context
+    ctx <- get
     mty <- iinfer ctx q t
     forM_ mty $ \ty -> do
-      let val    = iEval (fst ctx, []) t
-      let outdoc = prettyResult q mn val ty
-      outputDoc outdoc
-      out <- gets outFile
-      unless (null out) $ do
-        let process = T.unlines . map ("< " <>) . T.lines
-        outputFile out . process $ render outdoc
-        modify $ \st -> st { outFile = "" }
-      forM_ mn $ \n -> modify . mapContext $ bimap ((Global n, val) :)
-                                                   (Binding (Global n) q ty :)
+      let val = iEval (fst ctx, []) t
+      outputDoc $ prettyResult q mn val ty
+      forM_ mn
+        $ \n -> modify $ bimap ((Global n, val) :) (Binding (Global n) q ty :)
 
 ini :: Repl ()
 ini = liftIO $ putStrLn "Interpreter for Janus.\nType :? for help."
@@ -339,7 +325,7 @@ final = do
 
 -- | Evaluate the REPL monad and its inner state.
 repl :: IO ()
-repl = flip evalStateT (IState "" ([], [])) $ evalRepl
+repl = flip evalStateT ([], []) $ evalRepl
   (const $ pure ">>> ")
   compileStmt
   (concatMap (traverse (,) <$> cmdNames <*> cmdAction) commands)

@@ -22,6 +22,7 @@ import           Data.String                    ( IsString
                                                 )
 import           Janus.Printer
 import           Janus.REPL
+import           Janus.Types
 import           Test.Hspec                     ( Spec
                                                 , describe
                                                 , it
@@ -31,14 +32,13 @@ import           Test.Hspec                     ( Spec
 newtype TestIO m a = TestIO { runIO :: StateT ([String], [String]) m a}
   deriving (Monad, Functor, Applicative, MonadTrans)
 
-instance MonadState IState m => MonadState IState (TestIO m) where
+instance MonadState Context m => MonadState Context (TestIO m) where
   get = lift get
   put = lift . put
 
 instance (Monad m) => MonadAbstractIO (TestIO m) where
   output s = TestIO $ modify (second (s :))
-  outputDoc  = output . renderString
-  outputFile = undefined
+  outputDoc = output . renderString
 
 -- New type is used to coerce hspec into printing mismatched results across
 -- multiple lines.
@@ -65,10 +65,9 @@ spec = do
   describe "With-focused test cases" $ mapM_ run withCases
   describe "Pretty printer test cases" $ mapM_ run prettyCases
  where
-  evalTestCase i =
-    flip evalStateT (IState "" ([], [])) . flip execStateT (i, []) $ do
-      st <- gets fst
-      mapM_ (runIO . compileStmt) st
+  evalTestCase i = flip evalStateT ([], []) . flip execStateT (i, []) $ do
+    st <- gets fst
+    mapM_ (runIO . compileStmt) st
 
   run c = it (desc c) $ do
     (_, out) <- evalTestCase $ input c
