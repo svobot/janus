@@ -7,7 +7,7 @@ module Janus.Types
   , ITerm(..)
   , Name(Global, Local)
   , Type
-  , TypeEnv
+  , ValueEnv
   , Value
     ( VAPair
     , VAPairType
@@ -26,6 +26,8 @@ module Janus.Types
   , iEval
   , vfree
   , quote0
+  , -- * Utils
+    BoundEnv
   ) where
 
 import           Data.Bifunctor                 ( second )
@@ -147,10 +149,17 @@ instance (Show n, Show u, Show t) => Show (Binding n u t) where
 
 type Type = Value
 
-type TypeEnv = [Binding Name ZeroOneMany Type]
+-- | Judgment context.
+type Context = [Binding Name ZeroOneMany Type]
+
+-- | List of values defined by the /let/ statement.
 type ValueEnv = [(Name, Value)]
+
+-- | List of values of the bound variables that are in scope.
+--
+-- This is an implementation detail of the evaluation functions and should
+-- always start off empty.
 type BoundEnv = [Value]
-type Context = (ValueEnv, TypeEnv)
 
 vfree :: Name -> Value
 vfree = VNeutral . NFree

@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module IntegrationSpec
   ( spec
@@ -22,7 +23,6 @@ import           Data.String                    ( IsString
                                                 )
 import           Janus.Printer
 import           Janus.REPL
-import           Janus.Types
 import           Test.Hspec                     ( Spec
                                                 , describe
                                                 , it
@@ -32,7 +32,7 @@ import           Test.Hspec                     ( Spec
 newtype TestIO m a = TestIO { runIO :: StateT ([String], [String]) m a}
   deriving (Monad, Functor, Applicative, MonadTrans)
 
-instance MonadState Context m => MonadState Context (TestIO m) where
+instance MonadState a m => MonadState a (TestIO m) where
   get = lift get
   put = lift . put
 

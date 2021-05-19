@@ -29,9 +29,9 @@ import           Janus.Types
 -- | Record of bound variables.
 data TypingConfig = TypingConfig
   { -- | Variables which have been bound in some previous term.
-    cfgGlobalContext :: Context
+    cfgGlobalContext :: (ValueEnv, Context)
   , -- | Variables which have a binding occurrence in the currently judged term.
-    cfgBoundLocals   :: TypeEnv
+    cfgBoundLocals   :: Context
   }
 
 -- | Add new variable binding to the local environment.
@@ -39,7 +39,7 @@ with :: Binding Name ZeroOneMany Type -> TypingConfig -> TypingConfig
 with b cfg = cfg { cfgBoundLocals = b : cfgBoundLocals cfg }
 
 -- | Get the type bindings of the local and global variables.
-typeEnv :: TypingConfig -> TypeEnv
+typeEnv :: TypingConfig -> Context
 typeEnv (TypingConfig (_, globals) locals) = locals ++ globals
 
 -- | A monad transformer which carries the context for the typing algorithm.
@@ -77,7 +77,7 @@ withLocalVar loc v jud = local (with v) $ jud >>= checkVar (bndName v)
 
 -- | Check that the usage fits the resources available in the environment.
 checkUsage
-  :: TypeEnv -> Usage -> Maybe [(Name, Type, ZeroOneMany, ZeroOneMany)]
+  :: Context -> Usage -> Maybe [(Name, Type, ZeroOneMany, ZeroOneMany)]
 checkUsage env = toMaybe . mapMaybe notEnough . Map.toList
  where
   notEnough (n, q) = case find ((== n) . bndName) env of
@@ -94,9 +94,11 @@ data ExpectedType = SomePi | SomeMPair | SomeAPair | KnownType Type
 -- | Errors that can arise during the typing algorithm.
 data TypeError
    = -- | Usage of a variable in the term is incompatible with the available
-     -- quantity of that variable in the context. We can report list of multiple
-     -- incompatible variables at once.
-     UsageError (Maybe String) [(Name, Type, ZeroOneMany, ZeroOneMany)]
+     -- quantity of that variable in the context.
+     UsageError
+       (Maybe String) -- ^ Location of the error
+       [(Name, Type, ZeroOneMany, ZeroOneMany)] -- ^ List of recognised usage
+                                                -- incompatibilities.
    | -- | Type has a computational presence.
      ErasureError CTerm ZeroOneMany
    | -- | Type synthesised from the term doesn't match type the rule expects.
@@ -111,7 +113,7 @@ type Result = Either TypeError
 
 -- | Synthesise the type of a term and check that context has appropriate
 -- resources available for the term.
-synthesise :: Context -> ZeroOneMany -> ITerm -> Result Type
+synthesise :: (ValueEnv, Context) -> ZeroOneMany -> ITerm -> Result Type
 synthesise ctx s m = do
   (qs, tp) <- first (Map.map (s .*.))
     <$> runReaderT (synthType (relevance s) m) (TypingConfig ctx [])

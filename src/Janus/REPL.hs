@@ -115,8 +115,9 @@
 -- >           Used ω-times, but available 1-times.
 --
 module Janus.REPL
-  ( MonadAbstractIO(..)
-  , AbstractRepl
+  ( AbstractRepl
+  , IState
+  , MonadAbstractIO(..)
   , compileStmt
   , repl
   ) where
@@ -165,15 +166,16 @@ instance (Monad m, MonadIO m) => MonadAbstractIO (HaskelineT m) where
   output    = liftIO . putStrLn
   outputDoc = liftIO . T.putStrLn . render
 
+-- | Interpreter state which contains the context used in typing judgments and
+-- values defined by the 'Let' statements.
+type IState = (ValueEnv, Context)
+
 -- | 'HaskelineT' monad transformer that handles the input and holds the state
 -- of the interpreter.
---
--- State contains the context used in typing judgments and values defined by
--- the /let/ statements.
-type Repl = HaskelineT (StateT Context IO)
+type Repl = HaskelineT (StateT IState IO)
 
 -- | Type synonym for the constraints on the type of the REPL monad transformer.
-type AbstractRepl m = (MonadState Context m, MonadAbstractIO m)
+type AbstractRepl m = (MonadState IState m, MonadAbstractIO m)
 
 -- | Character which identifies a command.
 --
@@ -200,7 +202,7 @@ commandCompleter n =
     $ commands
 
 -- | Complete a known variable or a keyword.
-byWord :: (MonadState Context m) => WordCompleter m
+byWord :: (MonadState IState m) => WordCompleter m
 byWord n = do
   env <- gets snd
   let scope = [ s | Global s <- reverse . nub $ map bndName env ]
@@ -279,7 +281,7 @@ compileFile f = do
     Right x -> parseIO (fileParser f) x >>= mapM_ (mapM_ handleStmt)
 
 -- | Synthesise the type of a term and print an error if it occurs.
-iinfer :: AbstractRepl m => Context -> ZeroOneMany -> ITerm -> m (Maybe Type)
+iinfer :: AbstractRepl m => IState -> ZeroOneMany -> ITerm -> m (Maybe Type)
 iinfer g r t = case synthesise g r t of
   Left  e -> outputDoc (pretty e) >> return Nothing
   Right v -> return (Just v)

@@ -41,7 +41,7 @@ lang = P.makeTokenParser $ haskellStyle
   , P.reservedOpNames = "->" : map pure ":=\\λ.*&@∀,→⊗⟨⟩"
   }
 
--- | Keywords reserved in the language.
+-- | Reserved language keywords.
 keywords :: [String]
 keywords = words "assume putStrLn out forall let in U I fst snd T"
 

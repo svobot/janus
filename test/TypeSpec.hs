@@ -13,7 +13,7 @@ import           Test.Hspec
 
 data TestCase = TestCase
   { desc  :: String
-  , ctx   :: Context
+  , ctx   :: (ValueEnv, Context)
   , multi :: ZeroOneMany
   , expr  :: ITerm
   , res   :: TestResult
