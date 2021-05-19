@@ -8,7 +8,19 @@ module Janus.Types
   , Name(Global, Local)
   , Type
   , TypeEnv
-  , Value(..)
+  , Value
+    ( VAPair
+    , VAPairType
+    , VAUnit
+    , VAUnitType
+    , VLam
+    , VMPair
+    , VMPairType
+    , VMUnit
+    , VMUnitType
+    , VPi
+    , VUniverse
+    )
   , cEval
   , cSubst
   , iEval
@@ -49,16 +61,16 @@ data CTerm
      MPair CTerm CTerm
    | -- | Dependent multiplicative pair type.
      MPairType
-       ZeroOneMany -- ^ Multiplicity of the first pair element.
-       CTerm -- ^ Type of the first pair element.
-       CTerm -- ^ Type of the second pair element.
+       ZeroOneMany -- ^ Multiplicity of the first element.
+       CTerm -- ^ Type of the first element.
+       CTerm -- ^ Type of the second element.
    | -- | Multiplicative unit.
      MUnit
    | -- | Multiplicative unit type.
      MUnitType
-   | -- | Additive pair.
+   | -- | Dependent additive pair.
      APair CTerm CTerm
-   | -- | Additive pair type.
+   | -- | Dependent additive pair type.
      APairType CTerm CTerm
    | -- | Additive unit.
      AUnit
