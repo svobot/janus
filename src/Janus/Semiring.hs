@@ -1,4 +1,4 @@
--- | Semiring class and instance definitions
+-- | 'Semiring' class and instance definitions
 module Janus.Semiring
   ( Relevance(..)
   , Semiring(..)

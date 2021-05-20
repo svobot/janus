@@ -5,7 +5,7 @@
 module Janus.Typing
   ( ExpectedType(..)
   , Result
-  , TypeError(..)
+  , TypingError(..)
   , synthesise
   ) where
 
@@ -26,9 +26,10 @@ import           Data.Maybe                     ( fromMaybe
 import           Janus.Semiring
 import           Janus.Types
 
--- | Record of bound variables.
+-- | Record of variables that are in scope.
 data TypingConfig = TypingConfig
-  { -- | Variables which have been bound in some previous term.
+  { -- | Variables which have been defined in some previous term. Their values
+    -- are in 'ValueEnv' and their types in the'Context'
     cfgGlobalContext :: (ValueEnv, Context)
   , -- | Variables which have a binding occurrence in the currently judged term.
     cfgBoundLocals   :: Context
@@ -38,9 +39,9 @@ data TypingConfig = TypingConfig
 with :: Binding Name ZeroOneMany Type -> TypingConfig -> TypingConfig
 with b cfg = cfg { cfgBoundLocals = b : cfgBoundLocals cfg }
 
--- | Get the type bindings of the local and global variables.
-typeEnv :: TypingConfig -> Context
-typeEnv (TypingConfig (_, globals) locals) = locals ++ globals
+-- | Combine the contexts with global and local variables.
+context :: TypingConfig -> Context
+context (TypingConfig (_, globals) locals) = locals ++ globals
 
 -- | A monad transformer which carries the context for the typing algorithm.
 type Judgment = ReaderT TypingConfig Result
@@ -58,7 +59,11 @@ newLocalVar s ty = do
   i <- asks $ length . cfgBoundLocals
   return $ Binding (Local i) s ty
 
--- | Extend the typing context with a local variable.
+-- | Judge in an extended context.
+--
+-- @withLocalVar l x j@ extends the typing context with a local variable @x@ and
+-- judges @j@ in it. It then checks that the 'Usage' of @x@ which @j@ genretated
+-- fits the available quantity in the context.
 withLocalVar
   :: String -> Binding Name ZeroOneMany Type -> Judgment Usage -> Judgment Usage
 withLocalVar loc v jud = local (with v) $ jud >>= checkVar (bndName v)
@@ -67,10 +72,10 @@ withLocalVar loc v jud = local (with v) $ jud >>= checkVar (bndName v)
   -- judgment fails.
   checkVar :: Name -> Usage -> Judgment Usage
   checkVar n qs = do
-    env <- asks typeEnv
+    ctx <- asks context
     let (q, qs') = splitVar n qs
     mapM_ (throwError . UsageError (Just loc))
-          (checkUsage env $ Map.singleton n q)
+          (checkUsage ctx $ Map.singleton n q)
     return qs'
 
   splitVar = (first (fromMaybe zero) .) . Map.alterF (, Nothing)
@@ -92,7 +97,7 @@ checkUsage env = toMaybe . mapMaybe notEnough . Map.toList
 data ExpectedType = SomePi | SomeMPair | SomeAPair | KnownType Type
 
 -- | Errors that can arise during the typing algorithm.
-data TypeError
+data TypingError
    = -- | Usage of a variable in the term is incompatible with the available
      -- quantity of that variable in the context.
      UsageError
@@ -109,7 +114,7 @@ data TypeError
    | -- | Term uses a variable that is missing in the context.
      UnknownVarError Name
 
-type Result = Either TypeError
+type Result = Either TypingError
 
 -- | Synthesise the type of a term and check that context has appropriate
 -- resources available for the term.
@@ -128,7 +133,7 @@ synthType s (Ann m t) = do
   qs <- checkType s m ty
   return (qs, ty)
 synthType s (Free x) = do
-  env <- asks typeEnv
+  env <- asks context
   case find ((== x) . bndName) env of
     Just (Binding _ _ ty) -> return (Map.singleton x $ extend s, ty)
     Nothing               -> throwError $ UnknownVarError x

@@ -79,7 +79,7 @@ instance Pretty ExpectedType where
   pretty SomeAPair      = "_" <+> add "&" <+> "_"
   pretty (KnownType ty) = pretty ty
 
-instance Pretty TypeError where
+instance Pretty TypingError where
   pretty err = annotate (Term.color Term.Red <> Term.bold) "error:"
     <+> align (go err)
    where

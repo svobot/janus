@@ -43,7 +43,7 @@ lang = P.makeTokenParser $ haskellStyle
 
 -- | Reserved language keywords.
 keywords :: [String]
-keywords = words "assume putStrLn out forall let in U I fst snd T"
+keywords = words "assume forall let in U I fst snd T"
 
 -- | Parse a statement.
 evalParser :: String -> Either ParseError Stmt
