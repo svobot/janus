@@ -1,8 +1,7 @@
--- | Definitions of data types which are used throughout the code and functions
--- for substitution on and beta-reduction of terms.
+-- | Defines the abstract syntax tree type of the type-synthesising ('ITerm')
+-- and type-checking ('CTerm') terms, and substitution on these terms.
 module Janus.Syntax
-  ( Binding(..)
-  , CTerm(..)
+  ( CTerm(..)
   , ITerm(..)
   , Name(..)
   , cSubst
@@ -85,17 +84,6 @@ data ITerm
    | -- | Additive pair eliminator evaluating into the second element.
      Snd ITerm
   deriving (Show, Eq)
-
--- | A context element grouping a variable name, its type, and quantity.
-data Binding n u t = Binding
-  { bndName  :: n
-  , bndUsage :: u
-  , bndType  :: t
-  }
-  deriving Eq
-
-instance (Show n, Show u, Show t) => Show (Binding n u t) where
-  show (Binding n u t) = show u <> " " <> show n <> " : " <> show t
 
 -- | Substitution on type-synthesising terms.
 --

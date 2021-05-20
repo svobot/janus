@@ -56,6 +56,7 @@ library
                      , text
   exposed-modules:     Janus.Evaluation
                      , Janus.Infer
+                     , Janus.Judgment
                      , Janus.Parsing
                      , Janus.Pretty
                      , Janus.REPL

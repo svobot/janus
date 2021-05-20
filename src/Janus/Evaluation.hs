@@ -1,8 +1,7 @@
--- | Definitions of data types which are used throughout the code and functions
--- for substitution on and beta-reduction of terms.
+-- | Implements the algorithm for evaluation of terms and defines a data type
+-- ('Value') for representing an evaluated term using a higher-order syntax.
 module Janus.Evaluation
-  ( Context
-  , Type
+  ( Type
   , ValueEnv
   , Value
     ( VAPair
@@ -58,9 +57,6 @@ data Neutral
 
 type Type = Value
 
--- | Judgment context.
-type Context = [Binding Name ZeroOneMany Type]
-
 -- | List of values defined by the /let/ statement.
 type ValueEnv = [(Name, Value)]
 
@@ -70,12 +66,13 @@ type ValueEnv = [(Name, Value)]
 -- always start off empty.
 type BoundEnv = [Value]
 
+-- | Creates the 'Value' corresponding to a free variable.
 vfree :: Name -> Value
 vfree = VNeutral . NFree
 
--- | Evaluate a type-checkable term in a given context.
+-- | Evaluate a type-checkable term in a given environment.
 --
--- Context is a pair in which first element contains values of global variables
+-- Environment is a pair in which first element contains values of global variables
 -- and second element contains values of local variables.
 cEval :: (ValueEnv, BoundEnv) -> CTerm -> Value
 cEval ctx (Inf ii) = iEval ctx ii
@@ -94,9 +91,9 @@ cEval ctx (APairType ty ty') =
 cEval _ AUnit     = VAUnit
 cEval _ AUnitType = VAUnitType
 
--- | Evaluate a type-synthesising term in a given context.
+-- | Evaluate a type-synthesising term in a given environment.
 --
--- Context is a pair in which first element contains values of global variables
+-- Environment is a pair in which first element contains values of global variables
 -- and second element contains values of local variables.
 iEval :: (ValueEnv, BoundEnv) -> ITerm -> Value
 iEval ctx (Ann c _) = cEval ctx c

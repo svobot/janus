@@ -13,17 +13,18 @@ import           Control.Monad                  ( foldM
                                                 )
 import           Data.Char                      ( isAlpha )
 import           Data.List                      ( elemIndex )
-import           Janus.Semiring                 ( ZeroOneMany(..) )
-import           Janus.Syntax            hiding ( Binding )
-import qualified Janus.Syntax                  as S
+import qualified Janus.Judgment                as J
                                                 ( Binding(..) )
+import           Janus.Judgment          hiding ( Binding )
+import           Janus.Semiring                 ( ZeroOneMany(..) )
+import           Janus.Syntax
 import           Prelude                 hiding ( pi )
 import           Text.Parsec
 import           Text.Parsec.Language           ( haskellStyle )
 import           Text.Parsec.String             ( GenParser )
 import qualified Text.Parsec.Token             as P
 
-type Binding = S.Binding String ZeroOneMany CTerm
+type Binding = J.Binding String ZeroOneMany CTerm
 
 -- | Statement in the Janus language.
 data Stmt
@@ -143,7 +144,7 @@ cTermInner e = choice
     return $ iterate Lam t !! length xs
   universe = Universe <$ (reserved "𝘜" <|> reserved "U")
   pi       = do
-    S.Binding x q t <- try $ bind e <* (reservedOp "→" <|> reservedOp "->")
+    J.Binding x q t <- try $ bind e <* (reservedOp "→" <|> reservedOp "->")
     Pi q t <$> cTermWith iTermInner (x : e)
   forall = do
     reserved "forall" <|> reservedOp "∀"
@@ -153,7 +154,7 @@ cTermInner e = choice
     foldM (\a x -> return $ Pi (bndUsage x) (bndType x) a) p xs
   mPair     = P.parens lang $ MPair <$> cTerm e <* reservedOp "," <*> cTerm e
   mPairType = do
-    S.Binding x q t <- try $ bind e <* (reservedOp "⊗" <|> reservedOp "*")
+    J.Binding x q t <- try $ bind e <* (reservedOp "⊗" <|> reservedOp "*")
     MPairType q t <$> cTermWith iTermInner (x : e)
   mUnitType = MUnitType <$ (reserved "𝟭ₘ" <|> reserved "I")
   aPair =
@@ -177,7 +178,7 @@ mUnit = MUnit <$ reserved "()"
 bind :: [String] -> CharParser Binding
 bind e =
   P.parens lang
-    $   flip S.Binding
+    $   flip J.Binding
     <$> semiring
     <*> identifier
     <*  reservedOp ":"

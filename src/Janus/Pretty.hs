@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
 
+-- | Specifies how to pretty-print expressions for display.
 module Janus.Pretty
   ( Doc
   , Pretty(..)
@@ -25,6 +26,7 @@ import           Data.Text                      ( Text
                                                 )
 import           Janus.Evaluation
 import           Janus.Infer
+import           Janus.Judgment
 import           Janus.Semiring                 ( ZeroOneMany(..) )
 import           Janus.Syntax
 import qualified Prettyprinter                 as PP

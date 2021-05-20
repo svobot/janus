@@ -3,6 +3,7 @@ module ParseSpec
   ) where
 
 import           Data.Bifunctor                 ( first )
+import           Janus.Judgment
 import           Janus.Parsing
 import           Janus.Semiring
 import           Janus.Syntax

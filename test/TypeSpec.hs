@@ -7,6 +7,7 @@ import           Control.Monad.Except           ( throwError )
 import           Data.Function                  ( on )
 import           Janus.Evaluation
 import           Janus.Infer
+import           Janus.Judgment
 import           Janus.Pretty
 import           Janus.Semiring
 import           Janus.Syntax

@@ -150,6 +150,7 @@ import           Data.Maybe                     ( isNothing )
 import qualified Data.Text.IO                  as T
 import           Janus.Evaluation
 import           Janus.Infer
+import           Janus.Judgment
 import           Janus.Parsing
 import           Janus.Pretty
 import           Janus.Semiring

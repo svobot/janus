@@ -1,7 +1,7 @@
 -- | Implementation of the typing algorithm.
 --
--- This module exports the @synthesise@ function, which synthesises the type of
--- a given term, according to the typing rules described in our paper.
+-- This module exports the 'synthesise' function, which synthesises the type of
+-- a given term following the typing rules described in our paper.
 module Janus.Infer
   ( ExpectedType(..)
   , Result
@@ -24,75 +24,9 @@ import           Data.Maybe                     ( fromMaybe
                                                 , mapMaybe
                                                 )
 import           Janus.Evaluation
+import           Janus.Judgment
 import           Janus.Semiring
 import           Janus.Syntax
-
--- | Record of variables that are in scope.
-data TypingConfig = TypingConfig
-  { -- | Variables which have been defined in some previous term. Their values
-    -- are in 'ValueEnv' and their types in the'Context'
-    cfgGlobalContext :: (ValueEnv, Context)
-  , -- | Variables which have a binding occurrence in the currently judged term.
-    cfgBoundLocals   :: Context
-  }
-
--- | Add new variable binding to the local environment.
-with :: Binding Name ZeroOneMany Type -> TypingConfig -> TypingConfig
-with b cfg = cfg { cfgBoundLocals = b : cfgBoundLocals cfg }
-
--- | Combine the contexts with global and local variables.
-context :: TypingConfig -> Context
-context (TypingConfig (_, globals) locals) = locals ++ globals
-
--- | A monad transformer which carries the context for the typing algorithm.
-type Judgment = ReaderT TypingConfig Result
-
--- | Record of how much of each variable is consumed in a term.
-type Usage = Map.Map Name ZeroOneMany
-
--- | Evaluate the term in context provided by the judgment.
-evalInEnv :: CTerm -> Judgment Value
-evalInEnv m = asks (flip cEval m . (, []) . fst . cfgGlobalContext)
-
--- | Create a local variable with a fresh name.
-newLocalVar :: a -> b -> Judgment (Binding Name a b)
-newLocalVar s ty = do
-  i <- asks $ length . cfgBoundLocals
-  return $ Binding (Local i) s ty
-
--- | Judge in an extended context.
---
--- @withLocalVar l x j@ extends the typing context with a local variable @x@ and
--- judges @j@ in it. It then checks that the 'Usage' of @x@ which @j@ genretated
--- fits the available quantity in the context.
-withLocalVar
-  :: String -> Binding Name ZeroOneMany Type -> Judgment Usage -> Judgment Usage
-withLocalVar loc v jud = local (with v) $ jud >>= checkVar (bndName v)
- where
-  -- If usage of a local variable doesn't match available resources,
-  -- judgment fails.
-  checkVar :: Name -> Usage -> Judgment Usage
-  checkVar n qs = do
-    ctx <- asks context
-    let (q, qs') = splitVar n qs
-    mapM_ (throwError . UsageError (Just loc))
-          (checkUsage ctx $ Map.singleton n q)
-    return qs'
-
-  splitVar = (first (fromMaybe zero) .) . Map.alterF (, Nothing)
-
--- | Check that the usage fits the resources available in the environment.
-checkUsage
-  :: Context -> Usage -> Maybe [(Name, Type, ZeroOneMany, ZeroOneMany)]
-checkUsage env = toMaybe . mapMaybe notEnough . Map.toList
- where
-  notEnough (n, q) = case find ((== n) . bndName) env of
-    Just b | q `fitsIn` bndUsage b -> Nothing
-           | otherwise             -> Just (n, bndType b, q, bndUsage b)
-    Nothing ->
-      error $ "internal: Unknown " <> show n <> " used " <> show q <> "-times"
-  toMaybe [] = Nothing
-  toMaybe es = Just es
 
 -- | Type the term was expected to have during a type clash error.
 data ExpectedType = SomePi | SomeMPair | SomeAPair | KnownType Type
@@ -115,7 +49,51 @@ data TypingError
    | -- | Term uses a variable that is missing in the context.
      UnknownVarError Name
 
+-- | Typing judgment either fails and produces a 'TypingError' or succeeds and
+-- returns a value.
 type Result = Either TypingError
+
+type TypeJudgment = Judgment Result
+
+-- | Record of how much of each variable is consumed in a term.
+type Usage = Map.Map Name ZeroOneMany
+
+-- | Judge in an extended context.
+--
+-- @withLocalVar l x j@ extends the typing context with a local variable @x@ and
+-- judges @j@ in it. It then checks that the 'Usage' of @x@ which @j@ generated
+-- fits the available quantity in the context.
+withLocalVar
+  :: String
+  -> Binding Name ZeroOneMany Type
+  -> TypeJudgment Usage
+  -> TypeJudgment Usage
+withLocalVar loc v jud = local (with v) $ jud >>= checkVar (bndName v)
+ where
+  -- If usage of a local variable doesn't match available resources,
+  -- judgment fails.
+  checkVar :: Name -> Usage -> TypeJudgment Usage
+  checkVar n qs = do
+    ctx <- asks context
+    let (q, qs') = splitVar n qs
+    mapM_ (throwError . UsageError (Just loc))
+          (checkUsage ctx $ Map.singleton n q)
+    return qs'
+
+  splitVar = (first (fromMaybe zero) .) . Map.alterF (, Nothing)
+
+-- | Check that the usage fits the resources available in the environment.
+checkUsage
+  :: Context -> Usage -> Maybe [(Name, Type, ZeroOneMany, ZeroOneMany)]
+checkUsage env = toMaybe . mapMaybe notEnough . Map.toList
+ where
+  notEnough (n, q) = case find ((== n) . bndName) env of
+    Just b | q `fitsIn` bndUsage b -> Nothing
+           | otherwise             -> Just (n, bndType b, q, bndUsage b)
+    Nothing ->
+      error $ "internal: Unknown " <> show n <> " used " <> show q <> "-times"
+  toMaybe [] = Nothing
+  toMaybe es = Just es
 
 -- | Synthesise the type of a term and check that context has appropriate
 -- resources available for the term.
@@ -127,7 +105,7 @@ synthesise ctx s m = do
   return tp
 
 -- | Synthesise the type of a term.
-synthType :: Relevance -> ITerm -> Judgment (Usage, Type)
+synthType :: Relevance -> ITerm -> TypeJudgment (Usage, Type)
 synthType s (Ann m t) = do
   checkTypeErased t VUniverse
   ty <- evalInEnv t
@@ -193,7 +171,7 @@ synthType _ i@(Bound _) =
   error $ "internal: Trying to infer type of " <> show i
 
 -- | Type-check a term.
-checkType :: Relevance -> CTerm -> Type -> Judgment Usage
+checkType :: Relevance -> CTerm -> Type -> TypeJudgment Usage
 checkType s (Inf m) ty = do
   (qs, ty') <- synthType s m
   unless (((==) `on` quote0) ty ty')
@@ -233,7 +211,7 @@ checkType s ty@AUnitType           VUniverse  = checkTypeAtom s ty
 checkType _ m                      ty         = throwError $ CheckError ty m
 
 -- | Type-check a dependent type.
-checkTypeDep :: Relevance -> CTerm -> CTerm -> CTerm -> Judgment Usage
+checkTypeDep :: Relevance -> CTerm -> CTerm -> CTerm -> TypeJudgment Usage
 checkTypeDep s ty t1 t2 = case s of
   Erased -> do
     checkTypeErased t1 VUniverse
@@ -245,7 +223,7 @@ checkTypeDep s ty t1 t2 = case s of
   Present -> throwError . ErasureError ty $ extend s
 
 -- | Type-check an atomic type.
-checkTypeAtom :: Relevance -> CTerm -> Judgment Usage
+checkTypeAtom :: Relevance -> CTerm -> TypeJudgment Usage
 checkTypeAtom s ty = case s of
   Erased  -> return Map.empty
   -- Types cannot consume any resources, so the judgment fails if the typing
@@ -253,7 +231,7 @@ checkTypeAtom s ty = case s of
   Present -> throwError . ErasureError ty $ extend s
 
 -- | Type-check a term in erased context.
-checkTypeErased :: CTerm -> Type -> Judgment ()
+checkTypeErased :: CTerm -> Type -> TypeJudgment ()
 checkTypeErased m ty = do
   errs <- Map.filter (/= zero) <$> checkType Erased m ty
   -- Having a non-zero usage of a variable in the erased context means that
