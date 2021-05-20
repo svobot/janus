@@ -2,7 +2,7 @@
 --
 -- This module exports the @synthesise@ function, which synthesises the type of
 -- a given term, according to the typing rules described in our paper.
-module Janus.Typing
+module Janus.Infer
   ( ExpectedType(..)
   , Result
   , TypingError(..)
@@ -23,8 +23,9 @@ import qualified Data.Map.Strict               as Map
 import           Data.Maybe                     ( fromMaybe
                                                 , mapMaybe
                                                 )
+import           Janus.Evaluation
 import           Janus.Semiring
-import           Janus.Types
+import           Janus.Syntax
 
 -- | Record of variables that are in scope.
 data TypingConfig = TypingConfig

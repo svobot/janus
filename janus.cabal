@@ -54,12 +54,13 @@ library
                      , prettyprinter-ansi-terminal
                      , repline ^>=0.4
                      , text
-  exposed-modules:     Janus.Parser
-                     , Janus.Printer
+  exposed-modules:     Janus.Evaluation
+                     , Janus.Infer
+                     , Janus.Parsing
+                     , Janus.Pretty
                      , Janus.REPL
                      , Janus.Semiring
-                     , Janus.Types
-                     , Janus.Typing
+                     , Janus.Syntax
   other-modules:       Paths_janus
   autogen-modules:     Paths_janus
   hs-source-dirs:      src

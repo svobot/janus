@@ -5,10 +5,11 @@ module TypeSpec
 import           Control.Applicative            ( liftA3 )
 import           Control.Monad.Except           ( throwError )
 import           Data.Function                  ( on )
-import           Janus.Printer
+import           Janus.Evaluation
+import           Janus.Infer
+import           Janus.Pretty
 import           Janus.Semiring
-import           Janus.Types
-import           Janus.Typing
+import           Janus.Syntax
 import           Test.Hspec
 
 data TestCase = TestCase

@@ -21,7 +21,7 @@ import           Data.Bifunctor                 ( second )
 import           Data.String                    ( IsString
                                                 , fromString
                                                 )
-import           Janus.Printer
+import           Janus.Pretty
 import           Janus.REPL
 import           Test.Hspec                     ( Spec
                                                 , describe

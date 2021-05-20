@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Janus.Printer
+module Janus.Pretty
   ( Doc
   , Pretty(..)
   , render
@@ -23,18 +23,16 @@ import qualified Data.Set                      as Set
 import           Data.Text                      ( Text
                                                 , pack
                                                 )
-import           Data.Text.Prettyprint.Doc
-                                         hiding ( Doc
+import           Janus.Evaluation
+import           Janus.Infer
+import           Janus.Semiring                 ( ZeroOneMany(..) )
+import           Janus.Syntax
+import qualified Prettyprinter                 as PP
+import           Prettyprinter           hiding ( Doc
                                                 , Pretty(..)
                                                 )
-import qualified Data.Text.Prettyprint.Doc     as PP
-import qualified Data.Text.Prettyprint.Doc.Render.String
-                                               as PPS
-import qualified Data.Text.Prettyprint.Doc.Render.Terminal
-                                               as Term
-import           Janus.Semiring                 ( ZeroOneMany(..) )
-import           Janus.Types
-import           Janus.Typing
+import qualified Prettyprinter.Render.String   as PPS
+import qualified Prettyprinter.Render.Terminal as Term
 
 -- | Abstract type of documents annotated with the ANSI terminal colors.
 type Doc = PP.Doc Term.AnsiStyle

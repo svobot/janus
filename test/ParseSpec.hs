@@ -3,9 +3,9 @@ module ParseSpec
   ) where
 
 import           Data.Bifunctor                 ( first )
-import           Janus.Parser
+import           Janus.Parsing
 import           Janus.Semiring
-import           Janus.Types
+import           Janus.Syntax
 import           Test.Hspec
 import           Text.Parsec                    ( ParseError )
 

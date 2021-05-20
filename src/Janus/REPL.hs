@@ -148,11 +148,12 @@ import           Data.List                      ( dropWhileEnd
                                                 )
 import           Data.Maybe                     ( isNothing )
 import qualified Data.Text.IO                  as T
-import           Janus.Parser
-import           Janus.Printer
+import           Janus.Evaluation
+import           Janus.Infer
+import           Janus.Parsing
+import           Janus.Pretty
 import           Janus.Semiring
-import           Janus.Types
-import           Janus.Typing
+import           Janus.Syntax
 import           System.Console.Repline
 import           Text.Parsec                    ( ParseError )
 
