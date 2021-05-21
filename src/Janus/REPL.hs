@@ -308,7 +308,9 @@ handleStmt stmt = case stmt of
     unless (isNothing mty) $ do
       let val = iEval (fst ctx, []) annt
       outputDoc . pretty $ Binding (vfree $ Global x) q val
-      modify $ second (Binding (Global x) q val :)
+      modify $ bimap
+        (filter ((/= Global x) . fst))
+        ((Binding (Global x) q val :) . filter ((/= Global x) . bndName))
 
   checkEval q mn t = do
     ctx <- get
