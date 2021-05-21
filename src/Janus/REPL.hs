@@ -237,9 +237,9 @@ help _ = liftIO $ do
   aliases args =
     intercalate ", " . map ((++ maybe "" (' ' :) args) . (commandPrefix :))
   cols =
-    [ ("<expr>"               , "evaluate expression")
-      , ("let <var> = <expr>"   , "define variable")
-      , ("assume <var> : <expr>", "assume variable\n")
+    [ ("<quantity> <expr>"                     , "evaluate expression")
+      , ("let <quantity> <var> = <expr>"         , "define variable")
+      , ("assume (<quantity> <var> : <expr>) ...", "assume variable\n")
       ]
       ++ map ((,) <$> (aliases <$> cmdArgs <*> cmdNames) <*> cmdDesc) commands
   spaces colWidth cmd = replicate (colWidth + 2 - length cmd) ' '
