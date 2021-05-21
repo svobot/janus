@@ -4,8 +4,17 @@ name:                  janus
 version:               0.1.0.0
 synopsis:              An interpreter with Quantitative Types and Additive Pairs
 description:
-  An interpreter with Quantitative Types and Additive Pairs
-  with longer description
+  An interpreter of a simple programming language based on a λ-calculus with
+  Quantitative Types. It supports the following types:
+  .
+  * Dependent funtion types;
+  .
+  * Dependent multiplicative pairs and multiplicative units;
+  .
+  * Dependent additive pairs and additive units.
+  .
+
+  See the documentation of usage in the @Janus.REPL@ module.
 category:              Language, Compilers/Interpreters
 homepage:              https://github.com/svobot/janus
 author:                Tomáš Svoboda
