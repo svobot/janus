@@ -1,52 +1,120 @@
-# Janus
+# Janus: λ-calculus in Quantitative Type Theory
 
-A λ-calculus interpreter with Quantitative Types and Additive Pairs
+Janus is a small programming language examining the differences between additive
+and multiplicities pairs in Quantitative Type Theory.
 
-## Syntax
+## Getting started
 
-Here is the grammar for the language:
+To run the Janus interpreter, make sure you have a recent enough `ghc` (8.10.x)
+and `cabal` (3.4), then run:
 
-    Expr ::= let [Rig] Name = ITerm
-           | [Rig] ITerm
-           | assume Bindings
+    cabal build
+    cabal run janusc
 
-    Bindings ::= Binding Bindings | Binding
+## Usage
 
-    Binding ::= ([Rig] Name : CTerm)
+Interpreter reads user's input, evaluates it, and prints the result in
+an infinite loop. The input can either be a statement, see below, or a command.
+Commands are identified by a leading colon. Some commands expect arguments,
+which should follow the command. Janus interpreter supports the following
+commands:
 
-    CTerm ::= \ Name . CTerm                 -- Lambda abstraction
-            | Binding -> CTerm               -- Pi type
-            | (CTerm, CTerm)                 -- Multiplicative pair
-            | Binding * CTerm                -- Tensor product type
-            | <CTerm, CTerm>                 -- Additive pair
-            | (Name : CTerm) & CTerm         -- With type
-            | U                              -- Universe type
-            | ()                             -- Multiplicative unit
-            | I                              -- Multiplicative unit type
-            | <>                             -- Additive unit
-            | T                              -- Additive unit type
-            | (CTerm)
-            | ITerm
+- `:load` takes a file path and it opens the file and evaluates its contents.
+- `:browse` lists all the variables that are currently in scope, annotated with
+their types.
+- `:type` takes a Janus term and synthesises its type.
+- `:quit` exits the interpreter.
+- `:help`, or `:?` shows a short description of the interpreter's features.
 
-    ITerm ::= ITerm CTerm                    -- Lambda application
-            | CTerm : CTerm                  -- Type annotation
-            | Name                           -- Variable name
-            | let Name @ Name, Name = ITerm in CTerm : CTerm
-                                             -- Multiplicative pair eliminator
-            | let Name @ () = ITerm in CTerm : CTerm
-                                             -- Multiplicative unit eliminator
-            | fst ITerm                      -- Additive pair eliminator
-            | snd ITerm                      -- Additive pair eliminator
-            | (ITerm)
+For example, the following command loads the contents of the file `library.jns`:
 
-    Rig ::= 0                                -- None
-          | 1                                -- One
-          | w                                -- Many
+<pre>
+>>> :load library.jns
+<i>... output produced by the evaluation of terms read from the file ...</i>
+</pre>
 
-Multiplicity annotations specified as `[Rig]` are optional. `Many` is used if they are omitted. `Name`s are identifiers with the same format as in Haskell, which don't conflict with a reserved word.
+### Statements
 
-## Credits
+If no command is specified, interpreter expects the input to be a statement,
+which is evaluated, and the result is printed out. Statements are:
 
-This project is based on the calculus described in _[A tutorial implementation of a dependently typed lambda calculus][]_.
+- `assume` introduces new names and adds them to the context, subsequent Janus
+terms will have these variables in scope.
 
-[A tutorial implementation of a dependently typed lambda calculus]: https://www.andres-loeh.de/LambdaPi/
+<pre>
+>>> assume (<i>usage</i> <i>name</i> : <i>term</i>) <i>...</i>
+              │    │      │     │
+              │    │      │     └─ Multiple variables can be added
+              │    │      │        to context at the same time.
+              │    │      └─────── Janus term which defines the type.
+              │    └────────────── Name of the new variable.
+              └─────────────────── Multiplicity of the variable.
+                                   This is optional and when omitted,
+                                   interpreter defaults to ω.
+</pre>
+
+- `let` defines a new variable and assigns it a result of evaluated Janus term.
+
+<pre>
+>>> let <i>usage</i> <i>name</i> = <i>term</i>
+          │    │      │
+          │    │      └─────────── Janus term which creates the value.
+          │    └────────────────── Name of the new variable.
+          └─────────────────────── Multiplicity of the variable.
+                                   This is optional and when omitted,
+                                   interpreter defaults to ω.
+</pre>
+
+- `eval` statement is a Janus expression which get evaluated and its result is
+printed. `eval` has no effect on variables in scope.
+
+<pre>
+>>> <i>usage</i> <i>term</i>
+      │    │
+      │    └────────────────────── Janus term which creates the value.
+      └─────────────────────────── Multiplicity of the result.
+                                   This is optional and when omitted,
+                                   interpreter defaults to ω.
+</pre>
+
+### An example of an interactive programming session
+
+Declare a variable `A` of type *Universe* without a computational presence and
+a linear variable `x` of type `A`:
+
+    >>> assume (0 A : U) (1 x : A)
+    0 A : 𝘜
+    1 x : A
+
+Define a variable `id` as an identity function. Its parameter `y` is a linear
+variable, so the function body has to use it exactly once:
+
+    >>> let 1 id = \x. \y. y : (0 x : 𝘜) -> (1 y : x) -> x
+    1 id = (λx y. y) : ∀ (0 x : 𝘜) (1 y : x) . x
+
+Examine the variable in scope using the `:browse` command:
+
+    >>> :browse
+    0 A : 𝘜
+    1 x : A
+    1 id : ∀ (0 x : 𝘜) (1 y : x) . x
+
+Evaluate the identity function application:
+
+    >>> 1 id A       -- Partially applied function, resulting in an identity function on type A.
+    1 (λx. x) : (1 x : A) → A
+    >>> 1 id A x     -- Fully applied function, resulting in the value of type A.
+    1 x : A
+
+As an example of incorrect term, we try to construct a pair of identity
+functions. The variable `id` is however linear, so it can be used only once in
+a term.
+
+    >>> let 0 id_type = (0 x : 𝘜) -> (1 y : x) -> x : U     -- We define a helper variable to make
+                                                            -- the terms more readable.
+    0 id_type = (∀ (0 x : 𝘜) (1 y : x) . x) : 𝘜
+    >>> let 1 pair = (id, id) : (_ : id_type) * id_type
+    error: Mismatched multiplicities:
+            id : ∀ (0 x : 𝘜) (1 y : x) . x
+              Used ω-times, but available 1-times.
+
