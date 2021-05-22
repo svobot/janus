@@ -63,6 +63,7 @@ library
                      , prettyprinter-ansi-terminal
                      , repline ^>=0.4
                      , text
+                     , unicode-show
   exposed-modules:     Janus.Evaluation
                      , Janus.Infer
                      , Janus.Judgment

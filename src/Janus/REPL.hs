@@ -135,9 +135,7 @@ import           Control.Monad.State            ( MonadIO
                                                 , modify
                                                 , unless
                                                 )
-import           Data.Bifunctor                 ( bimap
-                                                , second
-                                                )
+import           Data.Bifunctor                 ( bimap )
 import           Data.Char                      ( isSpace )
 import           Data.Function                  ( on )
 import           Data.List                      ( dropWhileEnd
@@ -157,6 +155,7 @@ import           Janus.Semiring
 import           Janus.Syntax
 import           System.Console.Repline
 import           Text.Parsec                    ( ParseError )
+import           Text.Show.Unicode              ( ushow )
 
 -- | The 'MonadAbstractIO' class defines monadic actions which are used by our
 -- interpreter to output its results.
@@ -291,7 +290,7 @@ iinfer g r t = case synthesise g r t of
 -- | Run a parser and print an error if it occurs.
 parseIO :: MonadAbstractIO m => (a -> Either ParseError b) -> a -> m (Maybe b)
 parseIO p x = case p x of
-  Left  e -> output (show e) >> return Nothing
+  Left  e -> output (ushow e) >> return Nothing
   Right r -> return (Just r)
 
 -- | Perform an action specified by the statement.
