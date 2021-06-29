@@ -101,7 +101,7 @@ eval f = f <$> semiring <*> iTerm
 
 semiring :: Parser ZeroOneMany
 semiring = option Many $ choice
-  [Zero <$ symbol "0", One <$ symbol "1", Many <$ (symbol "ω" <|> symbol "w")]
+  [Zero <$ symbol "0", One <$ symbol "1", Many <$ (keyword "ω" <|> keyword "w")]
 
 iTerm :: Parser ITerm
 iTerm = try (cTermInner >>= ann) <|> do

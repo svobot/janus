@@ -81,7 +81,10 @@ stmtCases =
   , TestCase
     "Assumption"
     [ "assume (0 a : U) (1 x : a) (many : U)"
+    , "assume(0a:U)(1x:a)(many:U)"
     , "assume (0 a : 𝘜) (1 x : a) (ω many : 𝘜)"
+    , "assume(0a:𝘜)(1x:a)(ω many:𝘜)"
+    , "assume(0a:𝘜)(1x:a)(w many:𝘜)"
     ]
     (ParseRes $ Assume
       [ Binding "a"    Zero Universe
@@ -168,8 +171,7 @@ stmtCases =
     \1 | f : (1 _ : a) -> U x\n\
     \  |                    ^\n\
     \unexpected 'x'\n\
-    \expecting end of input\n\
-    \"
+    \expecting end of input\n"
   , TestCase
     "Pi type"
     [ "0 (x : a) -> b : U"
