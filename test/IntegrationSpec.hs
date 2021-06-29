@@ -40,7 +40,7 @@ instance (Monad m) => MonadAbstractIO (TestIO m) where
   output s = TestIO $ modify (second (s :))
   outputDoc = output . renderString
 
--- New type is used to coerce hspec into printing mismatched results across
+-- New type is used to coerce hspec into printing failing test results across
 -- multiple lines.
 newtype TestResult = TestResult String
 

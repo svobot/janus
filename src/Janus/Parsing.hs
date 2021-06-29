@@ -8,8 +8,17 @@ module Janus.Parsing
   , typeParser
   ) where
 
+import           Control.Applicative     hiding ( many
+                                                , some
+                                                )
+import           Data.Void                      ( Void )
+import           Text.Megaparsec         hiding ( State )
+import           Text.Megaparsec.Char
+import qualified Text.Megaparsec.Char.Lexer    as L
+
 import           Control.Monad                  ( foldM
                                                 , liftM2
+                                                , void
                                                 )
 import           Data.Char                      ( isAlpha )
 import           Data.List                      ( elemIndex )
@@ -19,10 +28,6 @@ import           Janus.Judgment          hiding ( Binding )
 import           Janus.Semiring                 ( ZeroOneMany(..) )
 import           Janus.Syntax
 import           Prelude                 hiding ( pi )
-import           Text.Parsec
-import           Text.Parsec.Language           ( haskellStyle )
-import           Text.Parsec.String             ( GenParser )
-import qualified Text.Parsec.Token             as P
 
 type Binding = J.Binding String ZeroOneMany CTerm
 
@@ -33,161 +38,166 @@ data Stmt
   | Eval ZeroOneMany ITerm
   deriving (Show, Eq)
 
--- | Language definition derived from the Haskell syntax.
-lang :: P.TokenParser u
-lang = P.makeTokenParser $ haskellStyle
-  { P.identStart      = satisfy (\c -> notElem @[] c "λₘω𝘜" && isAlpha c)
-                          <|> char '_'
-  , P.reservedNames   = keywords ++ ["<>", "()", "ω", "𝘜", "𝟭ₘ", "⊤"]
-  , P.reservedOpNames = "->" : map pure ":=\\λ.*&@∀,→⊗⟨⟩"
-  }
+type Parser = Parsec Void String
+
+ws :: Parser ()
+ws =
+  L.space space1 (L.skipLineComment "--") (L.skipBlockCommentNested "{-" "-}")
+
+lexeme :: Parser a -> Parser a
+lexeme = L.lexeme ws
+
+symbol :: String -> Parser ()
+symbol = void . L.symbol ws
+
+keyword :: String -> Parser ()
+keyword k = void $ lexeme (string k <* notFollowedBy alphaNumChar)
+
+identifier :: Parser String
+identifier = try $ do
+  ident <- lexeme $ (:) <$> start <*> rest
+  if ident `elem` keywords then fail $ "keyword " ++ ident else return ident
+ where
+  start = satisfy (\c -> notElem @[] c "λₘω𝘜" && isAlpha c) <|> char '_'
+  rest  = hidden $ many (alphaNumChar <|> oneOf @[] "_'")
+
+parens :: Parser a -> Parser a
+parens = between (symbol "(") (symbol ")")
 
 -- | Reserved language keywords.
 keywords :: [String]
 keywords = words "assume forall let in U I fst snd T"
 
 -- | Parse a statement.
-evalParser :: String -> Either ParseError Stmt
-evalParser = parse (P.whiteSpace lang *> stmt <* eof) "<interactive>"
+evalParser :: String -> Either (ParseErrorBundle String Void) Stmt
+evalParser = parse (ws *> stmt <* eof) "<interactive>"
 
 -- | Parse a Janus expression.
-typeParser :: String -> Either ParseError (ZeroOneMany, ITerm)
-typeParser = parse (P.whiteSpace lang *> eval (,) <* eof) "<interactive>"
+typeParser
+  :: String -> Either (ParseErrorBundle String Void) (ZeroOneMany, ITerm)
+typeParser = parse (ws *> eval (,) <* eof) "<interactive>"
 
 -- | Parse multiple consecutive statements.
-fileParser :: SourceName -> String -> Either ParseError [Stmt]
-fileParser = parse (P.whiteSpace lang *> many stmt <* eof)
-
-type CharParser = GenParser Char ()
-
-identifier :: CharParser String
-identifier = P.identifier lang
-
-reserved, reservedOp :: String -> CharParser ()
-reserved = P.reserved lang
-reservedOp = P.reservedOp lang
+fileParser :: String -> String -> Either (ParseErrorBundle String Void) [Stmt]
+fileParser = parse (ws *> many stmt <* eof)
 
 -- | Generate a parser of a single statement.
-stmt :: CharParser Stmt
+stmt :: Parser Stmt
 stmt = choice [define, assume, eval Eval]
  where
   define =
-    try (Let <$> (reserved "let" *> semiring) <*> identifier <* reserved "=")
+    try (Let <$> (keyword "let" *> semiring) <*> identifier <* symbol "=")
       <*> iTerm []
-  assume = Assume . reverse <$> (reserved "assume" *> bindings False [])
+  assume = Assume . reverse <$> (keyword "assume" *> bindings False [])
 
-eval :: (ZeroOneMany -> ITerm -> a) -> CharParser a
+eval :: (ZeroOneMany -> ITerm -> a) -> Parser a
 eval f = f <$> semiring <*> iTerm []
 
-semiring :: CharParser ZeroOneMany
+semiring :: Parser ZeroOneMany
 semiring = option Many $ choice
-  [ Zero <$ reserved "0"
-  , One <$ reserved "1"
-  , Many <$ (reserved "ω" <|> reserved "w")
-  ]
+  [Zero <$ symbol "0", One <$ symbol "1", Many <$ (symbol "ω" <|> symbol "w")]
 
-iTerm :: [String] -> CharParser ITerm
+iTerm :: [String] -> Parser ITerm
 iTerm e = try (cTermInner e >>= ann) <|> do
   t <- iTermInner e
   ann (Inf t) <|> return t
-  where ann t = Ann t <$> (reservedOp ":" *> cTerm e)
+  where ann t = Ann t <$> (symbol ":" *> cTerm e) <?> "type annotation"
 
-iTermInner :: [String] -> CharParser ITerm
+iTermInner :: [String] -> Parser ITerm
 iTermInner e = foldl (:$:) <$> inner e <*> many (cTermWith inner e)
  where
-  inner e' = choice [letElim, fstElim, sndElim, var, P.parens lang $ iTerm e']
+  inner e' =
+    choice [letElim, fstElim, sndElim, var, parens $ iTerm e']
+      <?> "synthesising term"
   letElim = do
-    z <- try $ reserved "let" *> identifier <* reserved "@"
+    z <- try $ keyword "let" *> identifier <* symbol "@"
     let rest elim ine tye =
           elim
-            <$> (reservedOp "=" *> iTerm e)
-            <*> (reserved "in" *> cTermWith iTermInner ine)
-            <*> (reservedOp ":" *> cTermWith iTermInner tye)
+            <$> (symbol "=" *> iTerm e)
+            <*> (keyword "in" *> cTermWith iTermInner ine)
+            <*> (symbol ":" *> cTermWith iTermInner tye)
     (do
         x <- identifier
-        y <- reservedOp "," *> identifier
+        y <- symbol "," *> identifier
         rest MPairElim ([y, x] ++ e) (z : e)
       )
       <|> (mUnit *> rest MUnitElim e (z : e))
-  fstElim = Fst <$> (reserved "fst" *> inner e)
-  sndElim = Snd <$> (reserved "snd" *> inner e)
+  fstElim = Fst <$> (keyword "fst" *> inner e)
+  sndElim = Snd <$> (keyword "snd" *> inner e)
   var     = (\x -> maybe (Free $ Global x) Bound $ elemIndex x e) <$> identifier
 
-cTermWith :: ([String] -> CharParser ITerm) -> [String] -> CharParser CTerm
+cTermWith :: ([String] -> Parser ITerm) -> [String] -> Parser CTerm
 cTermWith ip e = cTermInner e <|> Inf <$> ip e
 
-cTerm :: [String] -> CharParser CTerm
+cTerm :: [String] -> Parser CTerm
 cTerm = cTermWith iTerm
 
-cTermInner :: [String] -> CharParser CTerm
-cTermInner e = choice
-  [ lam
-  , universe
-  , pi
-  , forall
-  , try mPair
-  , mPairType
-  , mUnit
-  , mUnitType
-  , try aPair
-  , aPairType
-  , aUnit
-  , aUnitType
-  , try . P.parens lang $ cTerm e
-  ]
+cTermInner :: [String] -> Parser CTerm
+cTermInner e =
+  choice
+      [ lam
+      , universe
+      , pi
+      , forall
+      , try mPair
+      , mPairType
+      , mUnit
+      , mUnitType
+      , try aPair
+      , aPairType
+      , aUnit
+      , aUnitType
+      , try . parens $ cTerm e
+      ]
+    <?> "checkable term"
  where
   lam = do
-    reservedOp "\\" <|> reservedOp "λ"
-    xs <- many1 identifier
-    reservedOp "."
+    symbol "\\" <|> symbol "λ"
+    xs <- some identifier
+    symbol "."
     t <- cTermWith iTermInner (reverse xs ++ e)
     return $ iterate Lam t !! length xs
-  universe = Universe <$ (reserved "𝘜" <|> reserved "U")
+  universe = Universe <$ (keyword "𝘜" <|> keyword "U")
   pi       = do
-    J.Binding x q t <- try $ bind e <* (reservedOp "→" <|> reservedOp "->")
+    J.Binding x q t <- try $ bind e <* (symbol "→" <|> symbol "->")
     Pi q t <$> cTermWith iTermInner (x : e)
   forall = do
-    reserved "forall" <|> reservedOp "∀"
+    keyword "forall" <|> symbol "∀"
     xs <- bindings True e
-    reservedOp "."
+    symbol "."
     p <- cTerm (map bndName xs ++ e)
     foldM (\a x -> return $ Pi (bndUsage x) (bndType x) a) p xs
-  mPair     = P.parens lang $ MPair <$> cTerm e <* reservedOp "," <*> cTerm e
+  mPair     = parens $ MPair <$> cTerm e <* symbol "," <*> cTerm e
   mPairType = do
-    J.Binding x q t <- try $ bind e <* (reservedOp "⊗" <|> reservedOp "*")
+    J.Binding x q t <- try $ bind e <* (symbol "⊗" <|> symbol "*")
     MPairType q t <$> cTermWith iTermInner (x : e)
-  mUnitType = MUnitType <$ (reserved "𝟭ₘ" <|> reserved "I")
+  mUnitType = MUnitType <$ (keyword "𝟭ₘ" <|> keyword "I")
   aPair =
-    liftM2 (<|>) (between (reservedOp "⟨") (reservedOp "⟩")) (P.angles lang)
+    liftM2 (<|>)
+           (between (symbol "⟨") (symbol "⟩"))
+           (between (symbol "<") (symbol ">"))
       $   APair
       <$> cTerm e
-      <*  reservedOp ","
+      <*  symbol ","
       <*> cTerm e
   aPairType = do
     (x, t) <-
-      try
-      $  P.parens lang ((,) <$> identifier <* reservedOp ":" <*> cTerm e)
-      <* reservedOp "&"
+      try $ parens ((,) <$> identifier <* symbol ":" <*> cTerm e) <* symbol "&"
     APairType t <$> cTermWith iTermInner (x : e)
-  aUnit     = AUnit <$ (reserved "⟨⟩" <|> reserved "<>")
-  aUnitType = AUnitType <$ (reserved "⊤" <|> reserved "T")
+  aUnit     = AUnit <$ (symbol "⟨⟩" <|> symbol "<>")
+  aUnitType = AUnitType <$ (symbol "⊤" <|> keyword "T")
 
-mUnit :: CharParser CTerm
-mUnit = MUnit <$ reserved "()"
+mUnit :: Parser CTerm
+mUnit = MUnit <$ symbol "()"
 
-bind :: [String] -> CharParser Binding
+bind :: [String] -> Parser Binding
 bind e =
-  P.parens lang
-    $   flip J.Binding
-    <$> semiring
-    <*> identifier
-    <*  reservedOp ":"
-    <*> cTerm e
+  parens $ flip J.Binding <$> semiring <*> identifier <* symbol ":" <*> cTerm e
 
 -- | Parse multiple consecutive variable bindings.
-bindings :: Bool -> [String] -> CharParser [Binding]
+bindings :: Bool -> [String] -> Parser [Binding]
 bindings bound = fmap snd . flip go [] where
-  go :: [String] -> [Binding] -> CharParser ([String], [Binding])
+  go :: [String] -> [Binding] -> Parser ([String], [Binding])
   go env bs = do
     b <- bind $ if bound then env else []
     go (bndName b : env) (b : bs) <|> return (bndName b : env, b : bs)

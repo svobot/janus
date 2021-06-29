@@ -146,6 +146,7 @@ import           Data.List                      ( dropWhileEnd
                                                 )
 import           Data.Maybe                     ( isNothing )
 import qualified Data.Text.IO                  as T
+import           Data.Void                      ( Void )
 import           Janus.Evaluation
 import           Janus.Infer
 import           Janus.Judgment
@@ -154,8 +155,9 @@ import           Janus.Pretty
 import           Janus.Semiring
 import           Janus.Syntax
 import           System.Console.Repline
-import           Text.Parsec                    ( ParseError )
-import           Text.Show.Unicode              ( ushow )
+import           Text.Megaparsec                ( ParseErrorBundle
+                                                , errorBundlePretty
+                                                )
 
 -- | The 'MonadAbstractIO' class defines monadic actions which are used by our
 -- interpreter to output its results.
@@ -288,9 +290,13 @@ iinfer g r t = case synthesise g r t of
   Right v -> return (Just v)
 
 -- | Run a parser and print an error if it occurs.
-parseIO :: MonadAbstractIO m => (a -> Either ParseError b) -> a -> m (Maybe b)
+parseIO
+  :: MonadAbstractIO m
+  => (a -> Either (ParseErrorBundle String Void) b)
+  -> a
+  -> m (Maybe b)
 parseIO p x = case p x of
-  Left  e -> output (ushow e) >> return Nothing
+  Left  e -> output (errorBundlePretty e) >> return Nothing
   Right r -> return (Just r)
 
 -- | Perform an action specified by the statement.

@@ -2,29 +2,39 @@ module ParseSpec
   ( spec
   ) where
 
-import           Data.Bifunctor                 ( first )
+import           Data.String                    ( IsString
+                                                , fromString
+                                                )
+import           Data.Void
 import           Janus.Judgment
 import           Janus.Parsing
 import           Janus.Semiring
 import           Janus.Syntax
 import           Test.Hspec
-import           Text.Parsec                    ( ParseError )
+import           Text.Megaparsec                ( ParseErrorBundle
+                                                , errorBundlePretty
+                                                )
 
-newtype TestResult a = TestResult (Either (Maybe ParseError) a)
+data TestResult a
+   = ParseRes a
+   | ParseErr (ParseErrorBundle String Void)
+   | ParseErrLiteral String
+
+instance IsString (TestResult a) where
+  fromString = ParseErrLiteral
 
 instance (Eq a) => Eq (TestResult a) where
-  (TestResult (Right x)) == (TestResult (Right y)) = x == y
-  (TestResult (Left  _)) == (TestResult (Left  _)) = True
-  _                      == _                      = False
+  (ParseRes        x) == (ParseRes        y ) = x == y
+  (ParseErr        e) == (ParseErr        e') = e == e'
+  (ParseErrLiteral s) == (ParseErrLiteral s') = s == s'
+  (ParseErr        e) == (ParseErrLiteral s ) = errorBundlePretty e == s
+  (ParseErrLiteral s) == (ParseErr        e ) = s == errorBundlePretty e
+  _                   == _                    = False
 
 instance (Show a) => Show (TestResult a) where
-  show (TestResult x) = either (maybe "Parse error" show) show x
-
-good :: a -> TestResult a
-good = TestResult . return
-
-err :: TestResult a
-err = TestResult $ Left Nothing
+  show (ParseRes        x) = show x
+  show (ParseErr        e) = errorBundlePretty e
+  show (ParseErrLiteral s) = s
 
 data TestCase a = TestCase
   { desc   :: String
@@ -38,7 +48,7 @@ spec = do
   describe "File" $ mapM_ (run $ fileParser "<test>") fileCases
  where
   run p tc = it (desc tc) $ mapM_ (flip (checkOne p) $ res tc) $ inputs tc
-  checkOne p = shouldBe . TestResult . first Just . p
+  checkOne p = shouldBe . either ParseErr ParseRes . p
 
 fg :: String -> ITerm
 fg = Free . Global
@@ -53,10 +63,10 @@ stmtCases :: [TestCase Stmt]
 stmtCases =
   [ TestCase "Left associative function application"
              ["f x y", "(f x) y", "((f x) (y))"]
-             (good . Eval Many $ fg "f" :$: ifg "x" :$: ifg "y")
+             (ParseRes . Eval Many $ fg "f" :$: ifg "x" :$: ifg "y")
   , TestCase "Annotated function application"
              ["f x : a", "(f x) : a", "(f x : (a))"]
-             (good . Eval Many $ Ann (Inf $ fg "f" :$: ifg "x") (ifg "a"))
+             (ParseRes . Eval Many $ Ann (Inf $ fg "f" :$: ifg "x") (ifg "a"))
   , TestCase
     "Identity function"
     [ "\\a x . x : (0 a : U) -> (1 _ : a) -> a"
@@ -65,15 +75,15 @@ stmtCases =
     , "ω λa x . x : (0 a : U) → (1 _ : a) → a"
     , "ω λa x . x : ∀ (0 a : 𝘜) (1 _ : a) . a"
     ]
-    (good . Eval Many $ Ann (Lam (Lam (ib 0)))
-                            (Pi Zero Universe (Pi One (ib 0) (ib 1)))
+    (ParseRes . Eval Many $ Ann (Lam (Lam (ib 0)))
+                                (Pi Zero Universe (Pi One (ib 0) (ib 1)))
     )
   , TestCase
     "Assumption"
     [ "assume (0 a : U) (1 x : a) (many : U)"
     , "assume (0 a : 𝘜) (1 x : a) (ω many : 𝘜)"
     ]
-    (good $ Assume
+    (ParseRes $ Assume
       [ Binding "a"    Zero Universe
       , Binding "x"    One  (ifg "a")
       , Binding "many" Many Universe
@@ -84,7 +94,7 @@ stmtCases =
     [ "let p @ x', y' = (x, f y z) : (0 x : a) * x in y'\n\
       \               : ((λu . a) : (0 _ : (0 z : U) * z) -> U) p"
     ]
-    (good . Eval Many $ MPairElim
+    (ParseRes . Eval Many $ MPairElim
       (Ann (MPair (ifg "x") (Inf $ fg "f" :$: ifg "y" :$: ifg "z"))
            (MPairType Zero (ifg "a") (ib 0))
       )
@@ -98,20 +108,21 @@ stmtCases =
   , TestCase
     "Multiplicative unit elimination"
     ["0 let u @ () = f x in y : g u"]
-    (good . Eval Zero $ MUnitElim (fg "f" :$: ifg "x")
-                                  (ifg "y")
-                                  (Inf $ fg "g" :$: ib 0)
+    (ParseRes . Eval Zero $ MUnitElim (fg "f" :$: ifg "x")
+                                      (ifg "y")
+                                      (Inf $ fg "g" :$: ib 0)
     )
   , TestCase
     "Additive pair"
     ["let p = <x, f y> : (x : a) & f x", "let ω p = ⟨x, f y⟩ : (x : a) & f x"]
-    (good . Let Many "p" $ Ann (APair (ifg "x") (Inf $ fg "f" :$: ifg "y"))
-                               (APairType (ifg "a") (Inf $ fg "f" :$: ib 0))
+    (ParseRes . Let Many "p" $ Ann
+      (APair (ifg "x") (Inf $ fg "f" :$: ifg "y"))
+      (APairType (ifg "a") (Inf $ fg "f" :$: ib 0))
     )
   , TestCase
     "Additive pair elimination"
     ["1 λp. (fst p, snd p) : ∀ (p : (_ : a) & b) . (_ : a) * b"]
-    (good . Eval One $ Ann
+    (ParseRes . Eval One $ Ann
       (Lam (MPair (Inf (Fst (Bound 0))) (Inf (Snd (Bound 0)))))
       (Pi Many
           (APairType (ifg "a") (ifg "b"))
@@ -123,7 +134,7 @@ stmtCases =
     [ "(\\m a. m : forall (1 _ : I) (0 _ : T) . I) () <>"
     , "(λm a. m : ∀ (1 _ : 𝟭ₘ) (0 _ : ⊤) . 𝟭ₘ) () ⟨⟩"
     ]
-    (   good
+    (   ParseRes
     .   Eval Many
     $   (Ann (Lam (Lam (ib 1))) (Pi One MUnitType (Pi Zero AUnitType MUnitType))
         :$: MUnit
@@ -137,7 +148,7 @@ stmtCases =
       \    (_ : ((_ : (I)) * T))\n\
       \  . (I)) ((())) (((), <>))"
     ]
-    (   good
+    (   ParseRes
     .   Eval One
     $   (   Ann
             (Lam (Lam (Inf (Ann (ib 1) MUnitType))))
@@ -149,7 +160,16 @@ stmtCases =
         )
     :$: MPair MUnit AUnit
     )
-  , TestCase "Missing parenthesis" ["f : (1 _ : a) -> U x"] err
+  , TestCase
+    "Missing parenthesis"
+    ["f : (1 _ : a) -> U x"]
+    "<interactive>:1:20:\n\
+    \  |\n\
+    \1 | f : (1 _ : a) -> U x\n\
+    \  |                    ^\n\
+    \unexpected 'x'\n\
+    \expecting end of input\n\
+    \"
   , TestCase
     "Pi type"
     [ "0 (x : a) -> b : U"
@@ -158,15 +178,15 @@ stmtCases =
     , "0 (ω x : a) → b : 𝘜"
     , "0 (∀ (ω x : a) . b) : 𝘜"
     ]
-    (good . Eval Zero $ Ann (Pi Many (ifg "a") (ifg "b")) Universe)
+    (ParseRes . Eval Zero $ Ann (Pi Many (ifg "a") (ifg "b")) Universe)
   , TestCase
     "Multiplicative pair type"
     ["0 (w x : a) * b : U", "0 (x : (a)) * b : U", "0 (ω x : a) ⊗ b : 𝘜"]
-    (good . Eval Zero $ Ann (MPairType Many (ifg "a") (ifg "b")) Universe)
+    (ParseRes . Eval Zero $ Ann (MPairType Many (ifg "a") (ifg "b")) Universe)
   , TestCase
     "Additive pair type"
     ["0 (x : a) & b : U", "0 ((x : a) & b) : (U)", "0 (x : a) & b : 𝘜"]
-    (good . Eval Zero $ Ann (APairType (ifg "a") (ifg "b")) Universe)
+    (ParseRes . Eval Zero $ Ann (APairType (ifg "a") (ifg "b")) Universe)
   ]
 
 fileCases :: [TestCase [Stmt]]
@@ -177,7 +197,7 @@ fileCases =
         \\n\
         \let u = let _ @ () = () : I in x : a"
       ]
-      (good
+      (ParseRes
         [ Let One "v" $ MPairElim (fg "p") (ib 1) (ifg "a")
         , Let Many "u" $ MUnitElim (Ann MUnit MUnitType) (ifg "x") (ifg "a")
         ]

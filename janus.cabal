@@ -58,12 +58,11 @@ library
   import:              common
   build-depends:       containers
                      , mtl
-                     , parsec
+                     , megaparsec
                      , prettyprinter
                      , prettyprinter-ansi-terminal
                      , repline ^>=0.4
                      , text
-                     , unicode-show
   exposed-modules:     Janus.Evaluation
                      , Janus.Infer
                      , Janus.Judgment
@@ -93,7 +92,7 @@ test-suite test
   build-depends:       janus
                      , hspec
                      , mtl
-                     , parsec
+                     , megaparsec
   build-tool-depends:  hspec-discover:hspec-discover
   ghc-options:         -Wno-missing-export-lists
 
