@@ -60,8 +60,11 @@ keyword k = void $ lexeme (string k <* notFollowedBy alphaNumChar)
 
 identifier :: Parser String
 identifier = try $ do
-  ident <- lexeme $ (:) <$> start <*> rest
-  if ident `elem` keywords then fail $ "keyword " ++ ident else return ident
+  o <- getOffset
+  i <- lexeme $ (:) <$> start <*> rest
+  if i `elem` keywords
+    then region (setErrorOffset o) (fail $ "unexpected keyword '" <> i <> "'")
+    else return i
  where
   start = satisfy (\c -> notElem @[] c "λₘω𝘜" && isAlpha c) <|> char '_'
   rest  = hidden $ many (alphaNumChar <|> oneOf @[] "_'")
@@ -182,14 +185,10 @@ cTermInner =
     J.Binding x q t <- try $ bind <* (symbol "⊗" <|> symbol "*")
     MPairType q t <$> local (x :) (cTermWith iTermInner)
   mUnitType = MUnitType <$ (keyword "𝟭ₘ" <|> keyword "I")
-  aPair =
-    liftM2 (<|>)
-           (between (symbol "⟨") (symbol "⟩"))
-           (between (symbol "<") (symbol ">"))
-      $   APair
-      <$> cTerm
-      <*  symbol ","
-      <*> cTerm
+  aPair     = liftM2 (<|>)
+                     (between (symbol "⟨") (symbol "⟩"))
+                     (between (symbol "<") (symbol ">"))
+                     (APair <$> cTerm <* symbol "," <*> cTerm)
   aPairType = do
     (x, t) <-
       try $ parens ((,) <$> identifier <* symbol ":" <*> cTerm) <* symbol "&"
