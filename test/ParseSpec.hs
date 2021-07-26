@@ -147,9 +147,9 @@ stmtCases =
   , TestCase
     "Plentiful parentheses"
     [ "1 ((\\x y. ((x) : I))\n\
-      \  : forall (1 _ : ((I)))\n\
-      \    (_ : ((_ : (I)) * T))\n\
-      \  . (I)) ((())) (((), <>))"
+    \  : forall (1 _ : ((I)))\n\
+    \    (_ : ((_ : (I)) * T))\n\
+    \  . (I)) ((())) (((), <>))"
     ]
     (   ParseRes
     .   Eval One

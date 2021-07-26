@@ -125,8 +125,8 @@ cases =
     "Multiplicative unit elimination"
     [ "assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"
     , "1 (λp. let _ @ x, y = p in let _ @ () = y in x : a : a\n\
-    \     : (1 _ : (1 _ : a) * I) -> a)\n\
-    \   (x, ())"
+      \     : (1 _ : (1 _ : a) * I) -> a)\n\
+      \   (x, ())"
     ]
     "1 x : a"
   , TestCase
@@ -176,10 +176,10 @@ prettyCases =
   [ TestCase
     "Multiplicative pair first element projection"
     [ "let 0 proj1 = λa b p. let z @ x, y = p in x : a\n\
-    \            : ∀ (0 a : U)\n\
-    \                (0 b : ∀ (0 a' : a) . U)\n\
-    \                (0 p : (0 x : a) * b x)\n\
-    \              . a"
+      \            : ∀ (0 a : U)\n\
+      \                (0 b : ∀ (0 a' : a) . U)\n\
+      \                (0 p : (0 x : a) * b x)\n\
+      \              . a"
     ]
     "0 proj1 = (λx y z. let c @ a, b = z in a : x)\n\
     \          : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (0 z : (0 a : x) ⊗ y a) . x"
@@ -191,10 +191,10 @@ prettyCases =
       \                (0 p : (0 x : a) * b x)\n\
       \              . a"
     , "let 0 proj2 = λa b p. let z @ x,y = p in y : b (proj1 a b z)\n\
-    \            : ∀ (0 a : U)\n\
-    \                (0 b : (0 a' : a) -> U)\n\
-    \                (0 p : (0 x : a) * b x)\n\
-    \              . b (proj1 a b p)"
+      \            : ∀ (0 a : U)\n\
+      \                (0 b : (0 a' : a) -> U)\n\
+      \                (0 p : (0 x : a) * b x)\n\
+      \              . b (proj1 a b p)"
     ]
     "0 proj2 = (λx y z. let c @ a, b = z in b : y (let f @ d, e = c in d : x))\n\
     \          : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (0 z : (0 a : x) ⊗ y a)\n\
@@ -205,24 +205,24 @@ prettyCases =
   , TestCase
     "SKI Calculus (K combinator)"
     [ "let w K = (λ_ _ x _. x)\n\
-    \        : ∀ (0 a : U)\n\
-    \            (0 b : (0 _ : a) -> U)\n\
-    \            (1 x : a)\n\
-    \            (w _ : b x)\n\
-    \          . a"
+      \        : ∀ (0 a : U)\n\
+      \            (0 b : (0 _ : a) -> U)\n\
+      \            (1 x : a)\n\
+      \            (w _ : b x)\n\
+      \          . a"
     ]
     "ω K = (λx y z a. z)\n\
     \      : ∀ (0 x : 𝘜) (0 y : (0 b : x) → 𝘜) (1 z : x) (ω a : y z) . x"
   , TestCase
     "SKI Calculus (S combinator)"
     [ "let w S = ((λa b c x y z. x z (y z))\n\
-    \        : ∀ (0 a : U)\n\
-    \            (0 b : (0 _ : a) -> U)\n\
-    \            (0 c : ∀ (0 z : a) (0 yz : b z) . U)\n\
-    \            (1 x : ∀ (w z : a) (1 yz : b z) . c z yz)\n\
-    \            (1 y : (w z : a) -> b z)\n\
-    \            (w z : a)\n\
-    \          . c z (y z))"
+      \        : ∀ (0 a : U)\n\
+      \            (0 b : (0 _ : a) -> U)\n\
+      \            (0 c : ∀ (0 z : a) (0 yz : b z) . U)\n\
+      \            (1 x : ∀ (w z : a) (1 yz : b z) . c z yz)\n\
+      \            (1 y : (w z : a) -> b z)\n\
+      \            (w z : a)\n\
+      \          . c z (y z))"
     ]
     "ω S = (λx y z a b c. a c (b c))\n\
     \      : ∀ (0 x : 𝘜)\n\
