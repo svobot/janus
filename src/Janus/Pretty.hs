@@ -10,6 +10,9 @@ module Janus.Pretty
   , prettyResult
   ) where
 
+import           Control.Monad                  ( ap
+                                                , liftM2
+                                                )
 import           Control.Monad.Reader           ( MonadReader(local)
                                                 , Reader
                                                 , asks
@@ -77,6 +80,7 @@ instance Pretty ExpectedType where
   pretty SomePi         = "_ -> _"
   pretty SomeMPair      = "_" <+> mult "*" <+> "_"
   pretty SomeAPair      = "_" <+> add "&" <+> "_"
+  pretty SomeSum        = "_ ⊕ _"
   pretty (KnownType ty) = pretty ty
 
 instance Pretty TypingError where
@@ -238,6 +242,24 @@ iPrint p (MUnitElim l i t) = do
     ]
 iPrint p (Fst i) = (parensIf (p > 0) . (add "fst" <+>) <$>) <$> iPrint 3 i
 iPrint p (Snd i) = (parensIf (p > 0) . (add "snd" <+>) <$>) <$> iPrint 3 i
+iPrint p (SumElim q i c c' c'') = do
+  s         <- iPrint 0 i
+  leftPart  <- cPrint 0 c
+  rightPart <- cPrint 0 c'
+  typePart  <- cPrint 0 c''
+  return $ do
+    (x, y, z) <- asks (ap (liftM2 (,,) head (!! 1)) (!! 2) . fresh)
+    fmt x y z
+      <$> s
+      <*> local (skip 2 . bind)          leftPart
+      <*> local (skip 1 . bind . skip 1) rightPart
+      <*> local (bind . skip 2)          typePart
+ where
+  fmt x y z s l r ty =
+    parensIf (p > 0) $ hsep ["case", pretty q, var z, "@", s, "of"] <+> align
+      (sep ["{" <+> branches x y l r, "} :" <+> ty])
+  branch ctr n body = ctr <+> var n <+> "→" <+> body
+  branches x y l r = align $ sep [branch "inl" x l <> ";", branch "inr" y r]
 
 cPrint :: Int -> CTerm -> Printer Doc
 cPrint p (Inf i) = iPrint p i
@@ -286,11 +308,15 @@ cPrint _ (MPair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = mult "(" <> l <> mult "," <+> r <> mult ")"
 cPrint _ (APair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = add "⟨" <> l <> add "," <+> r <> add "⟩"
-cPrint _ Universe  = return . return $ "𝘜"
-cPrint _ MUnit     = return . return $ mult "()"
-cPrint _ MUnitType = return . return $ mult "𝟭ₘ"
-cPrint _ AUnit     = return . return $ add "⟨⟩"
-cPrint _ AUnitType = return . return $ add "⊤"
+cPrint _ Universe       = return . return $ "𝘜"
+cPrint _ MUnit          = return . return $ mult "()"
+cPrint _ MUnitType      = return . return $ mult "𝟭ₘ"
+cPrint _ AUnit          = return . return $ add "⟨⟩"
+cPrint _ AUnitType      = return . return $ add "⊤"
+cPrint p (SumL c      ) = (parensIf (p > 0) . ("inl" <+>) <$>) <$> cPrint 3 c
+cPrint p (SumR c      ) = (parensIf (p > 0) . ("inr" <+>) <$>) <$> cPrint 3 c
+cPrint p (SumType c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
+  where fmt l r = parensIf (p > 0) $ l <+> "⊕" <+> r
 
 cPrintDependent :: (Doc -> Doc -> Doc -> Doc) -> CTerm -> CTerm -> Printer Doc
 cPrintDependent fmt l r = do

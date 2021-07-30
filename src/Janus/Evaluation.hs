@@ -14,6 +14,9 @@ module Janus.Evaluation
     , VMUnit
     , VMUnitType
     , VPi
+    , VSumL
+    , VSumR
+    , VSumType
     , VUniverse
     )
   , cEval
@@ -42,6 +45,9 @@ data Value
    |  VAPairType Value (Value -> Value)
    |  VAUnit
    |  VAUnitType
+   |  VSumL Value
+   |  VSumR Value
+   |  VSumType Value Value
 
 instance Show Value where
   show = show . quote0
@@ -54,6 +60,7 @@ data Neutral
    |  NMUnitElim Neutral Value (Value -> Value)
    |  NFst Neutral
    |  NSnd Neutral
+   |  NSumElim ZeroOneMany Neutral (Value -> Value) (Value -> Value) (Value -> Value)
 
 type Type = Value
 
@@ -88,8 +95,11 @@ cEval _   MUnitType    = VMUnitType
 cEval ctx (APair c c') = VAPair (cEval ctx c) (cEval ctx c')
 cEval ctx (APairType ty ty') =
   VAPairType (cEval ctx ty) (\x -> cEval (second (x :) ctx) ty')
-cEval _ AUnit     = VAUnit
-cEval _ AUnitType = VAUnitType
+cEval _   AUnit          = VAUnit
+cEval _   AUnitType      = VAUnitType
+cEval ctx (SumL c      ) = VSumL (cEval ctx c)
+cEval ctx (SumR c      ) = VSumR (cEval ctx c)
+cEval ctx (SumType c c') = VSumType (cEval ctx c) (cEval ctx c')
 
 -- | Evaluate a type-synthesising term in a given environment.
 --
@@ -131,6 +141,16 @@ iEval ctx (Snd i) = case iEval ctx i of
   VNeutral n -> VNeutral $ NSnd n
   v          -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
+iEval ctx (SumElim p i c c' c'') = case iEval ctx i of
+  VSumL    x -> cEval (second (x :) ctx) c
+  VSumR    y -> cEval (second (y :) ctx) c'
+  VNeutral n -> VNeutral $ NSumElim p
+                                    n
+                                    (\x -> cEval (second (x :) ctx) c)
+                                    (\y -> cEval (second (y :) ctx) c')
+                                    (\z -> cEval (second (z :) ctx) c'')
+  v -> error
+    ("internal: Unable to eliminate " <> show v <> ", because it is not a sum")
 
 -- | Convert a value to a term.
 --
@@ -153,8 +173,11 @@ quote _  VMUnitType    = MUnitType
 quote ii (VAPair v v') = APair (quote ii v) (quote ii v')
 quote ii (VAPairType v f) =
   APairType (quote ii v) $ quote (ii + 1) (f $ quoteArg ii)
-quote _ VAUnit     = AUnit
-quote _ VAUnitType = AUnitType
+quote _  VAUnit          = AUnit
+quote _  VAUnitType      = AUnitType
+quote ii (VSumL v      ) = SumL $ quote ii v
+quote ii (VSumR v      ) = SumR $ quote ii v
+quote ii (VSumType v v') = SumType (quote ii v) (quote ii v')
 
 neutralQuote :: Int -> Neutral -> ITerm
 neutralQuote ii (NFree (Quote k)  ) = Bound $ (ii - k - 1) `max` 0
@@ -166,8 +189,14 @@ neutralQuote ii (NMPairElim n v v') = MPairElim
   (quote (ii + 1) (v' $ quoteArg ii))
 neutralQuote ii (NMUnitElim n v v') =
   MUnitElim (neutralQuote ii n) (quote ii v) $ quote (ii + 1) (v' $ quoteArg ii)
-neutralQuote ii (NFst n) = Fst $ neutralQuote ii n
-neutralQuote ii (NSnd n) = Snd $ neutralQuote ii n
+neutralQuote ii (NFst n               ) = Fst $ neutralQuote ii n
+neutralQuote ii (NSnd n               ) = Snd $ neutralQuote ii n
+neutralQuote ii (NSumElim p n v v' v'') = SumElim
+  p
+  (neutralQuote ii n)
+  (quote (ii + 1) $ v (quoteArg $ ii + 1))
+  (quote (ii + 1) $ v' (quoteArg $ ii + 1))
+  (quote (ii + 1) $ v'' (quoteArg $ ii + 1))
 
 quoteArg :: Int -> Value
 quoteArg = vfree . Quote

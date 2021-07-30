@@ -29,7 +29,7 @@ import           Janus.Semiring
 import           Janus.Syntax
 
 -- | Type the term was expected to have during a type clash error.
-data ExpectedType = SomePi | SomeMPair | SomeAPair | KnownType Type
+data ExpectedType = SomePi | SomeMPair | SomeAPair | SomeSum | KnownType Type
 
 -- | Errors that can arise during the typing algorithm.
 data TypingError
@@ -167,6 +167,25 @@ synthType s (Snd m) = do
   case ty of
     VAPairType _ t2 -> (qs, ) . t2 <$> evalInEnv (Inf $ Fst m)
     _               -> throwError $ TypeClashError SomeAPair ty (Snd m)
+synthType s (SumElim p m n o u) = do
+  (qs, mTy) <- first (Map.map (p .*.)) <$> synthType s m
+  case mTy of
+    zTy@(VSumType xTy yTy) -> do
+      z <- newLocalVar zero zTy
+      local (with z) $ checkTypeErased (cSubst 0 (Free $ bndName z) u) VUniverse
+      let sp = extend s .*. p
+      x   <- newLocalVar sp xTy
+      qs1 <- withLocalVar "Left case of the sum" x $ do
+        ux <- evalInEnv $ cSubst 0 (Ann (SumL $ ifn x) $ quote0 zTy) u
+        checkType s (cSubst 0 (Free $ bndName x) n) ux
+      y   <- newLocalVar sp yTy
+      qs2 <- withLocalVar "Right case of the sum" y $ do
+        uy <- evalInEnv $ cSubst 0 (Ann (SumR $ ifn y) $ quote0 zTy) u
+        checkType s (cSubst 0 (Free $ bndName y) o) uy
+      (Map.unionWith (.+.) qs (mergeUsages qs1 qs2), )
+        <$> evalInEnv (cSubst 0 m u)
+    ty -> throwError $ TypeClashError SomeSum ty (SumElim p m n o u)
+  where ifn = Inf . Free . bndName
 synthType _ i@(Bound _) =
   error $ "internal: Trying to infer type of " <> show i
 
@@ -192,23 +211,22 @@ checkType s (MPair m n) (VMPairType p t1 t2) = do
 checkType s (APair m n) (VAPairType t1 t2) = do
   qs1 <- checkType s m t1
   qs2 <- evalInEnv m >>= (checkType s n . t2)
-  -- For every resource that is used anywhere in the pair, take the least upper
-  -- bound of the resource usages in both elements of the pair. The element that
-  -- is missing a usage of a resource is considered to use it zero-times.
-  return $ Map.merge (Map.mapMissing (const $ lub zero))
-                     (Map.mapMissing (const $ lub zero))
-                     (Map.zipWithMatched (const lub))
-                     qs1
-                     qs2
-checkType _ MUnit                  VMUnitType = return Map.empty
-checkType _ AUnit                  VAUnitType = return Map.empty
-checkType s ty@(Pi        _ t1 t2) VUniverse  = checkTypeDep s ty t1 t2
-checkType s ty@(MPairType _ t1 t2) VUniverse  = checkTypeDep s ty t1 t2
-checkType s ty@(APairType t1 t2  ) VUniverse  = checkTypeDep s ty t1 t2
-checkType s ty@Universe            VUniverse  = checkTypeAtom s ty
-checkType s ty@MUnitType           VUniverse  = checkTypeAtom s ty
-checkType s ty@AUnitType           VUniverse  = checkTypeAtom s ty
-checkType _ m                      ty         = throwError $ CheckError ty m
+  return $ mergeUsages qs1 qs2
+checkType _ MUnit                  VMUnitType       = return Map.empty
+checkType _ AUnit                  VAUnitType       = return Map.empty
+checkType s ty@(Pi        _ t1 t2) VUniverse        = checkTypeDep s ty t1 t2
+checkType s ty@(MPairType _ t1 t2) VUniverse        = checkTypeDep s ty t1 t2
+checkType s ty@(APairType t1 t2  ) VUniverse        = checkTypeDep s ty t1 t2
+checkType s ty@Universe            VUniverse        = checkTypeAtom s ty
+checkType s ty@MUnitType           VUniverse        = checkTypeAtom s ty
+checkType s ty@AUnitType           VUniverse        = checkTypeAtom s ty
+checkType s (SumL m)               (VSumType t1 _ ) = checkType s m t1
+checkType s (SumR m)               (VSumType _  t2) = checkType s m t2
+checkType s ty@(SumType t1 t2) VUniverse =
+  checkTypeAtom s ty
+    <* checkTypeErased t1 VUniverse
+    <* checkTypeErased t2 VUniverse
+checkType _ m ty = throwError $ CheckError ty m
 
 -- | Type-check a dependent type.
 checkTypeDep :: Relevance -> CTerm -> CTerm -> CTerm -> TypeJudgment Usage
@@ -243,4 +261,13 @@ checkTypeErased m ty = do
       | (k, q) <- Map.toList errs
       ]
     )
+
+-- | Merge two usages by finding a least upper bound point-wise.
+--
+-- The pair element that is missing a usage of a resource is considered to use
+-- it zero-times.
+mergeUsages :: (Ord k, Semiring v) => Map.Map k v -> Map.Map k v -> Map.Map k v
+mergeUsages = Map.merge (Map.mapMissing (const $ lub zero))
+                        (Map.mapMissing (const $ lub zero))
+                        (Map.zipWithMatched (const lub))
 

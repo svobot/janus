@@ -139,9 +139,8 @@ stmtCases =
     ]
     (   ParseRes
     .   Eval Many
-    $   (Ann (Lam (Lam (ib 1))) (Pi One MUnitType (Pi Zero AUnitType MUnitType))
-        :$: MUnit
-        )
+    $   Ann (Lam (Lam (ib 1))) (Pi One MUnitType (Pi Zero AUnitType MUnitType))
+    :$: MUnit
     :$: AUnit
     )
   , TestCase
@@ -189,6 +188,25 @@ stmtCases =
     "Additive pair type"
     ["0 (x : a) & b : U", "0 ((x : a) & b) : (U)", "0 (x : a) & b : 𝘜"]
     (ParseRes . Eval Zero $ Ann (APairType (ifg "a") (ifg "b")) Universe)
+  , TestCase
+    "Disjoint sum"
+    ["1 inr x : (f a) + b"]
+    (ParseRes . Eval One $ Ann (SumR $ ifg "x")
+                               (SumType (Inf $ fg "f" :$: ifg "a") (ifg "b"))
+    )
+  , TestCase
+    "Disjoint sum elimination"
+    [ "let sum = case z @ m of {inl x -> x; inr y -> f y} : a"
+    , "let sum = case z @ m of {inr y -> f y; inl x -> x} : a"
+    , "let sum = case w z @ m of {inl x -> x; inr y -> f y} : a"
+    , "let ω sum = case ω z @ m of {inl x -> x; inr y -> f y} : a"
+    ]
+    (ParseRes . Let Many "sum" $ SumElim Many
+                                         (fg "m")
+                                         (ib 0)
+                                         (Inf $ fg "f" :$: ib 0)
+                                         (ifg "a")
+    )
   ]
 
 fileCases :: [TestCase [Stmt]]

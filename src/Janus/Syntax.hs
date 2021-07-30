@@ -54,6 +54,12 @@ data CTerm
      AUnit
    | -- | Additive unit type.
      AUnitType
+   | -- | Left constructor of a disjoint sum.
+     SumL CTerm
+   | -- | Right constructor of a disjoint sum.
+     SumR CTerm
+   | -- | Disjoint sum type.
+     SumType CTerm CTerm
   deriving (Show, Eq)
 
 -- | Type-synthesising term.
@@ -83,6 +89,14 @@ data ITerm
      Fst ITerm
    | -- | Additive pair eliminator evaluating into the second element.
      Snd ITerm
+   | -- | Disjoint sum eliminator.
+     SumElim
+        ZeroOneMany -- ^ Multiplicity of the sum contents.
+        ITerm -- ^ Term evaluating into a sum.
+        CTerm -- ^ Term evaluating into the result in case the sum contains the
+              -- left 
+        CTerm -- ^
+        CTerm -- ^ Type annotation of the result of the elimination.
   deriving (Show, Eq)
 
 -- | Substitution on type-synthesising terms.
@@ -98,8 +112,13 @@ iSubst ii r (MPairElim i c c') =
   MPairElim (iSubst ii r i) (cSubst (ii + 2) r c) (cSubst (ii + 1) r c')
 iSubst ii r (MUnitElim i c c') =
   MUnitElim (iSubst ii r i) (cSubst ii r c) (cSubst (ii + 1) r c')
-iSubst ii r (Fst i) = Fst (iSubst ii r i)
-iSubst ii r (Snd i) = Snd (iSubst ii r i)
+iSubst ii r (Fst i               ) = Fst (iSubst ii r i)
+iSubst ii r (Snd i               ) = Snd (iSubst ii r i)
+iSubst ii r (SumElim p i c c' c'') = SumElim p
+                                             (iSubst ii r i)
+                                             (cSubst (ii + 1) r c)
+                                             (cSubst (ii + 1) r c')
+                                             (cSubst (ii + 1) r c'')
 
 -- | Substitution on type-checkable terms.
 --
@@ -118,6 +137,9 @@ cSubst _  _ MUnitType    = MUnitType
 cSubst ii r (APair c c') = APair (cSubst ii r c) (cSubst ii r c')
 cSubst ii r (APairType ty ty') =
   APairType (cSubst ii r ty) (cSubst (ii + 1) r ty')
-cSubst _ _ AUnit     = AUnit
-cSubst _ _ AUnitType = AUnitType
+cSubst _  _ AUnit          = AUnit
+cSubst _  _ AUnitType      = AUnitType
+cSubst ii r (SumL c      ) = cSubst ii r c
+cSubst ii r (SumR c      ) = cSubst ii r c
+cSubst ii r (SumType c c') = SumType (cSubst ii r c) (cSubst ii r c')
 

@@ -169,6 +169,22 @@ cases =
     "Dependent additive pair elimination"
     ["assume (0 a : U) (0 s : a)", "let 0 res = snd (<a,s> : (a : U) & a)"]
     "0 res = s : a"
+  , TestCase
+    "Weakened disjoint sum usage in elimination branches"
+    [ "assume (0 a : U) (0 b : U) (x : a) (y : b)"
+    , "let 0 sum = a + b : U"
+    , "let x' = case z @ inl x : sum of { inl x -> x; inr y -> x} : a"
+    ]
+    "ω x' = x : a"
+  , TestCase
+    "Linear disjoint sum usage in elimination branches"
+    [ "assume (0 a : U) (0 b : U) (x : a) (y : b)"
+    , "let 0 sum = a + b : U"
+    , "let x' = case 1 z @ inl x : sum of { inl x -> x; inr y -> x} : a"
+    ]
+    "error: Mismatched multiplicities (Right case of the sum):\n\
+    \         [Local 0] : b\n\
+    \           Used 0-times, but available 1-times."
   ]
 
 prettyCases :: [TestCase]

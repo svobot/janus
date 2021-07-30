@@ -11,6 +11,7 @@ module Janus.Parsing
 import           Control.Applicative     hiding ( many
                                                 , some
                                                 )
+import           Data.Tuple                     ( swap )
 import           Data.Void                      ( Void )
 import           Text.Megaparsec         hiding ( State )
 import           Text.Megaparsec.Char
@@ -69,12 +70,13 @@ identifier = try $ do
   start = satisfy (\c -> notElem @[] c "λₘω𝘜" && isAlpha c) <|> char '_'
   rest  = hidden $ many (alphaNumChar <|> oneOf @[] "_'")
 
-parens :: Parser a -> Parser a
+parens, braces :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
+braces = between (symbol "{") (symbol "}")
 
 -- | Reserved language keywords.
 keywords :: [String]
-keywords = words "assume forall let in U I fst snd T"
+keywords = words "assume forall let in U I fst snd T inl inr case of"
 
 -- | Parse a statement.
 evalParser :: String -> Either (ParseErrorBundle String Void) Stmt
@@ -116,7 +118,7 @@ iTermInner :: Parser ITerm
 iTermInner = foldl (:$:) <$> inner <*> many (cTermWith inner)
  where
   inner =
-    choice [letElim, fstElim, sndElim, var, parens iTerm]
+    choice [letElim, fstElim, sndElim, sumElim, var, parens iTerm]
       <?> "synthesising term"
   letElim = do
     z <- try $ keyword "let" *> identifier <* symbol "@"
@@ -133,6 +135,19 @@ iTermInner = foldl (:$:) <$> inner <*> many (cTermWith inner)
       <|> (mUnit *> rest MUnitElim [] [z])
   fstElim = Fst <$> (keyword "fst" *> inner)
   sndElim = Snd <$> (keyword "snd" *> inner)
+  sumElim = do
+    s <- keyword "case" *> semiring
+    z <- identifier <* symbol "@"
+    m <- iTerm <* keyword "of"
+    let branch side = do
+          keyword side
+          x <- identifier <* (symbol "→" <|> symbol "->")
+          local (x :) (cTermWith iTermInner)
+    (l, r) <- braces
+      (   ((,) <$> branch "inl" <* symbol ";" <*> branch "inr")
+      <|> ((swap .) . (,) <$> branch "inr" <* symbol ";" <*> branch "inl")
+      )
+    SumElim s m l r <$> (symbol ":" *> local (z :) (cTermWith iTermInner))
   var =
     asks (\r x -> maybe (Free $ Global x) Bound $ elemIndex x r) <*> identifier
 
@@ -145,23 +160,23 @@ cTerm = cTermWith iTerm
 cTermInner :: Parser CTerm
 cTermInner =
   choice
-      [ lam
-      , universe
-      , pi
-      , forall
-      , try mPair
-      , mPairType
-      , mUnit
-      , mUnitType
-      , try aPair
-      , aPairType
-      , aUnit
-      , aUnitType
-      , try . parens $ cTerm
-      ]
+      (  atomic
+      ++ [ lam
+         , pi
+         , forall
+         , try mPair
+         , mPairType
+         , aPairType
+         , sumL
+         , sumR
+         , sumType
+         , try . parens $ cTerm
+         ]
+      )
     <?> "checkable term"
  where
-  lam = do
+  atomic = [universe, mUnit, mUnitType, aUnit, aUnitType, aPair]
+  lam    = do
     symbol "\\" <|> symbol "λ"
     xs <- some identifier
     symbol "."
@@ -195,6 +210,15 @@ cTermInner =
     APairType t <$> local (x :) (cTermWith iTermInner)
   aUnit     = AUnit <$ (symbol "⟨⟩" <|> symbol "<>")
   aUnitType = AUnitType <$ (symbol "⊤" <|> keyword "T")
+  sumL      = SumL <$> (keyword "inl" *> cTermWith iTermInner)
+  sumR      = SumR <$> (keyword "inr" *> cTermWith iTermInner)
+  sumType =
+    try
+        (   SumType
+        <$> choice (atomic ++ [try $ parens cTerm, Inf <$> iTermInner])
+        <*  (symbol "⊕" <|> symbol "+")
+        )
+      <*> cTermWith iTermInner
 
 mUnit :: Parser CTerm
 mUnit = MUnit <$ symbol "()"
