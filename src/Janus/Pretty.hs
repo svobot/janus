@@ -200,28 +200,30 @@ iPrint _ (Free  n) = do
   return . return $ pretty n
 iPrint p (i :$: c) = (<*>) . (fmt <$>) <$> iPrint 2 i <*> cPrint 3 c
   where fmt f x = parensIf (p > 2) . align $ sep [f, x]
-iPrint p (MPairElim l i t) = do
+iPrint p (MPairElim q l i t) = do
   letPart  <- iPrint 0 l
   inPart   <- cPrint 0 i
   typePart <- cPrint 0 t
-  return
-    $   asks (fmt . fresh)
-    <*> letPart
-    <*> local (bindMany 2)    inPart
-    <*> local (bind . skip 2) typePart
+  return $ do
+    (x, y, z) <- asks (ap (liftM2 (,,) head (!! 1)) (!! 2) . fresh)
+    fmt x y z
+      <$> letPart
+      <*> local (bindMany 2)    inPart
+      <*> local (bind . skip 2) typePart
  where
-  fmt names letPart inPart typePart = parensIf (p > 0) . align $ sep
+  fmt x y z letPart inPart typePart = parensIf (p > 0) . align $ sep
     [ mult "let"
-    <+> var (names !! 2)
+    <+> pretty q
+    <+> var z
     <+> mult "@"
-    <+> var (head names)
+    <+> var x
     <>  mult ","
-    <+> var (names !! 1)
+    <+> var y
     <+> mult "="
     <+> letPart
     , mult "in" <+> inPart <+> mult ":" <+> typePart
     ]
-iPrint p (MUnitElim l i t) = do
+iPrint p (MUnitElim q l i t) = do
   letPart  <- iPrint 0 l
   inPart   <- cPrint 0 i
   typePart <- cPrint 0 t
@@ -233,6 +235,7 @@ iPrint p (MUnitElim l i t) = do
  where
   fmt name letPart inPart typePart = parensIf (p > 0) $ sep
     [ mult "let"
+    <+> pretty q
     <+> var name
     <+> mult "@"
     <+> mult "()"

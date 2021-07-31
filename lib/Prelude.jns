@@ -19,7 +19,7 @@ let 0 proj2 = (λx y z. let c @ a, b = z in b : y (let f @ d, e = c in d : x))
 let 0 ofcW = (λx. (w y : x) * I) : (0 x : U) -> U
 
 -- Eliminator for values of the exponential type
-let w ofcElim = (λx y z a. let d @ b, c = z in let d @ () = c in a b : y z : y z)
+let w ofcElim = (λx y z a. let 1 d @ b, c = z in let 1 d @ () = c in a b : y z : y z)
                 : ∀ (0 x : U)
                     (0 y : (0 b : (w b : x) * I) -> U)
                     (1 z : (w b : x) * I)

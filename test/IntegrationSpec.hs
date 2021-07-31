@@ -71,7 +71,7 @@ spec = do
 
   run c = it (desc c) $ do
     (_, out) <- evalTestCase $ input c
-    (TestResult . head) out `shouldBe` result c
+    TestResult (head out) `shouldBe` result c
 
 cases :: [TestCase]
 cases =
@@ -124,7 +124,7 @@ cases =
   , TestCase
     "Multiplicative unit elimination"
     [ "assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"
-    , "1 (λp. let _ @ x, y = p in let _ @ () = y in x : a : a\n\
+    , "1 (λp. let 1 _ @ x, y = p in let 1 _ @ () = y in x : a : a\n\
       \     : (1 _ : (1 _ : a) * I) -> a)\n\
       \   (x, ())"
     ]
@@ -145,8 +145,8 @@ cases =
     "Exponential elimination"
     [ "assume (0 a : U) (m : a)"
     , "let 0 ofcW = (λa. (w _ : a) * I) : (0 _ : U) -> U"
-    , "let w ofcElim = λa b exp f. let z @ x,y = exp in\n\
-      \                              (let _ @ () = y in f x : b exp)\n\
+    , "let w ofcElim = λa b exp f. let 1 z @ x,y = exp in\n\
+      \                              (let 1 _ @ () = y in f x : b exp)\n\
       \                            : b exp\n\
       \              : ∀ (0 a : U)\n\
       \                  (0 b : (0 _ : (w _ : a) * I) -> U)\n\
@@ -197,7 +197,7 @@ prettyCases =
       \                (0 p : (0 x : a) * b x)\n\
       \              . a"
     ]
-    "0 proj1 = (λx y z. let c @ a, b = z in a : x)\n\
+    "0 proj1 = (λx y z. let ω c @ a, b = z in a : x)\n\
     \          : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (0 z : (0 a : x) ⊗ y a) . x"
   , TestCase
     "Multiplicative pair second element projection"
@@ -212,9 +212,9 @@ prettyCases =
       \                (0 p : (0 x : a) * b x)\n\
       \              . b (proj1 a b p)"
     ]
-    "0 proj2 = (λx y z. let c @ a, b = z in b : y (let f @ d, e = c in d : x))\n\
+    "0 proj2 = (λx y z. let ω c @ a, b = z in b : y (let ω f @ d, e = c in d : x))\n\
     \          : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (0 z : (0 a : x) ⊗ y a)\n\
-    \            . y (let c @ a, b = z in a : x)"
+    \            . y (let ω c @ a, b = z in a : x)"
   , TestCase "SKI Calculus (I combinator)"
              ["let w Id = λ_ x. x : ∀ (0 a : U) (1 _ : a) . a"]
              "ω Id = (λx y. y) : ∀ (0 x : 𝘜) (1 y : x) . x"

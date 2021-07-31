@@ -98,6 +98,7 @@ stmtCases =
       \               : ((λu . a) : (0 _ : (0 z : U) * z) -> U) p"
     ]
     (ParseRes . Eval Many $ MPairElim
+      Many
       (Ann (MPair (ifg "x") (Inf $ fg "f" :$: ifg "y" :$: ifg "z"))
            (MPairType Zero (ifg "a") (ib 0))
       )
@@ -111,7 +112,8 @@ stmtCases =
   , TestCase
     "Multiplicative unit elimination"
     ["0 let u @ () = f x in y : g u"]
-    (ParseRes . Eval Zero $ MUnitElim (fg "f" :$: ifg "x")
+    (ParseRes . Eval Zero $ MUnitElim Many
+                                      (fg "f" :$: ifg "x")
                                       (ifg "y")
                                       (Inf $ fg "g" :$: ib 0)
     )
@@ -218,8 +220,9 @@ fileCases =
         \let u = let _ @ () = () : I in x : a"
       ]
       (ParseRes
-        [ Let One "v" $ MPairElim (fg "p") (ib 1) (ifg "a")
-        , Let Many "u" $ MUnitElim (Ann MUnit MUnitType) (ifg "x") (ifg "a")
+        [ Let One "v" $ MPairElim Many (fg "p") (ib 1) (ifg "a")
+        , Let Many "u"
+          $ MUnitElim Many (Ann MUnit MUnitType) (ifg "x") (ifg "a")
         ]
       )
   ]

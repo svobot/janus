@@ -121,7 +121,8 @@ iTermInner = foldl (:$:) <$> inner <*> many (cTermWith inner)
     choice [letElim, fstElim, sndElim, sumElim, var, parens iTerm]
       <?> "synthesising term"
   letElim = do
-    z <- try $ keyword "let" *> identifier <* symbol "@"
+    (q, z) <- try $ (,) <$> (keyword "let" *> semiring) <*> identifier <* symbol
+      "@"
     let rest elim inLocal tyLocal =
           elim
             <$> (symbol "=" *> iTerm)
@@ -130,9 +131,9 @@ iTermInner = foldl (:$:) <$> inner <*> many (cTermWith inner)
     (do
         x <- identifier
         y <- symbol "," *> identifier
-        rest MPairElim [y, x] [z]
+        rest (MPairElim q) [y, x] [z]
       )
-      <|> (mUnit *> rest MUnitElim [] [z])
+      <|> (mUnit *> rest (MUnitElim q) [] [z])
   fstElim = Fst <$> (keyword "fst" *> inner)
   sndElim = Snd <$> (keyword "snd" *> inner)
   sumElim = do

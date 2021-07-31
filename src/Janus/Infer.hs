@@ -126,28 +126,28 @@ synthType s (m :$: n) = do
           Map.unionWith (.+.) qs1 . Map.map (sp .*.) <$> checkType Present n ty
       (qs, ) . ty' <$> evalInEnv n
     ty -> throwError $ TypeClashError SomePi ty (m :$: n)
-synthType s (MPairElim m n o) = do
-  (qs1, mTy) <- synthType s m
+synthType s (MPairElim r m n o) = do
+  (qs1, mTy) <- first (Map.map (r .*.)) <$> synthType s m
   case mTy of
     zTy@(VMPairType p xTy yTy) -> do
       z <- newLocalVar zero zTy
       local (with z) $ checkTypeErased (sub 0 z o) VUniverse
       let s' = extend s
-      x  <- newLocalVar (p .*. s') xTy
+      x  <- newLocalVar (p .*. s' .*. r) xTy
       qs <- withLocalVar "First element of the pair elimination" x $ do
-        y <- newLocalVar s' (yTy . vfree $ bndName x)
+        y <- newLocalVar (s' .*. r) (yTy . vfree $ bndName x)
         withLocalVar "Second element of the pair elimination" y $ do
           oxy <- evalInEnv
             $ cSubst 0 (Ann (MPair (ifn x) (ifn y)) $ quote0 zTy) o
           qs2 <- checkType s (sub 1 x . sub 0 y $ n) oxy
           return $ Map.unionWith (.+.) qs1 qs2
       (qs, ) <$> evalInEnv (cSubst 0 m o)
-    ty -> throwError $ TypeClashError SomeMPair ty (MPairElim m n o)
+    ty -> throwError $ TypeClashError SomeMPair ty (MPairElim r m n o)
  where
   ifn = Inf . Free . bndName
   sub i = cSubst i . Free . bndName
-synthType s (MUnitElim m n o) = do
-  (qs1, mTy) <- synthType s m
+synthType s (MUnitElim r m n o) = do
+  (qs1, mTy) <- first (Map.map (r .*.)) <$> synthType s m
   case mTy of
     xTy@VMUnitType -> do
       x <- newLocalVar zero xTy
@@ -155,8 +155,8 @@ synthType s (MUnitElim m n o) = do
       ox  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) o)
       qs2 <- checkType s n ox
       (Map.unionWith (.+.) qs1 qs2, ) <$> evalInEnv (cSubst 0 m o)
-    ty ->
-      throwError $ TypeClashError (KnownType VMUnitType) ty (MUnitElim m n o)
+    ty -> throwError
+      $ TypeClashError (KnownType VMUnitType) ty (MUnitElim r m n o)
 synthType s (Fst m) = do
   (qs, ty) <- synthType s m
   case ty of

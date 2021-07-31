@@ -76,12 +76,14 @@ data ITerm
      ITerm :$: CTerm
    | -- | Multiplicative pair eliminator.
      MPairElim
+       ZeroOneMany -- ^ Multiplicity of the eliminated pair.
        ITerm -- ^ Term evaluating into a pair.
        CTerm -- ^ Term evaluating into the result of the elimination, which has
              -- the two elements of the pair bound.
        CTerm -- ^ Type annotation of the result of elimination.
    | -- | Multiplicative unit eliminator.
      MUnitElim
+       ZeroOneMany -- ^ Multiplicity of the eliminated unit.
        ITerm -- ^ Term evaluating into a unit.
        CTerm -- ^ Term evaluating into the result of the elimination.
        CTerm -- ^ Type annotation of the result of elimination.
@@ -108,10 +110,10 @@ iSubst ii i' (Ann c c') = Ann (cSubst ii i' c) (cSubst ii i' c')
 iSubst ii i' (Bound j ) = if ii == j then i' else Bound j
 iSubst _  _  (Free  y ) = Free y
 iSubst ii i' (i :$: c ) = iSubst ii i' i :$: cSubst ii i' c
-iSubst ii r (MPairElim i c c') =
-  MPairElim (iSubst ii r i) (cSubst (ii + 2) r c) (cSubst (ii + 1) r c')
-iSubst ii r (MUnitElim i c c') =
-  MUnitElim (iSubst ii r i) (cSubst ii r c) (cSubst (ii + 1) r c')
+iSubst ii r (MPairElim p i c c') =
+  MPairElim p (iSubst ii r i) (cSubst (ii + 2) r c) (cSubst (ii + 1) r c')
+iSubst ii r (MUnitElim p i c c') =
+  MUnitElim p (iSubst ii r i) (cSubst ii r c) (cSubst (ii + 1) r c')
 iSubst ii r (Fst i               ) = Fst (iSubst ii r i)
 iSubst ii r (Snd i               ) = Snd (iSubst ii r i)
 iSubst ii r (SumElim p i c c' c'') = SumElim p

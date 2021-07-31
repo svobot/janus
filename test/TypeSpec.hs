@@ -86,10 +86,11 @@ cases =
     (TestResult . return $ ifg "a")
   , TestCase
     "Second projection of dependent multiplicative pair"
-    -- 1 let _ @ x, y = (a, x) : (0 _ : U) * a in y : a
+    -- 1 let 1 _ @ x, y = (a, x) : (0 _ : U) * a in y : a
     abxyContext
     One
     (MPairElim
+      One
       (Ann (MPair (ifg "a") (ifg "x")) (MPairType Zero Universe (ifg "a")))
       (ib 0)
       (ifg "a")
@@ -97,13 +98,14 @@ cases =
     (TestResult . return $ ifg "a")
   , TestCase
     "Linear swap"
-    -- 1 ((\p. let z @ x, y = p in (y, x) : (1 _ : b) * a) : (1 _ : (1 _ : a) * b) -> (1 _ : b) * a) (x, y)
+    -- 1 ((\p. let 1 z @ x, y = p in (y, x) : (1 _ : b) * a) : (1 _ : (1 _ : a) * b) -> (1 _ : b) * a) (x, y)
     abxyContext
     One
     (   Ann
         (Lam
           (Inf
-            (MPairElim (Bound 0)
+            (MPairElim One
+                       (Bound 0)
                        (MPair (ib 0) (ib 1))
                        (MPairType One (ifg "b") (ifg "a"))
             )

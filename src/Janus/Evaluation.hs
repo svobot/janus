@@ -56,8 +56,8 @@ instance Show Value where
 data Neutral
    =  NFree Name
    |  NApp Neutral Value
-   |  NMPairElim Neutral (Value -> Value -> Value) (Value -> Value)
-   |  NMUnitElim Neutral Value (Value -> Value)
+   |  NMPairElim ZeroOneMany Neutral (Value -> Value -> Value) (Value -> Value)
+   |  NMUnitElim ZeroOneMany Neutral Value (Value -> Value)
    |  NFst Neutral
    |  NSnd Neutral
    |  NSumElim ZeroOneMany Neutral (Value -> Value) (Value -> Value) (Value -> Value)
@@ -117,18 +117,19 @@ iEval ctx (i :$: c ) = case iEval ctx i of
   v          -> error
     ("internal: Unable to apply " <> show v <> " to the value " <> show val)
   where val = cEval ctx c
-iEval ctx (MPairElim i c c') = case iEval ctx i of
+iEval ctx (MPairElim p i c c') = case iEval ctx i of
   VMPair x y -> cEval (second ([y, x] ++) ctx) c
   VNeutral n -> VNeutral $ NMPairElim
+    p
     n
     (\x y -> cEval (second ([y, x] ++) ctx) c)
     (\z -> cEval (second (z :) ctx) c')
   v -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a pair")
-iEval ctx (MUnitElim i c c') = case iEval ctx i of
+iEval ctx (MUnitElim p i c c') = case iEval ctx i of
   VMUnit -> cEval ctx c
   VNeutral n ->
-    VNeutral $ NMUnitElim n (cEval ctx c) (\x -> cEval (second (x :) ctx) c')
+    VNeutral $ NMUnitElim p n (cEval ctx c) (\x -> cEval (second (x :) ctx) c')
   v -> error
     ("internal: Unable to eliminate " <> show v <> ", because it is not a unit")
 iEval ctx (Fst i) = case iEval ctx i of
@@ -180,15 +181,17 @@ quote ii (VSumR v      ) = SumR $ quote ii v
 quote ii (VSumType v v') = SumType (quote ii v) (quote ii v')
 
 neutralQuote :: Int -> Neutral -> ITerm
-neutralQuote ii (NFree (Quote k)  ) = Bound $ (ii - k - 1) `max` 0
-neutralQuote _  (NFree x          ) = Free x
-neutralQuote ii (NApp n v         ) = neutralQuote ii n :$: quote ii v
-neutralQuote ii (NMPairElim n v v') = MPairElim
+neutralQuote ii (NFree (Quote k)    ) = Bound $ (ii - k - 1) `max` 0
+neutralQuote _  (NFree x            ) = Free x
+neutralQuote ii (NApp n v           ) = neutralQuote ii n :$: quote ii v
+neutralQuote ii (NMPairElim p n v v') = MPairElim
+  p
   (neutralQuote ii n)
   (quote (ii + 2) $ v (quoteArg ii) (quoteArg $ ii + 1))
   (quote (ii + 1) (v' $ quoteArg ii))
-neutralQuote ii (NMUnitElim n v v') =
-  MUnitElim (neutralQuote ii n) (quote ii v) $ quote (ii + 1) (v' $ quoteArg ii)
+neutralQuote ii (NMUnitElim p n v v') =
+  MUnitElim p (neutralQuote ii n) (quote ii v)
+    $ quote (ii + 1) (v' $ quoteArg ii)
 neutralQuote ii (NFst n               ) = Fst $ neutralQuote ii n
 neutralQuote ii (NSnd n               ) = Snd $ neutralQuote ii n
 neutralQuote ii (NSumElim p n v v' v'') = SumElim
