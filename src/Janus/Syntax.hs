@@ -141,7 +141,7 @@ cSubst ii r (APairType ty ty') =
   APairType (cSubst ii r ty) (cSubst (ii + 1) r ty')
 cSubst _  _ AUnit          = AUnit
 cSubst _  _ AUnitType      = AUnitType
-cSubst ii r (SumL c      ) = cSubst ii r c
-cSubst ii r (SumR c      ) = cSubst ii r c
+cSubst ii r (SumL c      ) = SumL (cSubst ii r c)
+cSubst ii r (SumR c      ) = SumR (cSubst ii r c)
 cSubst ii r (SumType c c') = SumType (cSubst ii r c) (cSubst ii r c')
 
