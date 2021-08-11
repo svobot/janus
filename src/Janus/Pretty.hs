@@ -221,7 +221,8 @@ iPrint p (MPairElim q l i t) = do
     <+> var y
     <+> mult "="
     <+> letPart
-    , mult "in" <+> inPart <+> mult ":" <+> typePart
+    , mult "in" <+> inPart
+    , mult ":" <+> typePart
     ]
 iPrint p (MUnitElim q l i t) = do
   letPart  <- iPrint 0 l
@@ -233,7 +234,7 @@ iPrint p (MUnitElim q l i t) = do
     <*> inPart
     <*> local bind typePart
  where
-  fmt name letPart inPart typePart = parensIf (p > 0) $ sep
+  fmt name letPart inPart typePart = parensIf (p > 0) . align $ sep
     [ mult "let"
     <+> pretty q
     <+> var name
@@ -241,7 +242,8 @@ iPrint p (MUnitElim q l i t) = do
     <+> mult "()"
     <+> mult "="
     <+> letPart
-    , mult "in" <+> inPart <+> mult ":" <+> typePart
+    , mult "in" <+> inPart
+    , mult ":" <+> typePart
     ]
 iPrint p (Fst i) = (parensIf (p > 0) . (add "fst" <+>) <$>) <$> iPrint 3 i
 iPrint p (Snd i) = (parensIf (p > 0) . (add "snd" <+>) <$>) <$> iPrint 3 i
