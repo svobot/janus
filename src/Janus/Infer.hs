@@ -200,13 +200,12 @@ checkType s (Lam m) (VPi p ty ty') = do
   x <- newLocalVar (p .*. extend s) ty
   withLocalVar "Lambda abstraction" x
     $ checkType s (cSubst 0 (Free $ bndName x) m) (ty' . vfree $ bndName x)
-checkType s (MPair m n) (VMPairType p t1 t2) = do
-  case extend s .*. p of
-    Zero -> checkTypeErased m t1 >> rest
-    sp ->
-      Map.unionWith (.+.)
-        <$> (Map.map (sp .*.) <$> checkType Present m t1)
-        <*> rest
+checkType s (MPair m n) (VMPairType p t1 t2) = case extend s .*. p of
+  Zero -> checkTypeErased m t1 >> rest
+  sp ->
+    Map.unionWith (.+.)
+      <$> (Map.map (sp .*.) <$> checkType Present m t1)
+      <*> rest
   where rest = evalInEnv m >>= (checkType s n . t2)
 checkType s (APair m n) (VAPairType t1 t2) = do
   qs1 <- checkType s m t1
@@ -214,14 +213,14 @@ checkType s (APair m n) (VAPairType t1 t2) = do
   return $ mergeUsages qs1 qs2
 checkType _ MUnit                  VMUnitType       = return Map.empty
 checkType _ AUnit                  VAUnitType       = return Map.empty
+checkType s (   SumL m           ) (VSumType t1 _ ) = checkType s m t1
+checkType s (   SumR m           ) (VSumType _  t2) = checkType s m t2
 checkType s ty@(Pi        _ t1 t2) VUniverse        = checkTypeDep s ty t1 t2
 checkType s ty@(MPairType _ t1 t2) VUniverse        = checkTypeDep s ty t1 t2
 checkType s ty@(APairType t1 t2  ) VUniverse        = checkTypeDep s ty t1 t2
 checkType s ty@Universe            VUniverse        = checkTypeAtom s ty
 checkType s ty@MUnitType           VUniverse        = checkTypeAtom s ty
 checkType s ty@AUnitType           VUniverse        = checkTypeAtom s ty
-checkType s (SumL m)               (VSumType t1 _ ) = checkType s m t1
-checkType s (SumR m)               (VSumType _  t2) = checkType s m t2
 checkType s ty@(SumType t1 t2) VUniverse =
   checkTypeAtom s ty
     <* checkTypeErased t1 VUniverse
