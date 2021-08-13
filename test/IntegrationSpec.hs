@@ -64,6 +64,7 @@ spec = do
   mapM_ run cases
   describe "With-focused test cases" $ mapM_ run withCases
   describe "Pretty printer test cases" $ mapM_ run prettyCases
+  describe "Exponential type test cases" $ mapM_ run ofCourseCases
  where
   evalTestCase i = flip evalStateT ([], []) . flip execStateT (i, []) $ do
     st <- gets fst
@@ -95,32 +96,32 @@ cases =
     \         y : b\n\
     \           Used 0-times, but available 1-times."
   , TestCase
-    "First projection of multiplicative pair under erasure"
-    [ "assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"
-    , "let 0 proj1 = λa b p. let z @ x, y = p in x : a\n\
+    "Projection to a first element of a multiplicative pair"
+    [ "assume (0 a : U) (0 b : U) (w x : a) (w y : b)"
+    , "let w proj1 = λa b p. let z @ x, y = p in x : a\n\
       \            : ∀ (0 a : U)\n\
       \                (0 b : ∀ (0 a' : a) . U)\n\
-      \                (0 p : (0 x : a) * b x)\n\
+      \                (w p : (w x : a) * b x)\n\
       \              . a"
-    , "0 proj1 a (\\x. b) (x, y)"
+    , "w proj1 a (\\x. b) (x, y)"
     ]
-    "0 x : a"
+    "ω x : a"
   , TestCase
-    "Second projection of multiplicative pair under erasure"
-    [ "assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"
-    , "let 0 proj1 = λa b p. let z @ x, y = p in x : a\n\
+    "Projection to a second element of a multiplicative pair"
+    [ "assume (0 a : U) (0 b : U) (w x : a) (w y : b)"
+    , "let w proj1 = λa b p. let z @ x, y = p in x : a\n\
       \            : ∀ (0 a : U)\n\
       \                (0 b : ∀ (0 a' : a) . U)\n\
-      \                (0 p : (0 x : a) * b x)\n\
+      \                (w p : (w x : a) * b x)\n\
       \              . a"
-    , "let 0 proj2 = λa b p. let z @ x,y = p in y : b (proj1 a b z)\n\
+    , "let w proj2 = λa b p. let z @ x,y = p in y : b (proj1 a b z)\n\
       \            : ∀ (0 a : U)\n\
       \                (0 b : (0 a' : a) -> U)\n\
-      \                (0 p : (0 x : a) * b x)\n\
+      \                (w p : (w x : a) * b x)\n\
       \              . b (proj1 a b p)"
-    , "0 proj2 a (\\x. b) (x, y)"
+    , "w proj2 a (\\x. b) (x, y)"
     ]
-    "0 y : b"
+    "ω y : b"
   , TestCase
     "Multiplicative unit elimination"
     [ "assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"
@@ -189,37 +190,11 @@ cases =
 
 prettyCases :: [TestCase]
 prettyCases =
-  [ TestCase
-    "Multiplicative pair first element projection"
-    [ "let 0 proj1 = λa b p. let z @ x, y = p in x : a\n\
-      \            : ∀ (0 a : U)\n\
-      \                (0 b : ∀ (0 a' : a) . U)\n\
-      \                (0 p : (0 x : a) * b x)\n\
-      \              . a"
-    ]
-    "0 proj1 = (λx y z. let ω c @ a, b = z in a : x)\n\
-    \          : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (0 z : (0 a : x) ⊗ y a) . x"
-  , TestCase
-    "Multiplicative pair second element projection"
-    [ "let 0 proj1 = λa b p. let z @ x, y = p in x : a\n\
-      \            : ∀ (0 a : U)\n\
-      \                (0 b : ∀ (0 a' : a) . U)\n\
-      \                (0 p : (0 x : a) * b x)\n\
-      \              . a"
-    , "let 0 proj2 = λa b p. let z @ x,y = p in y : b (proj1 a b z)\n\
-      \            : ∀ (0 a : U)\n\
-      \                (0 b : (0 a' : a) -> U)\n\
-      \                (0 p : (0 x : a) * b x)\n\
-      \              . b (proj1 a b p)"
-    ]
-    "0 proj2 = (λx y z. let ω c @ a, b = z in b : y (let ω f @ d, e = c in d : x))\n\
-    \          : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (0 z : (0 a : x) ⊗ y a)\n\
-    \            . y (let ω c @ a, b = z in a : x)"
-  , TestCase "SKI Calculus (I combinator)"
+  [ TestCase "I combinator"
              ["let w Id = λ_ x. x : ∀ (0 a : U) (1 _ : a) . a"]
              "ω Id = (λx y. y) : ∀ (0 x : 𝘜) (1 y : x) . x"
   , TestCase
-    "SKI Calculus (K combinator)"
+    "K combinator"
     [ "let w K = (λ_ _ x _. x)\n\
       \        : ∀ (0 a : U)\n\
       \            (0 b : (0 _ : a) -> U)\n\
@@ -230,7 +205,7 @@ prettyCases =
     "ω K = (λx y z a. z)\n\
     \      : ∀ (0 x : 𝘜) (0 y : (0 b : x) → 𝘜) (1 z : x) (ω a : y z) . x"
   , TestCase
-    "SKI Calculus (S combinator)"
+    "S combinator"
     [ "let w S = ((λa b c x y z. x z (y z))\n\
       \        : ∀ (0 a : U)\n\
       \            (0 b : (0 _ : a) -> U)\n\
@@ -305,4 +280,177 @@ withCases =
     \         y : b\n\
     \           Used ω-times, but available 1-times."
   ]
+
+ofCourseCases :: [TestCase]
+ofCourseCases =
+  [ TestCase
+    "Exponential of a multiplicative pair produces a multiplicative pair of exponentials"
+    [ ofcW
+    , ofcElim
+    , "(\\A B pair. ofcElim ((1 _ : A) * B)\n\
+      \                     (\\_. (1 _ : ofcW A) * (ofcW B))\n\
+      \                     pair\n\
+      \                     (\\pair'. let w _ @ x, y = pair'\n\
+      \                              in ((x, ()), (y, ()))\n\
+      \                              : (1 _ : ofcW A) * (ofcW B)))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : U)\n\
+      \         (1 _ : ofcW ((1 _ : A) * B))\n\
+      \  . (1 _ : ofcW A) * (ofcW B)"
+    ]
+    "ω (λx y z. let 1 c @ a, b = z\n\
+    \           in let 1 c @ () = b\n\
+    \              in let ω e @ c, d = a\n\
+    \                 in ((c, ()), (d, ()))\n\
+    \                 : (1 f : (ω f : x) ⊗ 𝟭ₘ) ⊗ (ω g : y) ⊗ 𝟭ₘ\n\
+    \              : (1 d : (ω d : x) ⊗ 𝟭ₘ) ⊗ (ω e : y) ⊗ 𝟭ₘ\n\
+    \           : (1 d : (ω d : x) ⊗ 𝟭ₘ) ⊗ (ω e : y) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (ω a : (1 a : x) ⊗ y) ⊗ 𝟭ₘ)\n\
+    \    . (1 a : (ω a : x) ⊗ 𝟭ₘ) ⊗ (ω b : y) ⊗ 𝟭ₘ"
+  , TestCase
+    "Multiplicative pair of exponentials produces an exponential of a multiplicative pair"
+    [ ofcW
+    , ofcElim
+    , "(\\A B pair. let 1 _ @ x, y = pair\n\
+      \             in ofcElim A\n\
+      \                        (\\_. ofcW ((1 _ : A) * B))\n\
+      \                        x\n\
+      \                        (\\x'. ofcElim B\n\
+      \                                      (\\_. ofcW ((1 _ : A) * B))\n\
+      \                                      y\n\
+      \                                      (\\y'. ((x', y'), ())))\n\
+      \             : ofcW ((1 _ : A) * B))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : U)\n\
+      \         (1 _ : (1 _ : ofcW A) * (ofcW B))\n\
+      \  . ofcW ((1 _ : A) * B)"
+    ]
+    "ω (λx y z. let 1 c @ a, b = z\n\
+    \           in let 1 e @ c, d = a\n\
+    \              in let 1 e @ () = d\n\
+    \                 in let 1 g @ e, f = b\n\
+    \                    in let 1 g @ () = f\n\
+    \                       in ((c, e), ())\n\
+    \                       : (ω h : (1 h : x) ⊗ y) ⊗ 𝟭ₘ\n\
+    \                    : (ω h : (1 h : x) ⊗ y) ⊗ 𝟭ₘ\n\
+    \                 : (ω f : (1 f : x) ⊗ y) ⊗ 𝟭ₘ\n\
+    \              : (ω f : (1 f : x) ⊗ y) ⊗ 𝟭ₘ\n\
+    \           : (ω d : (1 d : x) ⊗ y) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (1 a : (ω a : x) ⊗ 𝟭ₘ) ⊗ (ω b : y) ⊗ 𝟭ₘ)\n\
+    \    . (ω a : (1 a : x) ⊗ y) ⊗ 𝟭ₘ"
+  , TestCase
+    "Exponential of an additive pair produces an additive pair of exponentials"
+    [ ofcW
+    , ofcElim
+    , "(\\A B pair. ofcElim ((_ : A) & B)\n\
+      \                     (\\_. (_ : ofcW A) & (ofcW B))\n\
+      \                     pair\n\
+      \                     (\\pair'. <(fst pair', ()), (snd pair', ())>))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : U)\n\
+      \         (1 _ : ofcW ((_ : A) & B))\n\
+      \  . (_ : ofcW A) & (ofcW B)"
+    ]
+    "ω (λx y z. let 1 c @ a, b = z\n\
+    \           in let 1 c @ () = b\n\
+    \              in ⟨(fst a, ()), (snd a, ())⟩\n\
+    \              : (d : (ω d : x) ⊗ 𝟭ₘ) & (ω e : y) ⊗ 𝟭ₘ\n\
+    \           : (d : (ω d : x) ⊗ 𝟭ₘ) & (ω e : y) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (ω a : (a : x) & y) ⊗ 𝟭ₘ)\n\
+    \    . (a : (ω a : x) ⊗ 𝟭ₘ) & (ω b : y) ⊗ 𝟭ₘ"
+  , TestCase
+    "Additive pair of exponentials fails to produce an exponential of an additive pair"
+    [ ofcW
+    , ofcElim
+    , "(\\A B pair. ofcElim A\n\
+      \                     (\\_. ofcW ((_ : A) & B))\n\
+      \                     (fst pair)\n\
+      \                     (\\x. ofcElim B\n\
+      \                                  (\\_. ofcW ((_ : A) & B))\n\
+      \                                  (snd pair)\n\
+      \                                  (\\y. (<x, y>, ()))))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : U)\n\
+      \         (1 _ : (_ : ofcW A) & (ofcW B))\n\
+      \  . ofcW ((_ : A) & B)"
+    ]
+    "error: Mismatched multiplicities (Lambda abstraction):\n\
+    \         [Local 2] : (x : (ω x : [Local 0]) ⊗ 𝟭ₘ) & (ω y : [Local 1]) ⊗ 𝟭ₘ\n\
+    \           Used ω-times, but available 1-times."
+  , TestCase
+    "Additive pair of exponentials fails to produce an exponential of an additive pair (different form)"
+    [ ofcW
+    , ofcElim
+    , "(\\A B pair. (<ofcElim A (\\_. A) (fst pair) (\\x. x),\n\
+      \               ofcElim B (\\_. B) (snd pair) (\\y. y)>, ()))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : U)\n\
+      \         (1 _ : (_ : ofcW A) & (ofcW B))\n\
+      \  . ofcW ((_ : A) & B)"
+    ]
+    "error: Mismatched multiplicities (Lambda abstraction):\n\
+    \         [Local 2] : (x : (ω x : [Local 0]) ⊗ 𝟭ₘ) & (ω y : [Local 1]) ⊗ 𝟭ₘ\n\
+    \           Used ω-times, but available 1-times."
+  , TestCase
+    "Exponential of a disjoint sum produces a disjoint sum of exponentials"
+    [ ofcW
+    , ofcElim
+    , "(\\A B sum. ofcElim (A + B)\n\
+      \                    (\\_. (ofcW A) + (ofcW B))\n\
+      \                    sum\n\
+      \                    (\\sum'. case w _ @ sum'\n\
+      \                            of { inl x -> inl (x, ());\n\
+      \                                 inr y -> inr (y, ())\n\
+      \                               } : (ofcW A) + (ofcW B)))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : U)\n\
+      \         (1 _ : ofcW (A + B))\n\
+      \  . (ofcW A) + (ofcW B)"
+    ]
+    "ω (λx y z. let 1 c @ a, b = z\n\
+    \           in let 1 c @ () = b\n\
+    \              in case ω e @ a of { inl c → inl (c, ()); inr d → inr (d, ())\n\
+    \                                 } : (ω f : x) ⊗ 𝟭ₘ ⊕ (ω f : y) ⊗ 𝟭ₘ\n\
+    \              : (ω d : x) ⊗ 𝟭ₘ ⊕ (ω d : y) ⊗ 𝟭ₘ\n\
+    \           : (ω d : x) ⊗ 𝟭ₘ ⊕ (ω d : y) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (ω a : x ⊕ y) ⊗ 𝟭ₘ)\n\
+    \    . (ω a : x) ⊗ 𝟭ₘ ⊕ (ω a : y) ⊗ 𝟭ₘ"
+  , TestCase
+    "Disjoint sum of exponentials produces an exponential of disjoint sums"
+    [ ofcW
+    , ofcElim
+    , "(\\A B sum. case 1 _ @ sum of\n\
+      \            { inl x -> ofcElim A (\\_. ofcW (A + B)) x (\\x'. (inl x', ()));\n\
+      \              inr y -> ofcElim B (\\_. ofcW (A + B)) y (\\y'. (inr y', ()))\n\
+      \            } : ofcW (A + B))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : U)\n\
+      \         (1 _ : (ofcW A) + (ofcW B))\n\
+      \  . ofcW (A + B)"
+    ]
+    "ω (λx y z. case 1 c @ z of { inl a → let 1 f @ d, e = a\n\
+    \                                     in let 1 f @ () = e\n\
+    \                                        in (inl d, ())\n\
+    \                                        : (ω g : x ⊕ y) ⊗ 𝟭ₘ\n\
+    \                                     : (ω g : x ⊕ y) ⊗ 𝟭ₘ;\n\
+    \                             inr b → let 1 f @ d, e = b\n\
+    \                                     in let 1 f @ () = e\n\
+    \                                        in (inr d, ())\n\
+    \                                        : (ω g : x ⊕ y) ⊗ 𝟭ₘ\n\
+    \                                     : (ω g : x ⊕ y) ⊗ 𝟭ₘ\n\
+    \                           } : (ω d : x ⊕ y) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (ω a : x) ⊗ 𝟭ₘ ⊕ (ω a : y) ⊗ 𝟭ₘ)\n\
+    \    . (ω a : x ⊕ y) ⊗ 𝟭ₘ"
+  ]
+ where
+  ofcW = "let 0 ofcW = (λA. (ω _ : A) ⊗ 𝟭ₘ) : (0 _ : 𝘜) → 𝘜"
+  ofcElim
+    = "let ω ofcElim = (λ_ B exp cont. let 1 _ @ val, unit = exp\n\
+      \                                in let 1 _ @ () = unit in cont val : B exp\n\
+      \                           : B exp)\n\
+      \                : ∀ (0 A : 𝘜)\n\
+      \                    (0 B : (0 _ : (ω _ : A) ⊗ 𝟭ₘ) → 𝘜)\n\
+      \                    (1 exp : (ω _ : A) ⊗ 𝟭ₘ)\n\
+      \                    (1 _ : (ω _ : A) → B exp)\n\
+      \                  . B exp"
 
