@@ -126,7 +126,7 @@ synthType s (m :$: n) = do
           Map.unionWith (.+.) qs1 . Map.map (sp .*.) <$> checkType Present n ty
       (qs, ) . ty' <$> evalInEnv n
     ty -> throwError $ TypeClashError SomePi ty (m :$: n)
-synthType s (MPairElim r m n o) = do
+synthType s elim@(MPairElim r m n o) = do
   (qs1, mTy) <- first (Map.map (r .*.)) <$> synthType s m
   case mTy of
     zTy@(VMPairType p xTy yTy) -> do
@@ -142,11 +142,11 @@ synthType s (MPairElim r m n o) = do
           qs2 <- checkType s (sub 1 x . sub 0 y $ n) oxy
           return $ Map.unionWith (.+.) qs1 qs2
       (qs, ) <$> evalInEnv (cSubst 0 m o)
-    ty -> throwError $ TypeClashError SomeMPair ty (MPairElim r m n o)
+    _ -> throwError $ TypeClashError SomeMPair mTy elim
  where
   ifn = Inf . Free . bndName
   sub i = cSubst i . Free . bndName
-synthType s (MUnitElim r m n o) = do
+synthType s elim@(MUnitElim r m n o) = do
   (qs1, mTy) <- first (Map.map (r .*.)) <$> synthType s m
   case mTy of
     xTy@VMUnitType -> do
@@ -155,8 +155,7 @@ synthType s (MUnitElim r m n o) = do
       ox  <- evalInEnv (cSubst 0 (Ann MUnit MUnitType) o)
       qs2 <- checkType s n ox
       (Map.unionWith (.+.) qs1 qs2, ) <$> evalInEnv (cSubst 0 m o)
-    ty -> throwError
-      $ TypeClashError (KnownType VMUnitType) ty (MUnitElim r m n o)
+    _ -> throwError $ TypeClashError (KnownType VMUnitType) mTy elim
 synthType s (Fst m) = do
   (qs, ty) <- synthType s m
   case ty of
@@ -167,7 +166,7 @@ synthType s (Snd m) = do
   case ty of
     VAPairType _ t2 -> (qs, ) . t2 <$> evalInEnv (Inf $ Fst m)
     _               -> throwError $ TypeClashError SomeAPair ty (Snd m)
-synthType s (SumElim p m n o u) = do
+synthType s elim@(SumElim p m n o u) = do
   (qs, mTy) <- first (Map.map (p .*.)) <$> synthType s m
   case mTy of
     zTy@(VSumType xTy yTy) -> do
@@ -184,7 +183,7 @@ synthType s (SumElim p m n o u) = do
         checkType s (cSubst 0 (Free $ bndName y) o) uy
       (Map.unionWith (.+.) qs (mergeUsages qs1 qs2), )
         <$> evalInEnv (cSubst 0 m u)
-    ty -> throwError $ TypeClashError SomeSum ty (SumElim p m n o u)
+    _ -> throwError $ TypeClashError SomeSum mTy elim
   where ifn = Inf . Free . bndName
 synthType _ i@(Bound _) =
   error $ "internal: Trying to infer type of " <> show i
