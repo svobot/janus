@@ -98,7 +98,7 @@ cases =
   , TestCase
     "Projection to a first element of a multiplicative pair"
     [ "assume (0 a : U) (0 b : U) (w x : a) (w y : b)"
-    , "let w proj1 = λa b p. let z @ x, y = p in x : a\n\
+    , "let w proj1 = λa b p. let z @ (x, y) = p in x : a\n\
       \            : ∀ (0 a : U)\n\
       \                (0 b : ∀ (0 a' : a) . U)\n\
       \                (w p : (w x : a) * b x)\n\
@@ -109,12 +109,12 @@ cases =
   , TestCase
     "Projection to a second element of a multiplicative pair"
     [ "assume (0 a : U) (0 b : U) (w x : a) (w y : b)"
-    , "let w proj1 = λa b p. let z @ x, y = p in x : a\n\
+    , "let w proj1 = λa b p. let z @ (x, y) = p in x : a\n\
       \            : ∀ (0 a : U)\n\
       \                (0 b : ∀ (0 a' : a) . U)\n\
       \                (w p : (w x : a) * b x)\n\
       \              . a"
-    , "let w proj2 = λa b p. let z @ x,y = p in y : b (proj1 a b z)\n\
+    , "let w proj2 = λa b p. let z @ (x, y) = p in y : b (proj1 a b z)\n\
       \            : ∀ (0 a : U)\n\
       \                (0 b : (0 a' : a) -> U)\n\
       \                (w p : (w x : a) * b x)\n\
@@ -125,7 +125,7 @@ cases =
   , TestCase
     "Multiplicative unit elimination"
     [ "assume (0 a : U) (0 b : U) (1 x : a) (1 y : b)"
-    , "1 (λp. let 1 _ @ x, y = p in let 1 _ @ () = y in x : a : a\n\
+    , "1 (λp. let 1 _ @ (x, y) = p in let 1 _ @ () = y in x : a : a\n\
       \     : (1 _ : (1 _ : a) * I) -> a)\n\
       \   (x, ())"
     ]
@@ -146,7 +146,7 @@ cases =
     "Exponential elimination"
     [ "assume (0 a : U) (m : a)"
     , "let 0 ofcW = (λa. (w _ : a) * I) : (0 _ : U) -> U"
-    , "let w ofcElim = λa b exp f. let 1 z @ x,y = exp in\n\
+    , "let w ofcElim = λa b exp f. let 1 z @ (x, y) = exp in\n\
       \                              (let 1 _ @ () = y in f x : b exp)\n\
       \                            : b exp\n\
       \              : ∀ (0 a : U)\n\
@@ -290,7 +290,7 @@ ofCourseCases =
     , "(\\A B pair. ofcElim ((1 _ : A) * B)\n\
       \                     (\\_. (1 _ : ofcW A) * (ofcW B))\n\
       \                     pair\n\
-      \                     (\\pair'. let w _ @ x, y = pair'\n\
+      \                     (\\pair'. let w _ @ (x, y) = pair'\n\
       \                              in ((x, ()), (y, ()))\n\
       \                              : (1 _ : ofcW A) * (ofcW B)))\n\
       \: forall (0 A : U)\n\
@@ -298,9 +298,9 @@ ofCourseCases =
       \         (1 _ : ofcW ((1 _ : A) * B))\n\
       \  . (1 _ : ofcW A) * (ofcW B)"
     ]
-    "ω (λx y z. let 1 c @ a, b = z\n\
+    "ω (λx y z. let 1 c @ (a, b) = z\n\
     \           in let 1 c @ () = b\n\
-    \              in let ω e @ c, d = a\n\
+    \              in let ω e @ (c, d) = a\n\
     \                 in ((c, ()), (d, ()))\n\
     \                 : (1 f : (ω f : x) ⊗ 𝟭ₘ) ⊗ (ω g : y) ⊗ 𝟭ₘ\n\
     \              : (1 d : (ω d : x) ⊗ 𝟭ₘ) ⊗ (ω e : y) ⊗ 𝟭ₘ\n\
@@ -311,7 +311,7 @@ ofCourseCases =
     "Multiplicative pair of exponentials produces an exponential of a multiplicative pair"
     [ ofcW
     , ofcElim
-    , "(\\A B pair. let 1 _ @ x, y = pair\n\
+    , "(\\A B pair. let 1 _ @ (x, y) = pair\n\
       \             in ofcElim A\n\
       \                        (\\_. ofcW ((1 _ : A) * B))\n\
       \                        x\n\
@@ -325,10 +325,10 @@ ofCourseCases =
       \         (1 _ : (1 _ : ofcW A) * (ofcW B))\n\
       \  . ofcW ((1 _ : A) * B)"
     ]
-    "ω (λx y z. let 1 c @ a, b = z\n\
-    \           in let 1 e @ c, d = a\n\
+    "ω (λx y z. let 1 c @ (a, b) = z\n\
+    \           in let 1 e @ (c, d) = a\n\
     \              in let 1 e @ () = d\n\
-    \                 in let 1 g @ e, f = b\n\
+    \                 in let 1 g @ (e, f) = b\n\
     \                    in let 1 g @ () = f\n\
     \                       in ((c, e), ())\n\
     \                       : (ω h : (1 h : x) ⊗ y) ⊗ 𝟭ₘ\n\
@@ -351,7 +351,7 @@ ofCourseCases =
       \         (1 _ : ofcW ((_ : A) & B))\n\
       \  . (_ : ofcW A) & (ofcW B)"
     ]
-    "ω (λx y z. let 1 c @ a, b = z\n\
+    "ω (λx y z. let 1 c @ (a, b) = z\n\
     \           in let 1 c @ () = b\n\
     \              in ⟨(fst a, ()), (snd a, ())⟩\n\
     \              : (d : (ω d : x) ⊗ 𝟭ₘ) & (ω e : y) ⊗ 𝟭ₘ\n\
@@ -407,7 +407,7 @@ ofCourseCases =
       \         (1 _ : ofcW (A + B))\n\
       \  . (ofcW A) + (ofcW B)"
     ]
-    "ω (λx y z. let 1 c @ a, b = z\n\
+    "ω (λx y z. let 1 c @ (a, b) = z\n\
     \           in let 1 c @ () = b\n\
     \              in case ω e @ a of { inl c → inl (c, ()); inr d → inr (d, ())\n\
     \                                 } : (ω f : x) ⊗ 𝟭ₘ ⊕ (ω f : y) ⊗ 𝟭ₘ\n\
@@ -428,12 +428,12 @@ ofCourseCases =
       \         (1 _ : (ofcW A) + (ofcW B))\n\
       \  . ofcW (A + B)"
     ]
-    "ω (λx y z. case 1 c @ z of { inl a → let 1 f @ d, e = a\n\
+    "ω (λx y z. case 1 c @ z of { inl a → let 1 f @ (d, e) = a\n\
     \                                     in let 1 f @ () = e\n\
     \                                        in (inl d, ())\n\
     \                                        : (ω g : x ⊕ y) ⊗ 𝟭ₘ\n\
     \                                     : (ω g : x ⊕ y) ⊗ 𝟭ₘ;\n\
-    \                             inr b → let 1 f @ d, e = b\n\
+    \                             inr b → let 1 f @ (d, e) = b\n\
     \                                     in let 1 f @ () = e\n\
     \                                        in (inr d, ())\n\
     \                                        : (ω g : x ⊕ y) ⊗ 𝟭ₘ\n\
@@ -445,7 +445,7 @@ ofCourseCases =
  where
   ofcW = "let 0 ofcW = (λA. (ω _ : A) ⊗ 𝟭ₘ) : (0 _ : 𝘜) → 𝘜"
   ofcElim
-    = "let ω ofcElim = (λ_ B exp cont. let 1 _ @ val, unit = exp\n\
+    = "let ω ofcElim = (λ_ B exp cont. let 1 _ @ (val, unit) = exp\n\
       \                                in let 1 _ @ () = unit in cont val : B exp\n\
       \                           : B exp)\n\
       \                : ∀ (0 A : 𝘜)\n\

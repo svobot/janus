@@ -128,12 +128,9 @@ iTermInner = foldl (:$:) <$> inner <*> many (cTermWith inner)
             <$> (symbol "=" *> iTerm)
             <*> (keyword "in" *> local (inLocal ++) (cTermWith iTermInner))
             <*> (symbol ":" *> local (tyLocal ++) (cTermWith iTermInner))
-    (do
-        x <- identifier
-        y <- symbol "," *> identifier
-        rest (MPairElim q) [y, x] [z]
-      )
-      <|> (mUnit *> rest (MUnitElim q) [] [z])
+    (try mUnit *> rest (MUnitElim q) [] [z]) <|> do
+      (x, y) <- parens $ (,) <$> identifier <* symbol "," <*> identifier
+      rest (MPairElim q) [y, x] [z]
   fstElim = Fst <$> (keyword "fst" *> inner)
   sndElim = Snd <$> (keyword "snd" *> inner)
   sumElim = do

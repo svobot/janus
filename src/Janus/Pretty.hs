@@ -212,15 +212,16 @@ iPrint p (MPairElim q l i t) = do
       <*> local (bind . skip 2) typePart
  where
   fmt x y z letPart inPart typePart = parensIf (p > 0) . align $ sep
-    [ mult "let"
-    <+> pretty q
-    <+> var z
-    <+> mult "@"
-    <+> var x
-    <>  mult ","
-    <+> var y
-    <+> mult "="
-    <+> letPart
+    [ hsep
+      [ mult "let"
+      , pretty q
+      , var z
+      , mult "@"
+      , mult "(" <> var x <> mult ","
+      , var y <> mult ")"
+      , mult "="
+      , letPart
+      ]
     , mult "in" <+> inPart
     , mult ":" <+> typePart
     ]
@@ -235,13 +236,8 @@ iPrint p (MUnitElim q l i t) = do
     <*> local bind typePart
  where
   fmt name letPart inPart typePart = parensIf (p > 0) . align $ sep
-    [ mult "let"
-    <+> pretty q
-    <+> var name
-    <+> mult "@"
-    <+> mult "()"
-    <+> mult "="
-    <+> letPart
+    [ hsep
+      [mult "let", pretty q, var name, mult "@", mult "()", mult "=", letPart]
     , mult "in" <+> inPart
     , mult ":" <+> typePart
     ]

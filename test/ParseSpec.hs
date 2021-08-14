@@ -94,8 +94,8 @@ stmtCases =
     )
   , TestCase
     "Multiplicative pair elimination"
-    [ "let p @ x', y' = (x, f y z) : (0 x : a) * x in y'\n\
-      \               : ((λu . a) : (0 _ : (0 z : U) * z) -> U) p"
+    [ "let p @ (x', y') = (x, f y z) : (0 x : a) * x in y'\n\
+      \                 : ((λu . a) : (0 _ : (0 z : U) * z) -> U) p"
     ]
     (ParseRes . Eval Many $ MPairElim
       Many
@@ -215,7 +215,7 @@ fileCases :: [TestCase [Stmt]]
 fileCases =
   [ TestCase
       "Two lets"
-      [ "let 1 v = let _ @ x,y = p in x : a\n\
+      [ "let 1 v = let _ @ (x, y) = p in x : a\n\
         \\n\
         \let u = let _ @ () = () : I in x : a"
       ]
