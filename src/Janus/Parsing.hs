@@ -27,7 +27,9 @@ import           Control.Monad.Reader           ( MonadReader(local)
                                                 , runReader
                                                 )
 import           Data.Char                      ( isAlpha )
-import           Data.List                      ( elemIndex )
+import           Data.List                      ( elemIndex
+                                                , foldl'
+                                                )
 import qualified Janus.Judgment                as J
                                                 ( Binding(..) )
 import           Janus.Judgment          hiding ( Binding )
@@ -108,31 +110,47 @@ semiring :: Parser ZeroOneMany
 semiring = option Many $ choice
   [Zero <$ symbol "0", One <$ symbol "1", Many <$ (keyword "ω" <|> keyword "w")]
 
+annotation :: Parser CTerm
+annotation =
+  symbol ":"
+    *>  choice
+          [ cTermInner False >>= \case
+            Inf i -> Inf <$> application i
+            c     -> pure c
+          , Inf <$> iTermInner
+          ]
+    <?> "type annotation"
+
+application :: ITerm -> Parser ITerm
+application t = foldl' (:$:) t <$> many (cTermWith True $ var <|> parens iTerm)
+
+var :: Parser ITerm
+var =
+  asks (\r x -> maybe (Free $ Global x) Bound $ elemIndex x r) <*> identifier
+
 iTerm :: Parser ITerm
-iTerm = try (cTermInner >>= ann) <|> do
+iTerm = try (cTermInner False >>= (\t -> Ann t <$> annotation)) <|> do
   t <- iTermInner
-  ann (Inf t) <|> return t
-  where ann t = Ann t <$> (symbol ":" *> cTerm) <?> "type annotation"
+  Ann (Inf t) <$> annotation <|> return t
 
 iTermInner :: Parser ITerm
-iTermInner = foldl (:$:) <$> inner <*> many (cTermWith inner)
+iTermInner = (var <|> parens iTerm >>= application) <|> inner
  where
-  inner =
-    choice [letElim, fstElim, sndElim, sumElim, var, parens iTerm]
-      <?> "synthesising term"
+  inner   = choice [letElim, fstElim, sndElim, sumElim] <?> "synthesising term"
   letElim = do
     (q, z) <- try $ (,) <$> (keyword "let" *> semiring) <*> identifier <* symbol
       "@"
     let rest elim inLocal tyLocal =
           elim
             <$> (symbol "=" *> iTerm)
-            <*> (keyword "in" *> local (inLocal ++) (cTermWith iTermInner))
-            <*> (symbol ":" *> local (tyLocal ++) (cTermWith iTermInner))
+            <*> (keyword "in" *> local (inLocal ++) (cTermWith False iTermInner)
+                )
+            <*> local (tyLocal ++) annotation
     (try mUnit *> rest (MUnitElim q) [] [z]) <|> do
       (x, y) <- parens $ (,) <$> identifier <* symbol "," <*> identifier
       rest (MPairElim q) [y, x] [z]
-  fstElim = Fst <$> (keyword "fst" *> inner)
-  sndElim = Snd <$> (keyword "snd" *> inner)
+  fstElim = Fst <$> (keyword "fst" *> (var <|> parens iTerm))
+  sndElim = Snd <$> (keyword "snd" *> (var <|> parens iTerm))
   sumElim = do
     s <- keyword "case" *> semiring
     z <- identifier <* symbol "@"
@@ -140,50 +158,43 @@ iTermInner = foldl (:$:) <$> inner <*> many (cTermWith inner)
     let branch side = do
           keyword side
           x <- identifier <* (symbol "→" <|> symbol "->")
-          local (x :) (cTermWith iTermInner)
+          local (x :) (cTermWith False iTermInner)
     (l, r) <- braces
       (   ((,) <$> branch "inl" <* symbol ";" <*> branch "inr")
       <|> ((swap .) . (,) <$> branch "inr" <* symbol ";" <*> branch "inl")
       )
-    SumElim s m l r <$> (symbol ":" *> local (z :) (cTermWith iTermInner))
-  var =
-    asks (\r x -> maybe (Free $ Global x) Bound $ elemIndex x r) <*> identifier
+    SumElim s m l r <$> local (z :) annotation
 
-cTermWith :: Parser ITerm -> Parser CTerm
-cTermWith ip = cTermInner <|> Inf <$> ip
+cTermWith :: Bool -> Parser ITerm -> Parser CTerm
+cTermWith atomicOnly iTermP = cTermInner atomicOnly <|> Inf <$> iTermP
 
 cTerm :: Parser CTerm
-cTerm = cTermWith iTerm
+cTerm = do
+  c <- cTermWith False iTermInner
+  (Inf . Ann c <$> annotation) <|> pure c
 
-cTermInner :: Parser CTerm
-cTermInner =
+cTermInner :: Bool -> Parser CTerm
+cTermInner atomicOnly =
   choice
-      (  atomic
-      ++ [ lam
-         , pi
-         , forall
-         , try mPair
-         , mPairType
-         , aPairType
-         , sumL
-         , sumR
-         , sumType
-         , try . parens $ cTerm
-         ]
+      (  [universe, mUnit, mUnitType, aUnit, aUnitType, aPair]
+      <> (if atomicOnly
+           then []
+           else [lam, pi, forall, mPairType, aPairType, sumL, sumR, sumType]
+         )
+      <> [mPairOrParenthesised]
       )
     <?> "checkable term"
  where
-  atomic = [universe, mUnit, mUnitType, aUnit, aUnitType, aPair]
-  lam    = do
+  lam = do
     symbol "\\" <|> symbol "λ"
     xs <- some identifier
     symbol "."
-    t <- local (reverse xs ++) $ cTermWith iTermInner
+    t <- local (reverse xs <>) $ cTermWith False iTermInner
     return $ iterate Lam t !! length xs
   universe = Universe <$ (keyword "𝘜" <|> keyword "U")
   pi       = do
     J.Binding x q t <- try $ bind <* (symbol "→" <|> symbol "->")
-    Pi q t <$> local (x :) (cTermWith iTermInner)
+    Pi q t <$> local (x :) (cTermWith False iTermInner)
   forall = do
     keyword "forall" <|> symbol "∀"
     let go bs = do
@@ -193,10 +204,9 @@ cTermInner =
     symbol "."
     p <- local (map bndName xs ++) cTerm
     foldM (\a x -> return $ Pi (bndUsage x) (bndType x) a) p xs
-  mPair     = parens $ MPair <$> cTerm <* symbol "," <*> cTerm
   mPairType = do
     J.Binding x q t <- try $ bind <* (symbol "⊗" <|> symbol "*")
-    MPairType q t <$> local (x :) (cTermWith iTermInner)
+    MPairType q t <$> local (x :) (cTermWith True iTermInner)
   mUnitType = MUnitType <$ (keyword "𝟭ₘ" <|> keyword "I")
   aPair     = liftM2 (<|>)
                      (between (symbol "⟨") (symbol "⟩"))
@@ -205,18 +215,17 @@ cTermInner =
   aPairType = do
     (x, t) <-
       try $ parens ((,) <$> identifier <* symbol ":" <*> cTerm) <* symbol "&"
-    APairType t <$> local (x :) (cTermWith iTermInner)
+    APairType t <$> local (x :) (cTermWith True iTermInner)
   aUnit     = AUnit <$ (symbol "⟨⟩" <|> symbol "<>")
   aUnitType = AUnitType <$ (symbol "⊤" <|> keyword "T")
-  sumL      = SumL <$> (keyword "inl" *> cTermWith iTermInner)
-  sumR      = SumR <$> (keyword "inr" *> cTermWith iTermInner)
+  sumL      = SumL <$> (keyword "inl" *> cTermWith True iTermInner)
+  sumR      = SumR <$> (keyword "inr" *> cTermWith True iTermInner)
   sumType =
-    try
-        (   SumType
-        <$> choice (atomic ++ [try $ parens cTerm, Inf <$> iTermInner])
-        <*  (symbol "⊕" <|> symbol "+")
-        )
-      <*> cTermWith iTermInner
+    try (SumType <$> cTermWith True iTermInner <* (symbol "⊕" <|> symbol "+"))
+      <*> cTermWith True iTermInner
+  mPairOrParenthesised = parens $ do
+    t <- cTerm
+    (MPair t <$> (symbol "," *> cTerm)) <|> pure t
 
 mUnit :: Parser CTerm
 mUnit = MUnit <$ symbol "()"
