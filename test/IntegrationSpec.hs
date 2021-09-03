@@ -441,16 +441,152 @@ ofCourseCases =
     \                           } : (ω d : x ⊕ y) ⊗ 𝟭ₘ)\n\
     \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (ω a : x) ⊗ 𝟭ₘ ⊕ (ω a : y) ⊗ 𝟭ₘ)\n\
     \    . (ω a : x ⊕ y) ⊗ 𝟭ₘ"
+  , TestCase
+    "Exponential of a dependent multiplicative pair produces a dependent multiplicative pair of exponentials"
+    [ ofcW
+    , ofcElim
+    , unwrap
+    , "(\\A B wab. ofcElim ((1 a : A) * B a)\n\
+      \            (\\_. (1 wa : ofcW A) * ofcW (B (unwrap A wa)))\n\
+      \            wab\n\
+      \            (\\ab. let w _ @ (a, b) = ab\n\
+      \                   in ((a, ()), (b, ()))\n\
+      \                   : (1 wa : ofcW A) * ofcW (B (unwrap A wa))))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : (0 _ : A) -> U)\n\
+      \         (1 _ : ofcW ((1 a : A) * B a))\n\
+      \  . (1 wa : ofcW A) * ofcW (B (unwrap A wa))"
+    ]
+    "ω (λx y z. let 1 c @ (a, b) = z\n\
+    \           in let 1 c @ () = b\n\
+    \              in let ω e @ (c, d) = a\n\
+    \                 in ((c, ()), (d, ()))\n\
+    \                 : (1 f : (ω f : x) ⊗ 𝟭ₘ) ⊗\n\
+    \                   (ω g\n\
+    \                    : y\n\
+    \                      (let 1 i @ (g, h) = f in let 1 i @ () = h in g : x : x)) ⊗\n\
+    \                   𝟭ₘ\n\
+    \              : (1 d : (ω d : x) ⊗ 𝟭ₘ) ⊗\n\
+    \                (ω e\n\
+    \                 : y (let 1 g @ (e, f) = d in let 1 g @ () = f in e : x : x)) ⊗\n\
+    \                𝟭ₘ\n\
+    \           : (1 d : (ω d : x) ⊗ 𝟭ₘ) ⊗\n\
+    \             (ω e : y (let 1 g @ (e, f) = d in let 1 g @ () = f in e : x : x)) ⊗\n\
+    \             𝟭ₘ)\n\
+    \  : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (1 z : (ω a : (1 a : x) ⊗ y a) ⊗ 𝟭ₘ)\n\
+    \    . (1 a : (ω a : x) ⊗ 𝟭ₘ) ⊗\n\
+    \      (ω b : y (let 1 d @ (b, c) = a in let 1 d @ () = c in b : x : x)) ⊗ 𝟭ₘ"
+  , TestCase
+    "Dependent multiplicative pair of exponentials produces an exponential of a dependent multiplicative pair"
+    [ ofcW
+    , ofcElim
+    , unwrap
+    , "(\\A B wawb. let 1 _ @ (wa, wb) = wawb\n\
+      \             in ofcElim A\n\
+      \                        (\\wa'. (1 _ : ofcW (B (unwrap A wa'))) -> ofcW ((1 a : A) * B a))\n\
+      \                        wa\n\
+      \                        (\\a wb'. ofcElim (B a)\n\
+      \                                          (\\_. ofcW ((1 a : A) * B a))\n\
+      \                                          wb'\n\
+      \                                          (\\b. ((a, b), ()))\n\
+      \                        )\n\
+      \                wb\n\
+      \             : ofcW ((1 a : A) * B a))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : (0 _ : A) -> U)\n\
+      \         (1 _ : (1 wa : ofcW A) * ofcW (B (unwrap A wa)))\n\
+      \  . ofcW ((1 a : A) * B a)"
+    ]
+    "ω (λx y z. let 1 c @ (a, b) = z\n\
+    \           in (let 1 e @ (c, d) = a\n\
+    \               in let 1 e @ () = d\n\
+    \                  in λe. let 1 h @ (f, g) = e\n\
+    \                         in let 1 h @ () = g\n\
+    \                            in ((c, f), ())\n\
+    \                            : (ω i : (1 i : x) ⊗ y i) ⊗ 𝟭ₘ\n\
+    \                         : (ω i : (1 i : x) ⊗ y i) ⊗ 𝟭ₘ\n\
+    \                  : (1 f : (ω f : y (let 1 f @ () = e in c : x)) ⊗ 𝟭ₘ) →\n\
+    \                    (ω g : (1 g : x) ⊗ y g) ⊗ 𝟭ₘ\n\
+    \               : (1 f\n\
+    \                  : (ω f\n\
+    \                     : y\n\
+    \                       (let 1 h @ (f, g) = e\n\
+    \                        in let 1 h @ () = g in f : x\n\
+    \                        : x)) ⊗\n\
+    \                    𝟭ₘ) →\n\
+    \                 (ω g : (1 g : x) ⊗ y g) ⊗ 𝟭ₘ)\n\
+    \              b\n\
+    \           : (ω d : (1 d : x) ⊗ y d) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 x : 𝘜)\n\
+    \      (0 y : (0 a : x) → 𝘜)\n\
+    \      (1 z : (1 a : (ω a : x) ⊗ 𝟭ₘ) ⊗\n\
+    \             (ω b : y (let 1 d @ (b, c) = a in let 1 d @ () = c in b : x : x)) ⊗\n\
+    \             𝟭ₘ)\n\
+    \    . (ω a : (1 a : x) ⊗ y a) ⊗ 𝟭ₘ"
+  , TestCase
+    "Exponential of a dependent additive pair produces a dependent additive pair of exponentials"
+    [ ofcW
+    , ofcElim
+    , unwrap
+    , "(\\A B wab. ofcElim ((a : A) & B a)\n\
+      \                    (\\_. (wa : ofcW A) & (ofcW (B (unwrap A wa))))\n\
+      \                    wab\n\
+      \                    (\\ab. <(fst ab, ()), (snd ab, ())>))\n\
+      \: forall (0 A : U)\n\
+      \         (0 B : (0 _ : A) -> U)\n\
+      \         (1 _ : ofcW ((a : A) & B a))\n\
+      \  . (wa : ofcW A) & (ofcW (B (unwrap A wa)))"
+    ]
+    "ω (λx y z. let 1 c @ (a, b) = z\n\
+    \           in let 1 c @ () = b\n\
+    \              in ⟨(fst a, ()), (snd a, ())⟩\n\
+    \              : (d : (ω d : x) ⊗ 𝟭ₘ) &\n\
+    \                (ω e\n\
+    \                 : y (let 1 g @ (e, f) = d in let 1 g @ () = f in e : x : x)) ⊗\n\
+    \                𝟭ₘ\n\
+    \           : (d : (ω d : x) ⊗ 𝟭ₘ) &\n\
+    \             (ω e : y (let 1 g @ (e, f) = d in let 1 g @ () = f in e : x : x)) ⊗\n\
+    \             𝟭ₘ)\n\
+    \  : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (1 z : (ω a : (a : x) & y a) ⊗ 𝟭ₘ)\n\
+    \    . (a : (ω a : x) ⊗ 𝟭ₘ) &\n\
+    \      (ω b : y (let 1 d @ (b, c) = a in let 1 d @ () = c in b : x : x)) ⊗ 𝟭ₘ"
+  , TestCase
+    "Dependent additive pair of exponentials fails to produce an exponential of a dependent additive pair"
+    [ ofcW
+    , ofcElim
+    , unwrap
+    , "(\\A B wawb. (<unwrap A (fst wawb)\n\
+       \             , unwrap (B (unwrap A (fst wawb))) (snd wawb)>\n\
+       \            , ()))\n\
+       \: forall (0 A : U)\n\
+       \         (0 B : (0 _ : A) -> U)\n\
+       \         (1 _ : (wa : ofcW A) & (ofcW (B (unwrap A wa))))\n\
+       \  . ofcW ((a : A) & B a)"
+    ]
+    "error: Mismatched multiplicities (Lambda abstraction):\n\
+    \         [Local 2] : (x : (ω x : [Local 0]) ⊗ 𝟭ₘ) &\n\
+    \                     (ω y\n\
+    \                      : [Local 1]\n\
+    \                        (let 1 a @ (y, z) = x\n\
+    \                         in let 1 a @ () = z in y : [Local 0]\n\
+    \                         : [Local 0])) ⊗\n\
+    \                     𝟭ₘ\n\
+    \           Used ω-times, but available 1-times."
   ]
  where
   ofcW = "let 0 ofcW = (λA. (ω _ : A) ⊗ 𝟭ₘ) : (0 _ : 𝘜) → 𝘜"
   ofcElim
-    = "let ω ofcElim = (λ_ B exp cont. let 1 _ @ (val, unit) = exp\n\
-      \                                in let 1 _ @ () = unit in cont val : B exp\n\
-      \                           : B exp)\n\
+    = "let ω ofcElim = (λ_ B exp cont. let 1 exp' @ (val, unit) = exp\n\
+      \                                in let 1 unit' @ () = unit\n\
+      \                                   in cont val\n\
+      \                                   : B (val, unit')\n\
+      \                                : B exp')\n\
       \                : ∀ (0 A : 𝘜)\n\
       \                    (0 B : (0 _ : (ω _ : A) ⊗ 𝟭ₘ) → 𝘜)\n\
       \                    (1 exp : (ω _ : A) ⊗ 𝟭ₘ)\n\
-      \                    (1 _ : (ω _ : A) → B exp)\n\
+      \                    (1 _ : (ω val : A) → B (val, ()))\n\
       \                  . B exp"
+  unwrap
+    = "let unwrap = (\\A wa. ofcElim A (\\_. A) wa (\\x. x))\n\
+      \             : (0 A : U) -> (_ : ofcW A) -> A"
 
