@@ -11,6 +11,7 @@ module Janus.Parsing
 import           Control.Applicative     hiding ( many
                                                 , some
                                                 )
+import           Data.Bifunctor                 ( second )
 import           Data.Tuple                     ( swap )
 import           Data.Void                      ( Void )
 import           Text.Megaparsec         hiding ( State )
@@ -20,16 +21,18 @@ import qualified Text.Megaparsec.Char.Lexer    as L
 import           Control.Monad                  ( foldM
                                                 , liftM2
                                                 , void
+                                                , when
                                                 )
 import           Control.Monad.Reader           ( MonadReader(local)
                                                 , Reader
-                                                , asks
+                                                , ask
                                                 , runReader
                                                 )
 import           Data.Char                      ( isAlpha )
-import           Data.List                      ( elemIndex
+import           Data.List                      ( elemIndices
                                                 , foldl'
                                                 )
+import           Data.Maybe                     ( fromMaybe )
 import qualified Janus.Judgment                as J
                                                 ( Binding(..) )
 import           Janus.Judgment          hiding ( Binding )
@@ -61,16 +64,25 @@ symbol = void . L.symbol ws
 keyword :: String -> Parser ()
 keyword k = void $ lexeme (string k <* notFollowedBy alphaNumChar)
 
-identifier :: Parser String
-identifier = try $ do
-  o <- getOffset
-  i <- lexeme $ (:) <$> start <*> rest
-  if i `elem` keywords
-    then region (setErrorOffset o) (fail $ "unexpected keyword '" <> i <> "'")
-    else return i
+identifier :: Bool -> Parser (String, Maybe Int)
+identifier withIndex = try $ do
+  o       <- getOffset
+  (n, mi) <- lexeme $ (,) <$> ((:) <$> start <*> rest) <*> option
+    Nothing
+    (Just <$> (char '@' *> L.decimal))
+  when (n `elem` keywords)
+    $ region (setErrorOffset o) (fail $ "unexpected keyword '" <> n <> "'")
+  case mi of
+    Just i | not withIndex -> region
+      (setErrorOffset o)
+      (fail $ "unexpected variable index '@" <> show i <> "'")
+    _ -> return (n, mi)
  where
   start = satisfy (\c -> notElem @[] c "λₘω𝘜" && isAlpha c) <|> char '_'
   rest  = hidden $ many (alphaNumChar <|> oneOf @[] "_'")
+
+name :: Parser String
+name = fst <$> identifier False
 
 parens, braces :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
@@ -99,8 +111,7 @@ stmt :: Parser Stmt
 stmt = choice [define, assume, eval Eval]
  where
   define =
-    try (Let <$> (keyword "let" *> semiring) <*> identifier <* symbol "=")
-      <*> iTerm
+    try (Let <$> (keyword "let" *> semiring) <*> name <* symbol "=") <*> iTerm
   assume = Assume <$> (keyword "assume" *> some bind)
 
 eval :: (ZeroOneMany -> ITerm -> a) -> Parser a
@@ -125,8 +136,18 @@ application :: ITerm -> Parser ITerm
 application t = foldl' (:$:) t <$> many (cTermWith True $ var <|> parens iTerm)
 
 var :: Parser ITerm
-var =
-  asks (\r x -> maybe (Free $ Global x) Bound $ elemIndex x r) <*> identifier
+var = do
+  o      <- getOffset
+  names  <- ask
+  (n, i) <- second (fromMaybe 0) <$> identifier True
+  case elemIndices n names of
+    []                 -> return . Free $ Global n
+    ns | i < length ns -> return . Bound $ ns !! i
+    ns                 -> region
+      (setErrorOffset o)
+      (fail $ "index of the bound variable is too large\n" <> mconcat
+        ["only ", show (length ns), " variables '", n, "' are in context"]
+      )
 
 iTerm :: Parser ITerm
 iTerm = try (cTermInner False >>= (\t -> Ann t <$> annotation)) <|> do
@@ -138,32 +159,30 @@ iTermInner = (var <|> parens iTerm >>= application) <|> inner
  where
   inner   = choice [letElim, fstElim, sndElim, sumElim] <?> "synthesising term"
   letElim = do
-    (q, z) <- try $ (,) <$> (keyword "let" *> semiring) <*> identifier <* symbol
-      "@"
-    let rest elim inLocal tyLocal =
+    (q, z) <- try $ (,) <$> (keyword "let" *> semiring) <*> name <* symbol "@"
+    let rest elim inLocals tyLocals =
           elim
-            <$> (symbol "=" *> iTerm)
-            <*> (keyword "in" *> local (inLocal ++) (cTermWith False iTermInner)
-                )
-            <*> local (tyLocal ++) annotation
-    (try mUnit *> rest (MUnitElim q) [] [z]) <|> do
-      (x, y) <- parens $ (,) <$> identifier <* symbol "," <*> identifier
-      rest (MPairElim q) [y, x] [z]
+            <$> (symbol "=" *> iTerm <* keyword "in")
+            <*> local (inLocals <>) (cTermWith False iTermInner)
+            <*> local (tyLocals <>) annotation
+    (try mUnit *> rest (MUnitElim q z) [] [z]) <|> do
+      (x, y) <- parens $ (,) <$> name <* symbol "," <*> name
+      rest (MPairElim q z x y) [y, x] [z]
   fstElim = Fst <$> (keyword "fst" *> (var <|> parens iTerm))
   sndElim = Snd <$> (keyword "snd" *> (var <|> parens iTerm))
   sumElim = do
     s <- keyword "case" *> semiring
-    z <- identifier <* symbol "@"
+    z <- name <* symbol "@"
     m <- iTerm <* keyword "of"
     let branch side = do
           keyword side
-          x <- identifier <* (symbol "→" <|> symbol "->")
-          local (x :) (cTermWith False iTermInner)
-    (l, r) <- braces
+          x <- name <* (symbol "→" <|> symbol "->")
+          (x, ) <$> local (x :) (cTermWith False iTermInner)
+    ((x, l), (y, r)) <- braces
       (   ((,) <$> branch "inl" <* symbol ";" <*> branch "inr")
       <|> ((swap .) . (,) <$> branch "inr" <* symbol ";" <*> branch "inl")
       )
-    SumElim s m l r <$> local (z :) annotation
+    SumElim s z m x l y r <$> local (z :) annotation
 
 cTermWith :: Bool -> Parser ITerm -> Parser CTerm
 cTermWith atomicOnly iTermP = cTermInner atomicOnly <|> Inf <$> iTermP
@@ -186,36 +205,32 @@ cTermInner atomicOnly =
     <?> "checkable term"
  where
   lam = do
-    symbol "\\" <|> symbol "λ"
-    xs <- some identifier
-    symbol "."
-    t <- local (reverse xs <>) $ cTermWith False iTermInner
-    return $ iterate Lam t !! length xs
+    xs <- (symbol "\\" <|> symbol "λ") *> some name <* symbol "."
+    t  <- local (reverse xs <>) $ cTermWith False iTermInner
+    return $ foldr Lam t xs
   universe = Universe <$ (keyword "𝘜" <|> keyword "U")
   pi       = do
     J.Binding x q t <- try $ bind <* (symbol "→" <|> symbol "->")
-    Pi q t <$> local (x :) (cTermWith False iTermInner)
+    Pi q x t <$> local (x :) (cTermWith False iTermInner)
   forall = do
     keyword "forall" <|> symbol "∀"
     let go bs = do
           b <- bind
           local (bndName b :) (go $ b : bs) <|> return (b : bs)
-    xs <- go []
-    symbol "."
-    p <- local (map bndName xs ++) cTerm
-    foldM (\a x -> return $ Pi (bndUsage x) (bndType x) a) p xs
+    xs <- go [] <* symbol "."
+    p  <- local (map bndName xs <>) cTerm
+    foldM (\a x -> return $ Pi (bndUsage x) (bndName x) (bndType x) a) p xs
   mPairType = do
     J.Binding x q t <- try $ bind <* (symbol "⊗" <|> symbol "*")
-    MPairType q t <$> local (x :) (cTermWith True iTermInner)
+    MPairType q x t <$> local (x :) (cTermWith True iTermInner)
   mUnitType = MUnitType <$ (keyword "𝟭ₘ" <|> keyword "I")
   aPair     = liftM2 (<|>)
                      (between (symbol "⟨") (symbol "⟩"))
                      (between (symbol "<") (symbol ">"))
                      (APair <$> cTerm <* symbol "," <*> cTerm)
   aPairType = do
-    (x, t) <-
-      try $ parens ((,) <$> identifier <* symbol ":" <*> cTerm) <* symbol "&"
-    APairType t <$> local (x :) (cTermWith True iTermInner)
+    (x, t) <- try $ parens ((,) <$> name <* symbol ":" <*> cTerm) <* symbol "&"
+    APairType x t <$> local (x :) (cTermWith True iTermInner)
   aUnit     = AUnit <$ (symbol "⟨⟩" <|> symbol "<>")
   aUnitType = AUnitType <$ (symbol "⊤" <|> keyword "T")
   sumL      = SumL <$> (keyword "inl" *> cTermWith True iTermInner)
@@ -231,6 +246,5 @@ mUnit :: Parser CTerm
 mUnit = MUnit <$ symbol "()"
 
 bind :: Parser Binding
-bind =
-  parens $ flip J.Binding <$> semiring <*> identifier <* symbol ":" <*> cTerm
+bind = parens $ flip J.Binding <$> semiring <*> name <* symbol ":" <*> cTerm
 

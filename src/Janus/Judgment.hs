@@ -57,8 +57,9 @@ evalInEnv :: Monad m => CTerm -> Judgment m Value
 evalInEnv m = asks (flip cEval m . (, []) . fst . cfgGlobalContext)
 
 -- | Create a local variable with a fresh name.
-newLocalVar :: Monad m => a -> b -> Judgment m (Binding Name a b)
-newLocalVar s ty = do
+newLocalVar
+  :: Monad m => BindingName -> a -> b -> Judgment m (Binding Name a b)
+newLocalVar n s ty = do
   i <- asks $ length . cfgBoundLocals
-  return $ Binding (Local i) s ty
+  return $ Binding (Local n i) s ty
 

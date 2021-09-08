@@ -134,14 +134,14 @@ cases =
     "Duplication of linear argument"
     ["(λx. (x, x) : ∀ (1 _ : I). (1 _ : I) * I) ()"]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
-    \         [Local 0] : 𝟭ₘ\n\
+    \         x : 𝟭ₘ\n\
     \           Used ω-times, but available 1-times."
   , TestCase "Erased multiplicative usage of linear argument"
              ["(λx. (x, x) : ∀ (1 _ : I). (0 _ : I) * I) ()"]
-             "ω ((), ()) : (0 x : 𝟭ₘ) ⊗ 𝟭ₘ"
+             "ω ((), ()) : (0 _ : 𝟭ₘ) ⊗ 𝟭ₘ"
   , TestCase "Additive usage of linear argument"
              ["(λx. <x, x> : ∀ (1 _ : I). (_ : I) & I) ()"]
-             "ω ⟨(), ()⟩ : (x : 𝟭ₘ) & 𝟭ₘ"
+             "ω ⟨(), ()⟩ : (_ : 𝟭ₘ) & 𝟭ₘ"
   , TestCase
     "Exponential elimination"
     [ "assume (0 a : U) (m : a)"
@@ -156,7 +156,7 @@ cases =
       \                . b exp"
     , "ofcElim a (λexp. (w _ : a) * a) (m, ()) (λm'. (m', m'))"
     ]
-    "ω (m, m) : (ω x : a) ⊗ a"
+    "ω (m, m) : (ω _ : a) ⊗ a"
   , TestCase
     ""
     [ "assume (0 a : U) (m : a)"
@@ -184,7 +184,7 @@ cases =
     , "let x' = case 1 z @ inl x : sum of { inl x -> x; inr y -> x} : a"
     ]
     "error: Mismatched multiplicities (Right case of the sum):\n\
-    \         [Local 0] : b\n\
+    \         y : b\n\
     \           Used 0-times, but available 1-times."
   ]
 
@@ -192,7 +192,7 @@ prettyCases :: [TestCase]
 prettyCases =
   [ TestCase "I combinator"
              ["let w Id = λ_ x. x : ∀ (0 a : U) (1 _ : a) . a"]
-             "ω Id = (λx y. y) : ∀ (0 x : 𝘜) (1 y : x) . x"
+             "ω Id = (λ_ x. x) : ∀ (0 a : 𝘜) (1 _ : a) . a"
   , TestCase
     "K combinator"
     [ "let w K = (λ_ _ x _. x)\n\
@@ -202,8 +202,8 @@ prettyCases =
       \            (w _ : b x)\n\
       \          . a"
     ]
-    "ω K = (λx y z a. z)\n\
-    \      : ∀ (0 x : 𝘜) (0 y : (0 b : x) → 𝘜) (1 z : x) (ω a : y z) . x"
+    "ω K = (λ_ _ x _. x)\n\
+    \      : ∀ (0 a : 𝘜) (0 b : (0 _ : a) → 𝘜) (1 x : a) (ω _ : b x) . a"
   , TestCase
     "S combinator"
     [ "let w S = ((λa b c x y z. x z (y z))\n\
@@ -215,14 +215,14 @@ prettyCases =
       \            (w z : a)\n\
       \          . c z (y z))"
     ]
-    "ω S = (λx y z a b c. a c (b c))\n\
-    \      : ∀ (0 x : 𝘜)\n\
-    \          (0 y : (0 d : x) → 𝘜)\n\
-    \          (0 z : ∀ (0 d : x) (0 e : y d) . 𝘜)\n\
-    \          (1 a : ∀ (ω d : x) (1 e : y d) . z d e)\n\
-    \          (1 b : (ω d : x) → y d)\n\
-    \          (ω c : x)\n\
-    \        . z c (b c)"
+    "ω S = (λa b c x y z. x z (y z))\n\
+    \      : ∀ (0 a : 𝘜)\n\
+    \          (0 b : (0 _ : a) → 𝘜)\n\
+    \          (0 c : ∀ (0 z : a) (0 yz : b z) . 𝘜)\n\
+    \          (1 x : ∀ (ω z : a) (1 yz : b z) . c z yz)\n\
+    \          (1 y : (ω z : a) → b z)\n\
+    \          (ω z : a)\n\
+    \        . c z (y z)"
   ]
 
 withCases :: [TestCase]
@@ -253,7 +253,7 @@ withCases =
     , "1 (λi. (fst i, snd i) : (1 _ : (_ : a) & b) -> (1 _ : a) * b) <x, y>"
     ]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
-    \         [Local 0] : (x : a) & b\n\
+    \         i : (_ : a) & b\n\
     \           Used ω-times, but available 1-times."
   , TestCase
     "1 <x, y> -> 1 (1 x, x)"
@@ -261,7 +261,7 @@ withCases =
     , "1 (λi. (fst i, fst i) : (1 _ : (_ : a) & b) -> (1 _ : a) * a) <x, y>"
     ]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
-    \         [Local 0] : (x : a) & b\n\
+    \         i : (_ : a) & b\n\
     \           Used ω-times, but available 1-times."
   , TestCase
     "1 <m, y> -> 1 (w n, m)"
@@ -298,15 +298,15 @@ ofCourseCases =
       \         (1 _ : ofcW ((1 _ : A) * B))\n\
       \  . (1 _ : ofcW A) * (ofcW B)"
     ]
-    "ω (λx y z. let 1 c @ (a, b) = z\n\
-    \           in let 1 c @ () = b\n\
-    \              in let ω e @ (c, d) = a\n\
-    \                 in ((c, ()), (d, ()))\n\
-    \                 : (1 f : (ω f : x) ⊗ 𝟭ₘ) ⊗ (ω g : y) ⊗ 𝟭ₘ\n\
-    \              : (1 d : (ω d : x) ⊗ 𝟭ₘ) ⊗ (ω e : y) ⊗ 𝟭ₘ\n\
-    \           : (1 d : (ω d : x) ⊗ 𝟭ₘ) ⊗ (ω e : y) ⊗ 𝟭ₘ)\n\
-    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (ω a : (1 a : x) ⊗ y) ⊗ 𝟭ₘ)\n\
-    \    . (1 a : (ω a : x) ⊗ 𝟭ₘ) ⊗ (ω b : y) ⊗ 𝟭ₘ"
+    "ω (λA B pair. let 1 exp' @ (val, unit) = pair\n\
+    \              in let 1 unit' @ () = unit\n\
+    \                 in let ω _ @ (x, y) = val\n\
+    \                    in ((x, ()), (y, ()))\n\
+    \                    : (1 _ : (ω _ : A) ⊗ 𝟭ₘ) ⊗ (ω _ : B) ⊗ 𝟭ₘ\n\
+    \                 : (1 _ : (ω _ : A) ⊗ 𝟭ₘ) ⊗ (ω _ : B) ⊗ 𝟭ₘ\n\
+    \              : (1 _ : (ω _ : A) ⊗ 𝟭ₘ) ⊗ (ω _ : B) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 A : 𝘜) (0 B : 𝘜) (1 _ : (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ)\n\
+    \    . (1 _ : (ω _ : A) ⊗ 𝟭ₘ) ⊗ (ω _ : B) ⊗ 𝟭ₘ"
   , TestCase
     "Multiplicative pair of exponentials produces an exponential of a multiplicative pair"
     [ ofcW
@@ -325,19 +325,19 @@ ofCourseCases =
       \         (1 _ : (1 _ : ofcW A) * (ofcW B))\n\
       \  . ofcW ((1 _ : A) * B)"
     ]
-    "ω (λx y z. let 1 c @ (a, b) = z\n\
-    \           in let 1 e @ (c, d) = a\n\
-    \              in let 1 e @ () = d\n\
-    \                 in let 1 g @ (e, f) = b\n\
-    \                    in let 1 g @ () = f\n\
-    \                       in ((c, e), ())\n\
-    \                       : (ω h : (1 h : x) ⊗ y) ⊗ 𝟭ₘ\n\
-    \                    : (ω h : (1 h : x) ⊗ y) ⊗ 𝟭ₘ\n\
-    \                 : (ω f : (1 f : x) ⊗ y) ⊗ 𝟭ₘ\n\
-    \              : (ω f : (1 f : x) ⊗ y) ⊗ 𝟭ₘ\n\
-    \           : (ω d : (1 d : x) ⊗ y) ⊗ 𝟭ₘ)\n\
-    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (1 a : (ω a : x) ⊗ 𝟭ₘ) ⊗ (ω b : y) ⊗ 𝟭ₘ)\n\
-    \    . (ω a : (1 a : x) ⊗ y) ⊗ 𝟭ₘ"
+    "ω (λA B pair. let 1 _ @ (x, y) = pair\n\
+    \              in let 1 exp' @ (val, unit) = x\n\
+    \                 in let 1 unit' @ () = unit\n\
+    \                    in let 1 exp' @ (val, unit) = y\n\
+    \                       in let 1 unit' @ () = unit\n\
+    \                          in ((val@1, val), ())\n\
+    \                          : (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ\n\
+    \                       : (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ\n\
+    \                    : (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ\n\
+    \                 : (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ\n\
+    \              : (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 A : 𝘜) (0 B : 𝘜) (1 _ : (1 _ : (ω _ : A) ⊗ 𝟭ₘ) ⊗ (ω _ : B) ⊗ 𝟭ₘ)\n\
+    \    . (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ"
   , TestCase
     "Exponential of an additive pair produces an additive pair of exponentials"
     [ ofcW
@@ -351,13 +351,13 @@ ofCourseCases =
       \         (1 _ : ofcW ((_ : A) & B))\n\
       \  . (_ : ofcW A) & (ofcW B)"
     ]
-    "ω (λx y z. let 1 c @ (a, b) = z\n\
-    \           in let 1 c @ () = b\n\
-    \              in ⟨(fst a, ()), (snd a, ())⟩\n\
-    \              : (d : (ω d : x) ⊗ 𝟭ₘ) & (ω e : y) ⊗ 𝟭ₘ\n\
-    \           : (d : (ω d : x) ⊗ 𝟭ₘ) & (ω e : y) ⊗ 𝟭ₘ)\n\
-    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (ω a : (a : x) & y) ⊗ 𝟭ₘ)\n\
-    \    . (a : (ω a : x) ⊗ 𝟭ₘ) & (ω b : y) ⊗ 𝟭ₘ"
+    "ω (λA B pair. let 1 exp' @ (val, unit) = pair\n\
+    \              in let 1 unit' @ () = unit\n\
+    \                 in ⟨(fst val, ()), (snd val, ())⟩\n\
+    \                 : (_ : (ω _ : A) ⊗ 𝟭ₘ) & (ω _ : B) ⊗ 𝟭ₘ\n\
+    \              : (_ : (ω _ : A) ⊗ 𝟭ₘ) & (ω _ : B) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 A : 𝘜) (0 B : 𝘜) (1 _ : (ω _ : (_ : A) & B) ⊗ 𝟭ₘ)\n\
+    \    . (_ : (ω _ : A) ⊗ 𝟭ₘ) & (ω _ : B) ⊗ 𝟭ₘ"
   , TestCase
     "Additive pair of exponentials fails to produce an exponential of an additive pair"
     [ ofcW
@@ -375,7 +375,7 @@ ofCourseCases =
       \  . ofcW ((_ : A) & B)"
     ]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
-    \         [Local 2] : (x : (ω x : [Local 0]) ⊗ 𝟭ₘ) & (ω y : [Local 1]) ⊗ 𝟭ₘ\n\
+    \         pair : (_ : (ω _ : A) ⊗ 𝟭ₘ) & (ω _ : B) ⊗ 𝟭ₘ\n\
     \           Used ω-times, but available 1-times."
   , TestCase
     "Additive pair of exponentials fails to produce an exponential of an additive pair (different form)"
@@ -389,7 +389,7 @@ ofCourseCases =
       \  . ofcW ((_ : A) & B)"
     ]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
-    \         [Local 2] : (x : (ω x : [Local 0]) ⊗ 𝟭ₘ) & (ω y : [Local 1]) ⊗ 𝟭ₘ\n\
+    \         pair : (_ : (ω _ : A) ⊗ 𝟭ₘ) & (ω _ : B) ⊗ 𝟭ₘ\n\
     \           Used ω-times, but available 1-times."
   , TestCase
     "Exponential of a disjoint sum produces a disjoint sum of exponentials"
@@ -407,14 +407,14 @@ ofCourseCases =
       \         (1 _ : ofcW (A + B))\n\
       \  . (ofcW A) + (ofcW B)"
     ]
-    "ω (λx y z. let 1 c @ (a, b) = z\n\
-    \           in let 1 c @ () = b\n\
-    \              in case ω e @ a of { inl c → inl (c, ()); inr d → inr (d, ())\n\
-    \                                 } : (ω f : x) ⊗ 𝟭ₘ ⊕ (ω f : y) ⊗ 𝟭ₘ\n\
-    \              : (ω d : x) ⊗ 𝟭ₘ ⊕ (ω d : y) ⊗ 𝟭ₘ\n\
-    \           : (ω d : x) ⊗ 𝟭ₘ ⊕ (ω d : y) ⊗ 𝟭ₘ)\n\
-    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (ω a : x ⊕ y) ⊗ 𝟭ₘ)\n\
-    \    . (ω a : x) ⊗ 𝟭ₘ ⊕ (ω a : y) ⊗ 𝟭ₘ"
+    "ω (λA B sum. let 1 exp' @ (val, unit) = sum\n\
+    \             in let 1 unit' @ () = unit\n\
+    \                in case ω _ @ val of { inl x → inl (x, ()); inr y → inr (y, ())\n\
+    \                                     } : (ω _ : A) ⊗ 𝟭ₘ ⊕ (ω _ : B) ⊗ 𝟭ₘ\n\
+    \                : (ω _ : A) ⊗ 𝟭ₘ ⊕ (ω _ : B) ⊗ 𝟭ₘ\n\
+    \             : (ω _ : A) ⊗ 𝟭ₘ ⊕ (ω _ : B) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 A : 𝘜) (0 B : 𝘜) (1 _ : (ω _ : A ⊕ B) ⊗ 𝟭ₘ)\n\
+    \    . (ω _ : A) ⊗ 𝟭ₘ ⊕ (ω _ : B) ⊗ 𝟭ₘ"
   , TestCase
     "Disjoint sum of exponentials produces an exponential of disjoint sums"
     [ ofcW
@@ -428,19 +428,19 @@ ofCourseCases =
       \         (1 _ : (ofcW A) + (ofcW B))\n\
       \  . ofcW (A + B)"
     ]
-    "ω (λx y z. case 1 c @ z of { inl a → let 1 f @ (d, e) = a\n\
-    \                                     in let 1 f @ () = e\n\
-    \                                        in (inl d, ())\n\
-    \                                        : (ω g : x ⊕ y) ⊗ 𝟭ₘ\n\
-    \                                     : (ω g : x ⊕ y) ⊗ 𝟭ₘ;\n\
-    \                             inr b → let 1 f @ (d, e) = b\n\
-    \                                     in let 1 f @ () = e\n\
-    \                                        in (inr d, ())\n\
-    \                                        : (ω g : x ⊕ y) ⊗ 𝟭ₘ\n\
-    \                                     : (ω g : x ⊕ y) ⊗ 𝟭ₘ\n\
-    \                           } : (ω d : x ⊕ y) ⊗ 𝟭ₘ)\n\
-    \  : ∀ (0 x : 𝘜) (0 y : 𝘜) (1 z : (ω a : x) ⊗ 𝟭ₘ ⊕ (ω a : y) ⊗ 𝟭ₘ)\n\
-    \    . (ω a : x ⊕ y) ⊗ 𝟭ₘ"
+    "ω (λA B sum. case 1 _ @ sum of { inl x → let 1 exp' @ (val, unit) = x\n\
+    \                                         in let 1 unit' @ () = unit\n\
+    \                                            in (inl val, ())\n\
+    \                                            : (ω _ : A ⊕ B) ⊗ 𝟭ₘ\n\
+    \                                         : (ω _ : A ⊕ B) ⊗ 𝟭ₘ;\n\
+    \                                 inr y → let 1 exp' @ (val, unit) = y\n\
+    \                                         in let 1 unit' @ () = unit\n\
+    \                                            in (inr val, ())\n\
+    \                                            : (ω _ : A ⊕ B) ⊗ 𝟭ₘ\n\
+    \                                         : (ω _ : A ⊕ B) ⊗ 𝟭ₘ\n\
+    \                               } : (ω _ : A ⊕ B) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 A : 𝘜) (0 B : 𝘜) (1 _ : (ω _ : A) ⊗ 𝟭ₘ ⊕ (ω _ : B) ⊗ 𝟭ₘ)\n\
+    \    . (ω _ : A ⊕ B) ⊗ 𝟭ₘ"
   , TestCase
     "Exponential of a dependent multiplicative pair produces a dependent multiplicative pair of exponentials"
     [ ofcW
@@ -457,25 +457,39 @@ ofCourseCases =
       \         (1 _ : ofcW ((1 a : A) * B a))\n\
       \  . (1 wa : ofcW A) * ofcW (B (unwrap A wa))"
     ]
-    "ω (λx y z. let 1 c @ (a, b) = z\n\
-    \           in let 1 c @ () = b\n\
-    \              in let ω e @ (c, d) = a\n\
-    \                 in ((c, ()), (d, ()))\n\
-    \                 : (1 f : (ω f : x) ⊗ 𝟭ₘ) ⊗\n\
-    \                   (ω g\n\
-    \                    : y\n\
-    \                      (let 1 i @ (g, h) = f in let 1 i @ () = h in g : x : x)) ⊗\n\
-    \                   𝟭ₘ\n\
-    \              : (1 d : (ω d : x) ⊗ 𝟭ₘ) ⊗\n\
-    \                (ω e\n\
-    \                 : y (let 1 g @ (e, f) = d in let 1 g @ () = f in e : x : x)) ⊗\n\
-    \                𝟭ₘ\n\
-    \           : (1 d : (ω d : x) ⊗ 𝟭ₘ) ⊗\n\
-    \             (ω e : y (let 1 g @ (e, f) = d in let 1 g @ () = f in e : x : x)) ⊗\n\
-    \             𝟭ₘ)\n\
-    \  : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (1 z : (ω a : (1 a : x) ⊗ y a) ⊗ 𝟭ₘ)\n\
-    \    . (1 a : (ω a : x) ⊗ 𝟭ₘ) ⊗\n\
-    \      (ω b : y (let 1 d @ (b, c) = a in let 1 d @ () = c in b : x : x)) ⊗ 𝟭ₘ"
+    "ω (λA B wab. let 1 exp' @ (val, unit) = wab\n\
+    \             in let 1 unit' @ () = unit\n\
+    \                in let ω _ @ (a, b) = val\n\
+    \                   in ((a, ()), (b, ()))\n\
+    \                   : (1 wa : (ω _ : A) ⊗ 𝟭ₘ) ⊗\n\
+    \                     (ω _\n\
+    \                      : B\n\
+    \                        (let 1 exp' @ (val, unit) = wa\n\
+    \                         in let 1 unit' @ () = unit in val : A\n\
+    \                         : A)) ⊗\n\
+    \                     𝟭ₘ\n\
+    \                : (1 wa : (ω _ : A) ⊗ 𝟭ₘ) ⊗\n\
+    \                  (ω _\n\
+    \                   : B\n\
+    \                     (let 1 exp' @ (val, unit) = wa\n\
+    \                      in let 1 unit' @ () = unit in val : A\n\
+    \                      : A)) ⊗\n\
+    \                  𝟭ₘ\n\
+    \             : (1 wa : (ω _ : A) ⊗ 𝟭ₘ) ⊗\n\
+    \               (ω _\n\
+    \                : B\n\
+    \                  (let 1 exp' @ (val, unit) = wa\n\
+    \                   in let 1 unit' @ () = unit in val : A\n\
+    \                   : A)) ⊗\n\
+    \               𝟭ₘ)\n\
+    \  : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (1 _ : (ω _ : (1 a : A) ⊗ B a) ⊗ 𝟭ₘ)\n\
+    \    . (1 wa : (ω _ : A) ⊗ 𝟭ₘ) ⊗\n\
+    \      (ω _\n\
+    \       : B\n\
+    \         (let 1 exp' @ (val, unit) = wa\n\
+    \          in let 1 unit' @ () = unit in val : A\n\
+    \          : A)) ⊗\n\
+    \      𝟭ₘ"
   , TestCase
     "Dependent multiplicative pair of exponentials produces an exponential of a dependent multiplicative pair"
     [ ofcW
@@ -497,32 +511,38 @@ ofCourseCases =
       \         (1 _ : (1 wa : ofcW A) * ofcW (B (unwrap A wa)))\n\
       \  . ofcW ((1 a : A) * B a)"
     ]
-    "ω (λx y z. let 1 c @ (a, b) = z\n\
-    \           in (let 1 e @ (c, d) = a\n\
-    \               in let 1 e @ () = d\n\
-    \                  in λe. let 1 h @ (f, g) = e\n\
-    \                         in let 1 h @ () = g\n\
-    \                            in ((c, f), ())\n\
-    \                            : (ω i : (1 i : x) ⊗ y i) ⊗ 𝟭ₘ\n\
-    \                         : (ω i : (1 i : x) ⊗ y i) ⊗ 𝟭ₘ\n\
-    \                  : (1 f : (ω f : y (let 1 f @ () = e in c : x)) ⊗ 𝟭ₘ) →\n\
-    \                    (ω g : (1 g : x) ⊗ y g) ⊗ 𝟭ₘ\n\
-    \               : (1 f\n\
-    \                  : (ω f\n\
-    \                     : y\n\
-    \                       (let 1 h @ (f, g) = e\n\
-    \                        in let 1 h @ () = g in f : x\n\
-    \                        : x)) ⊗\n\
-    \                    𝟭ₘ) →\n\
-    \                 (ω g : (1 g : x) ⊗ y g) ⊗ 𝟭ₘ)\n\
-    \              b\n\
-    \           : (ω d : (1 d : x) ⊗ y d) ⊗ 𝟭ₘ)\n\
-    \  : ∀ (0 x : 𝘜)\n\
-    \      (0 y : (0 a : x) → 𝘜)\n\
-    \      (1 z : (1 a : (ω a : x) ⊗ 𝟭ₘ) ⊗\n\
-    \             (ω b : y (let 1 d @ (b, c) = a in let 1 d @ () = c in b : x : x)) ⊗\n\
+    "ω (λA B wawb. let 1 _ @ (wa, wb) = wawb\n\
+    \              in (let 1 exp' @ (val, unit) = wa\n\
+    \                  in let 1 unit' @ () = unit\n\
+    \                     in λwb'. let 1 exp' @ (val, unit) = wb'\n\
+    \                              in let 1 unit' @ () = unit\n\
+    \                                 in ((val@1, val), ())\n\
+    \                                 : (ω _ : (1 a : A) ⊗ B a) ⊗ 𝟭ₘ\n\
+    \                              : (ω _ : (1 a : A) ⊗ B a) ⊗ 𝟭ₘ\n\
+    \                     : (1 _\n\
+    \                        : (ω _ : B (let 1 unit' @ () = unit' in val : A)) ⊗\n\
+    \                          𝟭ₘ) →\n\
+    \                       (ω _ : (1 a : A) ⊗ B a) ⊗ 𝟭ₘ\n\
+    \                  : (1 _\n\
+    \                     : (ω _\n\
+    \                        : B\n\
+    \                          (let 1 exp' @ (val, unit) = exp'\n\
+    \                           in let 1 unit' @ () = unit in val : A\n\
+    \                           : A)) ⊗\n\
+    \                       𝟭ₘ) →\n\
+    \                    (ω _ : (1 a : A) ⊗ B a) ⊗ 𝟭ₘ)\n\
+    \                 wb\n\
+    \              : (ω _ : (1 a : A) ⊗ B a) ⊗ 𝟭ₘ)\n\
+    \  : ∀ (0 A : 𝘜)\n\
+    \      (0 B : (0 _ : A) → 𝘜)\n\
+    \      (1 _ : (1 wa : (ω _ : A) ⊗ 𝟭ₘ) ⊗\n\
+    \             (ω _\n\
+    \              : B\n\
+    \                (let 1 exp' @ (val, unit) = wa\n\
+    \                 in let 1 unit' @ () = unit in val : A\n\
+    \                 : A)) ⊗\n\
     \             𝟭ₘ)\n\
-    \    . (ω a : (1 a : x) ⊗ y a) ⊗ 𝟭ₘ"
+    \    . (ω _ : (1 a : A) ⊗ B a) ⊗ 𝟭ₘ"
   , TestCase
     "Exponential of a dependent additive pair produces a dependent additive pair of exponentials"
     [ ofcW
@@ -537,19 +557,31 @@ ofCourseCases =
       \         (1 _ : ofcW ((a : A) & B a))\n\
       \  . (wa : ofcW A) & (ofcW (B (unwrap A wa)))"
     ]
-    "ω (λx y z. let 1 c @ (a, b) = z\n\
-    \           in let 1 c @ () = b\n\
-    \              in ⟨(fst a, ()), (snd a, ())⟩\n\
-    \              : (d : (ω d : x) ⊗ 𝟭ₘ) &\n\
-    \                (ω e\n\
-    \                 : y (let 1 g @ (e, f) = d in let 1 g @ () = f in e : x : x)) ⊗\n\
-    \                𝟭ₘ\n\
-    \           : (d : (ω d : x) ⊗ 𝟭ₘ) &\n\
-    \             (ω e : y (let 1 g @ (e, f) = d in let 1 g @ () = f in e : x : x)) ⊗\n\
-    \             𝟭ₘ)\n\
-    \  : ∀ (0 x : 𝘜) (0 y : (0 a : x) → 𝘜) (1 z : (ω a : (a : x) & y a) ⊗ 𝟭ₘ)\n\
-    \    . (a : (ω a : x) ⊗ 𝟭ₘ) &\n\
-    \      (ω b : y (let 1 d @ (b, c) = a in let 1 d @ () = c in b : x : x)) ⊗ 𝟭ₘ"
+    "ω (λA B wab. let 1 exp' @ (val, unit) = wab\n\
+    \             in let 1 unit' @ () = unit\n\
+    \                in ⟨(fst val, ()), (snd val, ())⟩\n\
+    \                : (wa : (ω _ : A) ⊗ 𝟭ₘ) &\n\
+    \                  (ω _\n\
+    \                   : B\n\
+    \                     (let 1 exp' @ (val, unit) = wa\n\
+    \                      in let 1 unit' @ () = unit in val : A\n\
+    \                      : A)) ⊗\n\
+    \                  𝟭ₘ\n\
+    \             : (wa : (ω _ : A) ⊗ 𝟭ₘ) &\n\
+    \               (ω _\n\
+    \                : B\n\
+    \                  (let 1 exp' @ (val, unit) = wa\n\
+    \                   in let 1 unit' @ () = unit in val : A\n\
+    \                   : A)) ⊗\n\
+    \               𝟭ₘ)\n\
+    \  : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (1 _ : (ω _ : (a : A) & B a) ⊗ 𝟭ₘ)\n\
+    \    . (wa : (ω _ : A) ⊗ 𝟭ₘ) &\n\
+    \      (ω _\n\
+    \       : B\n\
+    \         (let 1 exp' @ (val, unit) = wa\n\
+    \          in let 1 unit' @ () = unit in val : A\n\
+    \          : A)) ⊗\n\
+    \      𝟭ₘ"
   , TestCase
     "Dependent additive pair of exponentials fails to produce an exponential of a dependent additive pair"
     [ ofcW
@@ -564,13 +596,13 @@ ofCourseCases =
        \  . ofcW ((a : A) & B a)"
     ]
     "error: Mismatched multiplicities (Lambda abstraction):\n\
-    \         [Local 2] : (x : (ω x : [Local 0]) ⊗ 𝟭ₘ) &\n\
-    \                     (ω y\n\
-    \                      : [Local 1]\n\
-    \                        (let 1 a @ (y, z) = x\n\
-    \                         in let 1 a @ () = z in y : [Local 0]\n\
-    \                         : [Local 0])) ⊗\n\
-    \                     𝟭ₘ\n\
+    \         wawb : (wa : (ω _ : A) ⊗ 𝟭ₘ) &\n\
+    \                (ω _\n\
+    \                 : B\n\
+    \                   (let 1 exp' @ (val, unit) = wa\n\
+    \                    in let 1 unit' @ () = unit in val : A\n\
+    \                    : A)) ⊗\n\
+    \                𝟭ₘ\n\
     \           Used ω-times, but available 1-times."
   ]
  where

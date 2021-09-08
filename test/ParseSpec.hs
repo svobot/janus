@@ -45,6 +45,7 @@ data TestCase a = TestCase
 spec :: Spec
 spec = do
   describe "Statement" $ mapM_ (run evalParser) stmtCases
+  describe "Variable shadowing" $ mapM_ (run evalParser) shadowedCases
   describe "File" $ mapM_ (run $ fileParser "<test>") fileCases
  where
   run p tc = it (desc tc) $ mapM_ (flip (checkOne p) $ res tc) $ inputs tc
@@ -75,8 +76,9 @@ stmtCases =
     , "ω λa x . x : (0 a : U) → (1 _ : a) → a"
     , "ω λa x . x : ∀ (0 a : 𝘜) (1 _ : a) . a"
     ]
-    (ParseRes . Eval Many $ Ann (Lam (Lam (ib 0)))
-                                (Pi Zero Universe (Pi One (ib 0) (ib 1)))
+    (ParseRes . Eval Many $ Ann
+      (Lam "a" (Lam "x" (ib 0)))
+      (Pi Zero "a" Universe (Pi One "_" (ib 0) (ib 1)))
     )
   , TestCase
     "Assumption"
@@ -99,12 +101,16 @@ stmtCases =
     ]
     (ParseRes . Eval Many $ MPairElim
       Many
+      "p"
+      "x'"
+      "y'"
       (Ann (MPair (ifg "x") (Inf $ fg "f" :$: ifg "y" :$: ifg "z"))
-           (MPairType Zero (ifg "a") (ib 0))
+           (MPairType Zero "x" (ifg "a") (ib 0))
       )
       (ib 0)
       (Inf
-        (Ann (Lam (ifg "a")) (Pi Zero (MPairType Zero Universe (ib 0)) Universe)
+        (   Ann (Lam "u" (ifg "a"))
+                (Pi Zero "_" (MPairType Zero "z" Universe (ib 0)) Universe)
         :$: ib 0
         )
       )
@@ -113,6 +119,7 @@ stmtCases =
     "Multiplicative unit elimination"
     ["0 let u @ () = f x in y : g u"]
     (ParseRes . Eval Zero $ MUnitElim Many
+                                      "u"
                                       (fg "f" :$: ifg "x")
                                       (ifg "y")
                                       (Inf $ fg "g" :$: ib 0)
@@ -122,16 +129,17 @@ stmtCases =
     ["let p = <x, f y> : (x : a) & f x", "let ω p = ⟨x, f y⟩ : (x : a) & f x"]
     (ParseRes . Let Many "p" $ Ann
       (APair (ifg "x") (Inf $ fg "f" :$: ifg "y"))
-      (APairType (ifg "a") (Inf $ fg "f" :$: ib 0))
+      (APairType "x" (ifg "a") (Inf $ fg "f" :$: ib 0))
     )
   , TestCase
     "Additive pair elimination"
     ["1 λp. (fst p, snd p) : ∀ (p : (_ : a) & b) . (_ : a) * b"]
     (ParseRes . Eval One $ Ann
-      (Lam (MPair (Inf (Fst (Bound 0))) (Inf (Snd (Bound 0)))))
+      (Lam "p" (MPair (Inf (Fst (Bound 0))) (Inf (Snd (Bound 0)))))
       (Pi Many
-          (APairType (ifg "a") (ifg "b"))
-          (MPairType Many (ifg "a") (ifg "b"))
+          "p"
+          (APairType "_" (ifg "a") (ifg "b"))
+          (MPairType Many "_" (ifg "a") (ifg "b"))
       )
     )
   , TestCase
@@ -141,7 +149,8 @@ stmtCases =
     ]
     (   ParseRes
     .   Eval Many
-    $   Ann (Lam (Lam (ib 1))) (Pi One MUnitType (Pi Zero AUnitType MUnitType))
+    $   Ann (Lam "m" (Lam "a" (ib 1)))
+            (Pi One "_" MUnitType (Pi Zero "_" AUnitType MUnitType))
     :$: MUnit
     :$: AUnit
     )
@@ -155,10 +164,12 @@ stmtCases =
     (   ParseRes
     .   Eval One
     $   (   Ann
-            (Lam (Lam (Inf (Ann (ib 1) MUnitType))))
-            (Pi One
-                MUnitType
-                (Pi Many (MPairType Many MUnitType AUnitType) MUnitType)
+            (Lam "x" (Lam "y" (Inf (Ann (ib 1) MUnitType))))
+            (Pi
+              One
+              "_"
+              MUnitType
+              (Pi Many "_" (MPairType Many "_" MUnitType AUnitType) MUnitType)
             )
         :$: MUnit
         )
@@ -181,15 +192,17 @@ stmtCases =
     , "0 (ω x : a) → b : 𝘜"
     , "0 (∀ (ω x : a) . b) : 𝘜"
     ]
-    (ParseRes . Eval Zero $ Ann (Pi Many (ifg "a") (ifg "b")) Universe)
+    (ParseRes . Eval Zero $ Ann (Pi Many "x" (ifg "a") (ifg "b")) Universe)
   , TestCase
     "Multiplicative pair type"
     ["0 (w x : a) * b : U", "0 (x : (a)) * b : U", "0 (ω x : a) ⊗ b : 𝘜"]
-    (ParseRes . Eval Zero $ Ann (MPairType Many (ifg "a") (ifg "b")) Universe)
+    (ParseRes . Eval Zero $ Ann (MPairType Many "x" (ifg "a") (ifg "b"))
+                                Universe
+    )
   , TestCase
     "Additive pair type"
     ["0 (x : a) & b : U", "0 ((x : a) & b) : (U)", "0 (x : a) & b : 𝘜"]
-    (ParseRes . Eval Zero $ Ann (APairType (ifg "a") (ifg "b")) Universe)
+    (ParseRes . Eval Zero $ Ann (APairType "x" (ifg "a") (ifg "b")) Universe)
   , TestCase
     "Disjoint sum"
     ["1 inr x : (f a) + b"]
@@ -204,11 +217,43 @@ stmtCases =
     , "let ω sum = case ω z @ m of {inl x -> x; inr y -> f y} : a"
     ]
     (ParseRes . Let Many "sum" $ SumElim Many
+                                         "z"
                                          (fg "m")
+                                         "x"
                                          (ib 0)
+                                         "y"
                                          (Inf $ fg "f" :$: ib 0)
                                          (ifg "a")
     )
+  ]
+
+shadowedCases :: [TestCase Stmt]
+shadowedCases =
+  [ TestCase
+    "Binding De Bruijn index 0"
+    [ "let 1 id = (\\x. \\x. x : (0 x : 𝘜) -> (1 y : U) -> U)"
+    , "let 1 id = (\\x. \\x. x@0 : (0 x : 𝘜) -> (1 y : U) -> U)"
+    ]
+    (ParseRes . Let One "id" $ Ann
+      (Lam "x" (Lam "x" (ib 0)))
+      (Pi Zero "x" Universe (Pi One "y" Universe Universe))
+    )
+  , TestCase
+    "Binding De Bruijn index 1"
+    ["let 1 id = (\\x. \\x. x@1 : (1 x : 𝘜) -> (0 y : U) -> U)"]
+    (ParseRes . Let One "id" $ Ann
+      (Lam "x" (Lam "x" (ib 1)))
+      (Pi One "x" Universe (Pi Zero "y" Universe Universe))
+    )
+  , TestCase
+    "Binding too large index"
+    ["let 1 id = (\\x. \\x. x@10 : (1 x : 𝘜) -> (0 y : U) -> U)"]
+    "<interactive>:1:21:\n\
+             \  |\n\
+             \1 | let 1 id = (\\x. \\x. x@10 : (1 x : 𝘜) -> (0 y : U) -> U)\n\
+             \  |                     ^\n\
+             \index of the bound variable is too large\n\
+             \only 2 variables 'x' are in context\n"
   ]
 
 fileCases :: [TestCase [Stmt]]
@@ -220,9 +265,9 @@ fileCases =
         \let u = let _ @ () = () : I in x : a"
       ]
       (ParseRes
-        [ Let One "v" $ MPairElim Many (fg "p") (ib 1) (ifg "a")
+        [ Let One "v" $ MPairElim Many "_" "x" "y" (fg "p") (ib 1) (ifg "a")
         , Let Many "u"
-          $ MUnitElim Many (Ann MUnit MUnitType) (ifg "x") (ifg "a")
+          $ MUnitElim Many "_" (Ann MUnit MUnitType) (ifg "x") (ifg "a")
         ]
       )
   ]

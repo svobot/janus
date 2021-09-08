@@ -48,7 +48,8 @@ cases =
     -- 1 (λa x. x : ∀ (0 a : U) (1 _ : a) . a) a x
     abxyContext
     One
-    (   Ann (Lam . Lam $ ib 0) (Pi Zero Universe $ Pi One (ib 0) (ib 1))
+    (   Ann (Lam "a" . Lam "x" $ ib 0)
+            (Pi Zero "a" Universe $ Pi One "_" (ib 0) (ib 1))
     :$: ifg "a"
     :$: ifg "x"
     )
@@ -66,18 +67,21 @@ cases =
     )
     One
     (   (   (   (   Ann
-                    (Lam (Lam (Lam (Lam (ib 1)))))
+                    (Lam "a" (Lam "b" (Lam "x" (Lam "y" (ib 1)))))
                     (Pi
                       Zero
+                      "a"
                       Universe
-                      (Pi Zero
-                          (Pi Zero (ib 0) Universe)
-                          (Pi One (ib 1) (Pi Many (Inf (Bound 1 :$: ib 0)) (ib 3)))
+                      (Pi
+                        Zero
+                        "b"
+                        (Pi Zero "_" (ib 0) Universe)
+                        (Pi One "x" (ib 1) (Pi Many "y" (Inf (Bound 1 :$: ib 0)) (ib 3)))
                       )
                     )
                 :$: ifg "a"
                 )
-            :$: Lam (ifg "b")
+            :$: Lam "a" (ifg "b")
             )
         :$: ifg "x"
         )
@@ -91,7 +95,10 @@ cases =
     One
     (MPairElim
       One
-      (Ann (MPair (ifg "a") (ifg "x")) (MPairType Zero Universe (ifg "a")))
+      "_"
+      "x"
+      "y"
+      (Ann (MPair (ifg "a") (ifg "x")) (MPairType Zero "_" Universe (ifg "a")))
       (ib 0)
       (ifg "a")
     )
@@ -103,28 +110,33 @@ cases =
     One
     (   Ann
         (Lam
+          "p"
           (Inf
             (MPairElim One
+                       "z"
+                       "x"
+                       "y"
                        (Bound 0)
                        (MPair (ib 0) (ib 1))
-                       (MPairType One (ifg "b") (ifg "a"))
+                       (MPairType One "_" (ifg "b") (ifg "a"))
             )
           )
         )
         (Pi One
-            (MPairType One (ifg "a") (ifg "b"))
-            (MPairType One (ifg "b") (ifg "a"))
+            "_"
+            (MPairType One "_" (ifg "a") (ifg "b"))
+            (MPairType One "_" (ifg "b") (ifg "a"))
         )
     :$: MPair (ifg "x") (ifg "y")
     )
-    (TestResult . return $ MPairType One (ifg "b") (ifg "a"))
+    (TestResult . return $ MPairType One "_" (ifg "b") (ifg "a"))
   , TestCase
     "Second projection of dependent additive pair"
     -- 1 ((\p. snd p) : (1 _ : (_ : a) & b) -> b) <x, y>
     abxyContext
     One
-    (   Ann (Lam (Inf (Snd (Bound 0))))
-            (Pi One (APairType (ifg "a") (ifg "b")) (ifg "b"))
+    (   Ann (Lam "_" (Inf (Snd (Bound 0))))
+            (Pi One "_" (APairType "_" (ifg "a") (ifg "b")) (ifg "b"))
     :$: APair (ifg "x") (ifg "y")
     )
     (TestResult . throwError $ UsageError

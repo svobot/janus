@@ -10,20 +10,12 @@ module Janus.Pretty
   , prettyResult
   ) where
 
-import           Control.Monad                  ( ap
-                                                , liftM2
-                                                )
 import           Control.Monad.Reader           ( MonadReader(local)
                                                 , Reader
                                                 , asks
                                                 , runReader
                                                 )
-import           Control.Monad.Writer.Strict    ( MonadWriter(tell)
-                                                , Writer
-                                                , runWriter
-                                                )
 import           Data.List                      ( intersperse )
-import qualified Data.Set                      as Set
 import           Data.Text                      ( Text
                                                 , pack
                                                 )
@@ -52,9 +44,16 @@ instance Pretty Doc where
 instance Pretty Text where
   pretty = PP.pretty
 
+instance Pretty String where
+  pretty = PP.pretty
+
+instance Pretty Int where
+  pretty = PP.pretty
+
 instance Pretty Name where
-  pretty (Global s) = PP.pretty s
-  pretty x          = localVar "[" <> PP.pretty (show x) <> localVar "]"
+  pretty (Global s ) = PP.pretty s
+  pretty (Local s _) = PP.pretty s
+  pretty x           = localVar "[" <> PP.pretty (show x) <> localVar "]"
 
 instance Pretty ITerm where
   pretty = runPrinter $ iPrint 0
@@ -145,185 +144,141 @@ parensIf :: Bool -> Doc -> Doc
 parensIf True  = parens
 parensIf False = id
 
--- | 'Printer' monad keeps track of used names in a term and makes sure that new
--- names created when replacing De Bruijn indices of bound variables are unique.
-type Printer doc = Writer FreeVars (Reader (NameEnv doc) doc)
+type NameEnv = [BindingName]
 
-type FreeVars = Set.Set String
-
-data NameEnv doc = NameEnv
-  { fresh :: [doc]
-  , bound :: [doc]
-  }
+-- | 'Reader' environment tracks the bound variables. Shadowed variables are
+-- appended with an index to distinguish them from more tightly bound variables.
+type Printer = Reader NameEnv
 
 -- | Convert a term into a 'Doc'.
---
--- 'Writer' first accumulates names of free variables that are used in
--- the printed document and then creates a 'Reader' environment which
--- distributes non-clashing names to bound variables that are being converted
--- from De Bruijn indices.
 runPrinter :: (a -> Printer Doc) -> a -> Doc
-runPrinter printer term = runReader r (NameEnv freshNames [])
- where
-  (r, freeVars) = runWriter (printer term)
-  -- Filter the free variables that occur in the term out of the names that can
-  -- be used for bound variables.
-  freshNames =
-    [ PP.pretty $ c : n
-    | n <- "" : map show [1 :: Int ..]
-    , c <- ['x', 'y', 'z'] ++ ['a' .. 'v']
-    , (c : n) `Set.notMember` freeVars
-    ]
+runPrinter printer = flip runReader [] . printer
 
--- | Skip binding one variable in the 'Reader' environment.
-skip :: Int -> NameEnv a -> NameEnv a
-skip i env = env { fresh = drop i $ fresh env }
-
--- | Make a new 'Reader' environment with a new variable bound.
-bind :: NameEnv a -> NameEnv a
-bind (NameEnv (new : fs) bs) = NameEnv fs (new : bs)
-bind _                       = error "internal: No new variable name available."
-
--- | Make a new 'Reader' environment with multiple new variables bound.
-bindMany :: Int -> NameEnv a -> NameEnv a
-bindMany n (NameEnv as bs) = NameEnv (drop n as) (reverse (take n as) ++ bs)
+-- | Add a new name to the list of bound variables.
+bind :: BindingName -> NameEnv -> NameEnv
+bind b bs = b : bs
 
 iPrint :: Int -> ITerm -> Printer Doc
-iPrint p (Ann c c') = (<*>) . (fmt <$>) <$> cPrint 2 c <*> cPrint 0 c'
+iPrint p (Ann c c') = fmt <$> cPrint 2 c <*> cPrint 0 c'
  where
   fmt val ty = align . group . parensIf (p > 1) $ val <> line <> ":" <+> ty
-iPrint _ (Bound k) = return . asks $ (!! k) . bound
-iPrint _ (Free  n) = do
-  case n of
-    Global s -> tell $ Set.singleton s
-    _        -> return ()
-  return . return $ pretty n
-iPrint p (i :$: c) = (<*>) . (fmt <$>) <$> iPrint 2 i <*> cPrint 3 c
+iPrint _ (Bound k) = do
+  name  <- asks (!! k)
+  index <- asks $ length . filter (== name) . take k
+  return $ pretty name <> if index > 0 then "@" <> pretty index else ""
+iPrint _ (Free n ) = return $ pretty n
+iPrint p (i :$: c) = fmt <$> iPrint 2 i <*> cPrint 3 c
   where fmt f x = parensIf (p > 2) . align $ sep [f, x]
-iPrint p (MPairElim q l i t) = do
-  letPart  <- iPrint 0 l
-  inPart   <- cPrint 0 i
-  typePart <- cPrint 0 t
-  return $ do
-    (x, y, z) <- asks (ap (liftM2 (,,) head (!! 1)) (!! 2) . fresh)
-    fmt x y z
-      <$> letPart
-      <*> local (bindMany 2)    inPart
-      <*> local (bind . skip 2) typePart
+iPrint p (MPairElim q z x y l i t) =
+  fmt <$> iPrint 0 l <*> local (flip (foldr bind) [y, x]) (cPrint 0 i) <*> local
+    (bind z)
+    (cPrint 0 t)
  where
-  fmt x y z letPart inPart typePart = parensIf (p > 0) . align $ sep
+  fmt letPart inPart typePart = parensIf (p > 0) . align $ sep
     [ hsep
       [ mult "let"
       , pretty q
-      , var z
+      , var (PP.pretty z)
       , mult "@"
-      , mult "(" <> var x <> mult ","
-      , var y <> mult ")"
+      , mult "(" <> var (PP.pretty x) <> mult ","
+      , var (PP.pretty y) <> mult ")"
       , mult "="
       , letPart
       ]
     , mult "in" <+> inPart
     , mult ":" <+> typePart
     ]
-iPrint p (MUnitElim q l i t) = do
-  letPart  <- iPrint 0 l
-  inPart   <- cPrint 0 i
-  typePart <- cPrint 0 t
-  return
-    $   asks (fmt . head . fresh)
-    <*> letPart
-    <*> inPart
-    <*> local bind typePart
+iPrint p (MUnitElim q x l i t) = fmt <$> iPrint 0 l <*> cPrint 0 i <*> local
+  (bind x)
+  (cPrint 0 t)
  where
-  fmt name letPart inPart typePart = parensIf (p > 0) . align $ sep
+  fmt letPart inPart typePart = parensIf (p > 0) . align $ sep
     [ hsep
-      [mult "let", pretty q, var name, mult "@", mult "()", mult "=", letPart]
+      [ mult "let"
+      , pretty q
+      , var $ PP.pretty x
+      , mult "@"
+      , mult "()"
+      , mult "="
+      , letPart
+      ]
     , mult "in" <+> inPart
     , mult ":" <+> typePart
     ]
-iPrint p (Fst i) = (parensIf (p > 0) . (add "fst" <+>) <$>) <$> iPrint 3 i
-iPrint p (Snd i) = (parensIf (p > 0) . (add "snd" <+>) <$>) <$> iPrint 3 i
-iPrint p (SumElim q i c c' c'') = do
-  s         <- iPrint 0 i
-  leftPart  <- cPrint 0 c
-  rightPart <- cPrint 0 c'
-  typePart  <- cPrint 0 c''
-  return $ do
-    (x, y, z) <- asks (ap (liftM2 (,,) head (!! 1)) (!! 2) . fresh)
-    fmt x y z
-      <$> s
-      <*> local (skip 2 . bind)          leftPart
-      <*> local (skip 1 . bind . skip 1) rightPart
-      <*> local (bind . skip 2)          typePart
+iPrint p (Fst i) = parensIf (p > 0) . (add "fst" <+>) <$> iPrint 3 i
+iPrint p (Snd i) = parensIf (p > 0) . (add "snd" <+>) <$> iPrint 3 i
+iPrint p (SumElim q z i x c y c' c'') =
+  fmt
+    <$> iPrint 0 i
+    <*> local (bind x) (cPrint 0 c)
+    <*> local (bind y) (cPrint 0 c')
+    <*> local (bind z) (cPrint 0 c'')
  where
-  fmt x y z s l r ty =
-    parensIf (p > 0) $ hsep ["case", pretty q, var z, "@", s, "of"] <+> align
-      (sep ["{" <+> branches x y l r, "} :" <+> ty])
-  branch ctr n body = ctr <+> var n <+> "→" <+> body
-  branches x y l r = align $ sep [branch "inl" x l <> ";", branch "inr" y r]
+  fmt s l r ty =
+    parensIf (p > 0)
+      $   hsep ["case", pretty q, var $ pretty z, "@", s, "of"]
+      <+> align (sep ["{" <+> branches l r, "} :" <+> ty])
+  branch ctr n body = ctr <+> var (pretty n) <+> "→" <+> body
+  branches l r = align $ sep [branch "inl" x l <> ";", branch "inr" y r]
 
 cPrint :: Int -> CTerm -> Printer Doc
-cPrint p (Inf i) = iPrint p i
-cPrint p (Lam c) = (parensIf (p > 0) <$>) <$> go 0 c
+cPrint p (Inf i  ) = iPrint p i
+cPrint p (Lam x c) = parensIf (p > 0) <$> go [x] c
  where
-  go depth (Lam c') = go (depth + 1) c'
-  go depth c'       = do
-    body <- cPrint 0 c'
-    return $ asks (fmt depth . fresh) <*> local (bindMany $ depth + 1) body
-  fmt depth names body = do
-    "λ" <> hsep (map (var . (names !!)) [0 .. depth]) <> "." <+> body
-cPrint p (Pi q1 d1 (Pi q2 d2 r)) =
-  (parensIf (p > 0) <$>) <$> go [(q2, d2), (q1, d1)] r
+  go xs (Lam x' c') = go (x' : xs) c'
+  go xs c'          = fmt xs <$> local (flip (foldr bind) xs) (cPrint 0 c')
+  fmt xs body =
+    "λ" <> hsep (map (var . PP.pretty) $ reverse xs) <> "." <+> body
+cPrint p (Pi q1 x1 c (Pi q2 x2 c' c'')) =
+  parensIf (p > 0) <$> go [Binding x2 q2 c', Binding x1 q1 c] c''
  where
-  go ds (Pi q d x) = go ((q, d) : ds) x
-  go ds x          = do
-    let bindCount = length ds
-    binds <- mapM
-      (\(depth, (q, d)) -> do
-        ty <- cPrint 0 d
-        return
-          .   local (bindMany depth)
-          $   asks (fmtBind q . head . fresh)
-          <*> local (skip $ bindCount - depth) ty
-      )
-      (zip [0 ..] $ reverse ds)
-    body <- cPrint 0 x
-    return $ do
-      bindsDoc <- sequence binds
-      bodyDoc  <- local (bindMany bindCount) body
-      return . align $ sep ["∀" <+> align (sep bindsDoc), "." <+> bodyDoc]
-  fmtBind q name body = parens $ pretty q <+> var name <+> ":" <+> body
-cPrint p (Pi q c c') = cPrintDependent fmt c c'
+  go bs (Pi q x d body) = go (Binding x q d : bs) body
+  go bs body            = do
+    binds <-
+      traverse
+        (\(Binding n q d, prevBinds) -> fmtBind q n
+          <$> local (flip (foldr bind) $ map bndName prevBinds) (cPrint 0 d)
+        )
+      . scanl1 (flip (\(newBind, _) -> (newBind, ) . uncurry (:)))
+      . flip zip (repeat [])
+      $ reverse bs
+    bodyDoc <- local (flip (foldr bind) $ map bndName bs) (cPrint 0 body)
+    return . align $ sep ["∀" <+> align (sep binds), "." <+> bodyDoc]
+  fmtBind q n body = parens $ hsep [pretty q, var $ PP.pretty n, ":", body]
+cPrint p (Pi q x c c') = cPrintDependent fmt x c c'
  where
-  fmt name l r = align . group . parensIf (p > 0) $ sep
-    ["(" <> pretty (Binding name q l) <> ")" <+> "→", r]
-cPrint p (MPairType q c c') = cPrintDependent fmt c c'
+  fmt n l r = align . group . parensIf (p > 0) $ sep
+    ["(" <> pretty (Binding n q l) <> ")" <+> "→", r]
+cPrint p (MPairType q x c c') = cPrintDependent fmt x c c'
  where
-  fmt name l r = align . group . parensIf (p > 0) $ sep
-    [mult "(" <> pretty (Binding name q l) <> mult ")" <+> mult "⊗", r]
-cPrint p (APairType c c') = cPrintDependent fmt c c'
+  fmt n l r = align . group . parensIf (p > 0) $ sep
+    [mult "(" <> pretty (Binding n q l) <> mult ")" <+> mult "⊗", r]
+cPrint p (APairType x c c') = cPrintDependent fmt x c c'
  where
-  fmt name l r = align . group . parensIf (p > 0) $ sep
-    [add "(" <> pretty (Binding @_ @Text name "" l) <> add ")" <+> add "&", r]
-cPrint _ (MPair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
+  fmt n l r = align . group . parensIf (p > 0) $ sep
+    [add "(" <> pretty (Binding @_ @Text n "" l) <> add ")" <+> add "&", r]
+cPrint _ (MPair c c') = fmt <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = mult "(" <> l <> mult "," <+> r <> mult ")"
-cPrint _ (APair c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
+cPrint _ (APair c c') = fmt <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = add "⟨" <> l <> add "," <+> r <> add "⟩"
-cPrint _ Universe       = return . return $ "𝘜"
-cPrint _ MUnit          = return . return $ mult "()"
-cPrint _ MUnitType      = return . return $ mult "𝟭ₘ"
-cPrint _ AUnit          = return . return $ add "⟨⟩"
-cPrint _ AUnitType      = return . return $ add "⊤"
-cPrint p (SumL c      ) = (parensIf (p > 0) . ("inl" <+>) <$>) <$> cPrint 3 c
-cPrint p (SumR c      ) = (parensIf (p > 0) . ("inr" <+>) <$>) <$> cPrint 3 c
-cPrint p (SumType c c') = (<*>) . (fmt <$>) <$> cPrint 0 c <*> cPrint 0 c'
+cPrint _ Universe       = return "𝘜"
+cPrint _ MUnit          = return $ mult "()"
+cPrint _ MUnitType      = return $ mult "𝟭ₘ"
+cPrint _ AUnit          = return $ add "⟨⟩"
+cPrint _ AUnitType      = return $ add "⊤"
+cPrint p (SumL c      ) = parensIf (p > 0) . ("inl" <+>) <$> cPrint 3 c
+cPrint p (SumR c      ) = parensIf (p > 0) . ("inr" <+>) <$> cPrint 3 c
+cPrint p (SumType c c') = fmt <$> cPrint 0 c <*> cPrint 0 c'
   where fmt l r = parensIf (p > 0) $ l <+> "⊕" <+> r
 
-cPrintDependent :: (Doc -> Doc -> Doc -> Doc) -> CTerm -> CTerm -> Printer Doc
-cPrintDependent fmt l r = do
-  left  <- cPrint 0 l
-  right <- cPrint 0 r
-  return $ asks (fmt . head . fresh) <*> left <*> local bind right
+cPrintDependent
+  :: (BindingName -> Doc -> Doc -> Doc)
+  -> BindingName
+  -> CTerm
+  -> CTerm
+  -> Printer Doc
+cPrintDependent fmt n l r =
+  fmt n <$> cPrint 0 l <*> local (bind n) (cPrint 0 r)
 
 mult, add, var, localVar :: Doc -> Doc
 mult = annotate (Term.color Term.Blue <> Term.bold)
