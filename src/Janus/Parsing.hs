@@ -157,9 +157,12 @@ iTerm = try (cTermInner False >>= (\t -> Ann t <$> annotation)) <|> do
 iTermInner :: Parser ITerm
 iTermInner = (var <|> parens iTerm >>= application) <|> inner
  where
-  inner   = choice [letElim, fstElim, sndElim, sumElim] <?> "synthesising term"
+  inner = choice [letElim, fstElim, sndElim, sumElim] <?> "synthesising term"
+  restrictedSemiring = option Many
+    $ choice [One <$ symbol "1", Many <$ (keyword "ω" <|> keyword "w")]
   letElim = do
-    (q, z) <- try $ (,) <$> (keyword "let" *> semiring) <*> name <* symbol "@"
+    (q, z) <-
+      try $ (,) <$> (keyword "let" *> restrictedSemiring) <*> name <* symbol "@"
     let rest elim inLocals tyLocals =
           elim
             <$> (symbol "=" *> iTerm <* keyword "in")
@@ -171,7 +174,7 @@ iTermInner = (var <|> parens iTerm >>= application) <|> inner
   fstElim = Fst <$> (keyword "fst" *> (var <|> parens iTerm))
   sndElim = Snd <$> (keyword "snd" *> (var <|> parens iTerm))
   sumElim = do
-    s <- keyword "case" *> semiring
+    s <- keyword "case" *> restrictedSemiring
     z <- name <* symbol "@"
     m <- iTerm <* keyword "of"
     let branch side = do
