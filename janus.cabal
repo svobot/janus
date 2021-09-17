@@ -71,6 +71,7 @@ library
                      , Janus.REPL
                      , Janus.Semiring
                      , Janus.Syntax
+                     , Janus.Style
   other-modules:       Paths_janus
   autogen-modules:     Paths_janus
   hs-source-dirs:      src
@@ -80,6 +81,7 @@ executable janusc
   hs-source-dirs:      app
   main-is:             Main.hs
   build-depends:       janus
+                     , optparse-applicative
 
 test-suite test
   import:              common, threaded

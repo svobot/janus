@@ -10,6 +10,7 @@ import           Janus.Infer
 import           Janus.Judgment
 import           Janus.Pretty
 import           Janus.Semiring
+import           Janus.Style
 import           Janus.Syntax
 import           Test.Hspec
 
@@ -25,12 +26,12 @@ newtype TestResult =  TestResult (Result CTerm)
 
 instance Eq TestResult where
   (TestResult (Left te)) == (TestResult (Left te')) =
-    ((==) `on` (renderString . pretty)) te te'
+    ((==) `on` (renderString . pretty unicode)) te te'
   (TestResult (Right ty)) == (TestResult (Right ty')) = ty == ty'
   _                       == _                        = False
 
 instance Show TestResult where
-  show (TestResult (Left  te)) = renderString $ pretty te
+  show (TestResult (Left  te)) = renderString $ pretty unicode te
   show (TestResult (Right ty)) = show ty
 
 spec :: Spec

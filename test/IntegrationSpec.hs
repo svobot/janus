@@ -8,6 +8,9 @@ module IntegrationSpec
   ( spec
   ) where
 
+import           Control.Monad.Reader           ( MonadReader(ask, local)
+                                                , runReaderT
+                                                )
 import           Control.Monad.State            ( MonadState(..)
                                                 , MonadTrans
                                                 , StateT
@@ -15,6 +18,7 @@ import           Control.Monad.State            ( MonadState(..)
                                                 , execStateT
                                                 , gets
                                                 , lift
+                                                , mapStateT
                                                 , modify
                                                 )
 import           Data.Bifunctor                 ( second )
@@ -23,6 +27,7 @@ import           Data.String                    ( IsString
                                                 )
 import           Janus.Pretty
 import           Janus.REPL
+import           Janus.Style
 import           Test.Hspec                     ( Spec
                                                 , describe
                                                 , it
@@ -31,6 +36,10 @@ import           Test.Hspec                     ( Spec
 
 newtype TestIO m a = TestIO { runIO :: StateT ([String], [String]) m a}
   deriving (Monad, Functor, Applicative, MonadTrans)
+
+instance MonadReader a m => MonadReader a (TestIO m) where
+  ask = lift ask
+  local f = TestIO . mapStateT (local f) . runIO
 
 instance MonadState a m => MonadState a (TestIO m) where
   get = lift get
@@ -61,18 +70,23 @@ data TestCase = TestCase
 
 spec :: Spec
 spec = do
-  mapM_ run cases
-  describe "With-focused test cases" $ mapM_ run withCases
-  describe "Pretty printer test cases" $ mapM_ run prettyCases
-  describe "Exponential type test cases" $ mapM_ run ofCourseCases
+  mapM_ runUnicode cases
+  describe "Additive pair type test cases" $ mapM_ runUnicode withCases
+  describe "Pretty printer test cases" $ mapM_ runUnicode prettyCases
+  describe "Exponential type test cases" $ mapM_ runUnicode ofCourseCases
+  describe "Test cases without unicode" $ mapM_ runAscii asciiCases
  where
-  evalTestCase i = flip evalStateT ([], []) . flip execStateT (i, []) $ do
-    st <- gets fst
-    mapM_ (runIO . compileStmt) st
+  evalTestCase s i =
+    flip evalStateT ([], []) . flip runReaderT s . flip execStateT (i, []) $ do
+      st <- gets fst
+      mapM_ (runIO . compileStmt) st
 
-  run c = it (desc c) $ do
-    (_, out) <- evalTestCase $ input c
+  run s c = it (desc c) $ do
+    (_, out) <- evalTestCase s $ input c
     TestResult (head out) `shouldBe` result c
+
+  runUnicode = run unicode
+  runAscii   = run ascii
 
 cases :: [TestCase]
 cases =
@@ -621,4 +635,22 @@ ofCourseCases =
   unwrap
     = "let unwrap = (\\A wa. ofcElim A (\\_. A) wa (\\x. x))\n\
       \             : (0 A : U) -> (_ : ofcW A) -> A"
+
+asciiCases :: [TestCase]
+asciiCases =
+  [ TestCase
+    "K combinator"
+    [ "let ω K = (λ_ _ x _. x)\n\
+      \        : ∀ (0 a : U)\n\
+      \            (0 b : (0 _ : a) -> U)\n\
+      \            (1 x : a)\n\
+      \            (ω _ : b x)\n\
+      \          . a"
+    ]
+    "w K = (\\_ _ x _. x)\n\
+      \      : forall (0 a : U) (0 b : (0 _ : a) -> U) (1 x : a) (w _ : b x) . a"
+  , TestCase "Additive and multiplicative units"
+             ["let 0 u = <<>, ()> : (_ : T) & I"]
+             "0 u = <<>, ()> : (_ : T) & I"
+  ]
 

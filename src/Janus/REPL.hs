@@ -125,6 +125,10 @@ module Janus.REPL
 import           Control.Exception              ( IOException
                                                 , try
                                                 )
+import           Control.Monad.Reader           ( MonadReader(ask)
+                                                , ReaderT
+                                                , runReaderT
+                                                )
 import           Control.Monad.State            ( MonadIO
                                                 , MonadState(..)
                                                 , StateT
@@ -153,6 +157,7 @@ import           Janus.Judgment
 import           Janus.Parsing
 import           Janus.Pretty
 import           Janus.Semiring
+import           Janus.Style
 import           Janus.Syntax
 import           System.Console.Repline
 import           Text.Megaparsec                ( ParseErrorBundle
@@ -175,10 +180,11 @@ type IState = (ValueEnv, Context)
 
 -- | 'HaskelineT' monad transformer that handles the input and holds the state
 -- of the interpreter.
-type Repl = HaskelineT (StateT IState IO)
+type Repl = HaskelineT (ReaderT Style (StateT IState IO))
 
 -- | Type synonym for the constraints on the type of the REPL monad transformer.
-type AbstractRepl m = (MonadState IState m, MonadAbstractIO m)
+type AbstractRepl m
+  = (MonadState IState m, MonadReader Style m, MonadAbstractIO m)
 
 -- | Character which identifies a command.
 --
@@ -249,17 +255,18 @@ help _ = liftIO $ do
 
 -- | Synthesise the type of a term and print it.
 typeOf :: Cmd Repl
-typeOf s = do
-  mx  <- parseIO typeParser s
-  ctx <- get
-  t   <- maybe (return Nothing) (uncurry (iinfer ctx)) mx
-  mapM_ (liftIO . T.putStrLn . render . pretty) t
+typeOf e = do
+  mx <- parseIO typeParser e
+  t  <- maybe (return Nothing) (uncurry iinfer) mx
+  s  <- ask
+  mapM_ (liftIO . T.putStrLn . render . pretty s) t
 
 -- | Print types of variables in the context.
 browse :: Cmd Repl
 browse _ = do
   env <- gets snd
-  mapM_ (liftIO . T.putStrLn . render . pretty)
+  s   <- ask
+  mapM_ (liftIO . T.putStrLn . render . pretty s)
     . reverse
     . map (\b -> b { bndName = vfree $ bndName b })
     $ nubBy ((==) `on` bndName) env
@@ -284,10 +291,13 @@ compileFile f = do
     Right x -> parseIO (fileParser f) x >>= mapM_ (mapM_ handleStmt)
 
 -- | Synthesise the type of a term and print an error if it occurs.
-iinfer :: AbstractRepl m => IState -> ZeroOneMany -> ITerm -> m (Maybe Type)
-iinfer g r t = case synthesise g r t of
-  Left  e -> outputDoc (pretty e) >> return Nothing
-  Right v -> return (Just v)
+iinfer :: AbstractRepl m => ZeroOneMany -> ITerm -> m (Maybe Type)
+iinfer r t = do
+  ctx <- get
+  s   <- ask
+  case synthesise ctx r t of
+    Left  e -> outputDoc (pretty s e) >> return Nothing
+    Right v -> return (Just v)
 
 -- | Run a parser and print an error if it occurs.
 parseIO
@@ -308,21 +318,23 @@ handleStmt stmt = case stmt of
  where
   assume (Binding x q t) = do
     let annt = Ann t Universe
-    ctx <- get
-    mty <- iinfer ctx Zero annt
+    mty <- iinfer Zero annt
     unless (isNothing mty) $ do
+      ctx <- get
+      s   <- ask
       let val = iEval (fst ctx, []) annt
-      outputDoc . pretty $ Binding (vfree $ Global x) q val
+      outputDoc . pretty s $ Binding (vfree $ Global x) q val
       modify $ bimap
         (filter ((/= Global x) . fst))
         ((Binding (Global x) q val :) . filter ((/= Global x) . bndName))
 
   checkEval q mn t = do
-    ctx <- get
-    mty <- iinfer ctx q t
+    mty <- iinfer q t
     forM_ mty $ \ty -> do
+      ctx <- get
+      s   <- ask
       let val = iEval (fst ctx, []) t
-      outputDoc $ prettyResult q mn val ty
+      outputDoc $ prettyResult s q mn val ty
       forM_ mn
         $ \n -> modify $ bimap ((Global n, val) :) (Binding (Global n) q ty :)
 
@@ -335,8 +347,8 @@ final = do
   return Exit
 
 -- | Evaluate the REPL monad and its inner state.
-repl :: IO ()
-repl = flip evalStateT ([], []) $ evalRepl
+repl :: Style -> IO ()
+repl s = flip evalStateT ([], []) . flip runReaderT s $ evalRepl
   (const $ pure ">>> ")
   compileStmt
   (concatMap (traverse (,) <$> cmdNames <*> cmdAction) commands)
