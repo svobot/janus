@@ -157,9 +157,9 @@ stmtCases =
   , TestCase
     "Plentiful parentheses"
     [ "1 ((\\x y. ((x) : I))\n\
-    \  : forall (1 _ : ((I)))\n\
-    \    (_ : ((_ : (I)) * T))\n\
-    \  . (I)) ((())) (((), <>))"
+      \  : forall (1 _ : ((I)))\n\
+      \    (_ : ((_ : (I)) * T))\n\
+      \  . (I)) ((())) (((), <>))"
     ]
     (   ParseRes
     .   Eval One
@@ -249,11 +249,11 @@ shadowedCases =
     "Binding too large index"
     ["let 1 id = (\\x. \\x. x@10 : (1 x : 𝘜) -> (0 y : U) -> U)"]
     "<interactive>:1:21:\n\
-             \  |\n\
-             \1 | let 1 id = (\\x. \\x. x@10 : (1 x : 𝘜) -> (0 y : U) -> U)\n\
-             \  |                     ^\n\
-             \index of the bound variable is too large\n\
-             \only 2 variables 'x' are in context\n"
+    \  |\n\
+    \1 | let 1 id = (\\x. \\x. x@10 : (1 x : 𝘜) -> (0 y : U) -> U)\n\
+    \  |                     ^\n\
+    \index of the bound variable is too large\n\
+    \only 2 variables 'x' are in context\n"
   ]
 
 fileCases :: [TestCase [Stmt]]
