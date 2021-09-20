@@ -49,6 +49,7 @@ common common
                      , OverloadedStrings
                      , TupleSections
                      , TypeApplications
+                     , RecordWildCards
   build-depends:       base ^>=4.14
 
 common threaded

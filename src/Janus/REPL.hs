@@ -118,6 +118,7 @@ module Janus.REPL
   ( AbstractRepl
   , IState
   , MonadAbstractIO(..)
+  , ReplOptions(..)
   , compileStmt
   , repl
   ) where
@@ -166,11 +167,11 @@ import           Text.Megaparsec                ( ParseErrorBundle
 
 -- | The 'MonadAbstractIO' class defines monadic actions which are used by our
 -- interpreter to output its results.
-class (Monad m) => MonadAbstractIO m where
+class Monad m => MonadAbstractIO m where
   output :: String -> m ()
   outputDoc :: Doc -> m ()
 
-instance (Monad m, MonadIO m) => MonadAbstractIO (HaskelineT m) where
+instance MonadIO m => MonadAbstractIO (HaskelineT m) where
   output    = liftIO . putStrLn
   outputDoc = liftIO . T.putStrLn . render
 
@@ -185,6 +186,12 @@ type Repl = HaskelineT (ReaderT Style (StateT IState IO))
 -- | Type synonym for the constraints on the type of the REPL monad transformer.
 type AbstractRepl m
   = (MonadState IState m, MonadReader Style m, MonadAbstractIO m)
+
+-- | Configuration options for a run of the REPL.
+data ReplOptions = ReplOptions
+  { optStyle :: Style
+  , optFile  :: Maybe FilePath
+  }
 
 -- | Character which identifies a command.
 --
@@ -347,16 +354,17 @@ final = do
   return Exit
 
 -- | Evaluate the REPL monad and its inner state.
-repl :: Style -> IO ()
-repl s = flip evalStateT ([], []) . flip runReaderT s $ evalRepl
-  (const $ pure ">>> ")
-  compileStmt
-  (concatMap (traverse (,) <$> cmdNames <*> cmdAction) commands)
-  (Just commandPrefix)
-  Nothing
-  (Combine (Prefix (wordCompleter byWord) defaultMatcher)
-           (Word commandCompleter)
-  )
-  ini
-  final
+repl :: ReplOptions -> IO ()
+repl ReplOptions {..} =
+  flip evalStateT ([], []) . flip runReaderT optStyle $ evalRepl
+    (const $ pure ">>> ")
+    compileStmt
+    (concatMap (traverse (,) <$> cmdNames <*> cmdAction) commands)
+    (Just commandPrefix)
+    Nothing
+    (Combine (Prefix (wordCompleter byWord) defaultMatcher)
+             (Word commandCompleter)
+    )
+    (ini >> mapM_ compileFile optFile)
+    final
 
