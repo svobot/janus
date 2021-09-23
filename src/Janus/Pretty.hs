@@ -168,7 +168,7 @@ iPrint s p (Ann c c') = fmt <$> cPrint s 2 c <*> cPrint s 0 c'
 iPrint s _ (Bound k) = do
   name  <- asks (!! k)
   index <- asks $ length . filter (== name) . take k
-  return $ pretty s name <> if index > 0 then "@" <> pretty s index else ""
+  return $ pretty s name <> if index > 0 then "#" <> pretty s index else ""
 iPrint s _ (Free n ) = return $ pretty s n
 iPrint s p (i :$: c) = fmt <$> iPrint s 2 i <*> cPrint s 3 c
   where fmt f x = parensIf (p > 2) . align $ sep [f, x]

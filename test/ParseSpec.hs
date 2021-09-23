@@ -98,6 +98,8 @@ stmtCases =
     "Multiplicative pair elimination"
     [ "let p @ (x', y') = (x, f y z) : (0 x : a) * x in y'\n\
       \                 : ((λu . a) : (0 _ : (0 z : U) * z) -> U) p"
+    , "let p@(x',y')=(x,f y z):(0x:a)*x in y'\n\
+      \             :((λu.a):(0_:(0 z:U)*z)->U)p"
     ]
     (ParseRes . Eval Many $ MPairElim
       Many
@@ -117,7 +119,7 @@ stmtCases =
     )
   , TestCase
     "Multiplicative unit elimination"
-    ["0 let u @ () = f x in y : g u"]
+    ["0 let u @ () = f x in y : g u", "0 let u@()=f x in y:g u"]
     (ParseRes . Eval Zero $ MUnitElim Many
                                       "u"
                                       (fg "f" :$: ifg "x")
@@ -212,6 +214,7 @@ stmtCases =
   , TestCase
     "Disjoint sum elimination"
     [ "let sum = case z @ m of {inl x -> x; inr y -> f y} : a"
+    , "let sum=case z@m of{inl x->x;inr y->f y}:a"
     , "let sum = case z @ m of {inr y -> f y; inl x -> x} : a"
     , "let sum = case w z @ m of {inl x -> x; inr y -> f y} : a"
     , "let ω sum = case ω z @ m of {inl x -> x; inr y -> f y} : a"
@@ -232,7 +235,7 @@ shadowedCases =
   [ TestCase
     "Binding De Bruijn index 0"
     [ "let 1 id = (\\x. \\x. x : (0 x : 𝘜) -> (1 y : U) -> U)"
-    , "let 1 id = (\\x. \\x. x@0 : (0 x : 𝘜) -> (1 y : U) -> U)"
+    , "let 1 id = (\\x. \\x. x#0 : (0 x : 𝘜) -> (1 y : U) -> U)"
     ]
     (ParseRes . Let One "id" $ Ann
       (Lam "x" (Lam "x" (ib 0)))
@@ -240,17 +243,17 @@ shadowedCases =
     )
   , TestCase
     "Binding De Bruijn index 1"
-    ["let 1 id = (\\x. \\x. x@1 : (1 x : 𝘜) -> (0 y : U) -> U)"]
+    ["let 1 id = (\\x. \\x. x#1 : (1 x : 𝘜) -> (0 y : U) -> U)"]
     (ParseRes . Let One "id" $ Ann
       (Lam "x" (Lam "x" (ib 1)))
       (Pi One "x" Universe (Pi Zero "y" Universe Universe))
     )
   , TestCase
     "Binding too large index"
-    ["let 1 id = (\\x. \\x. x@10 : (1 x : 𝘜) -> (0 y : U) -> U)"]
+    ["let 1 id = (\\x. \\x. x#10 : (1 x : 𝘜) -> (0 y : U) -> U)"]
     "<interactive>:1:21:\n\
     \  |\n\
-    \1 | let 1 id = (\\x. \\x. x@10 : (1 x : 𝘜) -> (0 y : U) -> U)\n\
+    \1 | let 1 id = (\\x. \\x. x#10 : (1 x : 𝘜) -> (0 y : U) -> U)\n\
     \  |                     ^\n\
     \index of the bound variable is too large\n\
     \only 2 variables 'x' are in context\n"

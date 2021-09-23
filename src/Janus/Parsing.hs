@@ -69,13 +69,13 @@ identifier withIndex = try $ do
   o       <- getOffset
   (n, mi) <- lexeme $ (,) <$> ((:) <$> start <*> rest) <*> option
     Nothing
-    (Just <$> (char '@' *> L.decimal))
+    (Just <$> (char '#' *> L.decimal))
   when (n `elem` keywords)
     $ region (setErrorOffset o) (fail $ "unexpected keyword '" <> n <> "'")
   case mi of
     Just i | not withIndex -> region
       (setErrorOffset o)
-      (fail $ "unexpected variable index '@" <> show i <> "'")
+      (fail $ "unexpected variable index '#" <> show i <> "'")
     _ -> return (n, mi)
  where
   start = satisfy (\c -> notElem @[] c "λₘω𝘜" && isAlpha c) <|> char '_'

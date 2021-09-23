@@ -344,7 +344,7 @@ ofCourseCases =
     \                 in let 1 unit' @ () = unit\n\
     \                    in let 1 exp' @ (val, unit) = y\n\
     \                       in let 1 unit' @ () = unit\n\
-    \                          in ((val@1, val), ())\n\
+    \                          in ((val#1, val), ())\n\
     \                          : (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ\n\
     \                       : (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ\n\
     \                    : (ω _ : (1 _ : A) ⊗ B) ⊗ 𝟭ₘ\n\
@@ -530,7 +530,7 @@ ofCourseCases =
     \                  in let 1 unit' @ () = unit\n\
     \                     in λwb'. let 1 exp' @ (val, unit) = wb'\n\
     \                              in let 1 unit' @ () = unit\n\
-    \                                 in ((val@1, val), ())\n\
+    \                                 in ((val#1, val), ())\n\
     \                                 : (ω _ : (1 a : A) ⊗ B a) ⊗ 𝟭ₘ\n\
     \                              : (ω _ : (1 a : A) ⊗ B a) ⊗ 𝟭ₘ\n\
     \                     : (1 _\n\
