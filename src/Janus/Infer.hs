@@ -192,7 +192,7 @@ synthType _ i@(Bound _) =
 checkType :: Relevance -> CTerm -> Type -> TypeJudgment Usage
 checkType s (Inf m) ty = do
   (qs, ty') <- synthType s m
-  unless (((==) `on` (cForgetLocalNames . quote0)) ty ty')
+  unless (((==) `on` quote0) ty ty')
          (throwError $ TypeClashError (KnownType ty) ty' m)
   return qs
 checkType s (Lam xName m) (VPi p _ ty ty') = do

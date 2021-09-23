@@ -6,7 +6,6 @@ module Janus.Syntax
   , ITerm(..)
   , Name(..)
   , cSubst
-  , cForgetLocalNames
   ) where
 
 import           Janus.Semiring
@@ -74,7 +73,26 @@ data CTerm
      SumR CTerm
    | -- | Disjoint sum type.
      SumType CTerm CTerm
-  deriving (Show, Eq)
+  deriving (Show)
+
+instance Eq CTerm where
+  (Inf i)        == (Inf i')          = i == i'
+  Universe       == Universe          = True
+  (Lam _ c     ) == (Lam _ c'       ) = c == c'
+  (Pi q _ c1 c2) == (Pi q' _ c1' c2') = q == q' && c1 == c1' && c2 == c2'
+  (MPair c1 c2 ) == (MPair c1' c2'  ) = c1 == c1' && c2 == c2'
+  (MPairType q _ c1 c2) == (MPairType q' _ c1' c2') =
+    q == q' && c1 == c1' && c2 == c2'
+  MUnit               == MUnit                 = True
+  MUnitType           == MUnitType             = True
+  (APair c1 c2      ) == (APair c1' c2'      ) = c1 == c1' && c2 == c2'
+  (APairType _ c1 c2) == (APairType _ c1' c2') = c1 == c1' && c2 == c2'
+  AUnit               == AUnit                 = True
+  AUnitType           == AUnitType             = True
+  (SumL c       )     == (SumL c'        )     = c == c'
+  (SumR c       )     == (SumR c'        )     = c == c'
+  (SumType c1 c2)     == (SumType c1' c2')     = c1 == c1' && c2 == c2'
+  _                   == _                     = False
 
 -- | Type-synthesising term.
 data ITerm
@@ -123,7 +141,22 @@ data ITerm
         CTerm -- ^ Result of the elimination in case the sum contains the right
               -- element.
         CTerm -- ^ Type annotation of the result of the elimination.
-  deriving (Show, Eq)
+  deriving (Show)
+
+instance Eq ITerm where
+  (Ann c1 c2) == (Ann c1' c2') = c1 == c1' && c2 == c2'
+  (Bound i  ) == (Bound i'   ) = i == i'
+  (Free  n  ) == (Free  n'   ) = n == n'
+  (i :$: c  ) == (i' :$: c'  ) = i == i' && c == c'
+  (MPairElim q _ _ _ i c1 c2) == (MPairElim q' _ _ _ i' c1' c2') =
+    q == q' && i == i' && c1 == c1' && c2 == c2'
+  (MUnitElim q _ i c1 c2) == (MUnitElim q' _ i' c1' c2') =
+    q == q' && i == i' && c1 == c1' && c2 == c2'
+  (Fst i) == (Fst i') = i == i'
+  (Snd i) == (Snd i') = i == i'
+  (SumElim q _ i _ c1 _ c2 c3) == (SumElim q' _ i' _ c1' _ c2' c3') =
+    q == q' && i == i' && c1 == c1' && c2 == c2' && c3 == c3'
+  _ == _ = False
 
 -- | Substitution on type-synthesising terms.
 --
@@ -171,60 +204,4 @@ cSubst _  _ AUnitType      = AUnitType
 cSubst ii r (SumL c      ) = SumL (cSubst ii r c)
 cSubst ii r (SumR c      ) = SumR (cSubst ii r c)
 cSubst ii r (SumType c c') = SumType (cSubst ii r c) (cSubst ii r c')
-
--- | Replace all names of binding variables with an underscore.
-cForgetLocalNames :: CTerm -> CTerm
-cForgetLocalNames (Inf i  ) = Inf (iForgetLocalNames i)
-cForgetLocalNames (Lam _ c) = Lam "_" (cForgetLocalNames c)
-cForgetLocalNames Universe  = Universe
-cForgetLocalNames (Pi p _ ty ty') =
-  Pi p "_" (cForgetLocalNames ty) (cForgetLocalNames ty')
-cForgetLocalNames (MPair c c') =
-  MPair (cForgetLocalNames c) (cForgetLocalNames c')
-cForgetLocalNames (MPairType p _ ty ty') =
-  MPairType p "_" (cForgetLocalNames ty) (cForgetLocalNames ty')
-cForgetLocalNames MUnit     = MUnit
-cForgetLocalNames MUnitType = MUnitType
-cForgetLocalNames (APair c c') =
-  APair (cForgetLocalNames c) (cForgetLocalNames c')
-cForgetLocalNames (APairType _ ty ty') =
-  APairType "_" (cForgetLocalNames ty) (cForgetLocalNames ty')
-cForgetLocalNames AUnit     = AUnit
-cForgetLocalNames AUnitType = AUnitType
-cForgetLocalNames (SumL c)  = SumL (cForgetLocalNames c)
-cForgetLocalNames (SumR c)  = SumR (cForgetLocalNames c)
-cForgetLocalNames (SumType c c') =
-  SumType (cForgetLocalNames c) (cForgetLocalNames c')
-
--- | Replace all names of binding variables with an underscore.
-iForgetLocalNames :: ITerm -> ITerm
-iForgetLocalNames (Ann c c') = Ann (cForgetLocalNames c) (cForgetLocalNames c')
-iForgetLocalNames (Bound j) = Bound j
-iForgetLocalNames (Free (Local _ i)) = Free (Local "_" i)
-iForgetLocalNames (Free x) = Free x
-iForgetLocalNames (i :$: c) = iForgetLocalNames i :$: cForgetLocalNames c
-iForgetLocalNames (MPairElim p _ _ _ i c c') = MPairElim
-  p
-  "_"
-  "_"
-  "_"
-  (iForgetLocalNames i)
-  (cForgetLocalNames c)
-  (cForgetLocalNames c')
-iForgetLocalNames (MUnitElim p _ i c c') = MUnitElim p
-                                                     "_"
-                                                     (iForgetLocalNames i)
-                                                     (cForgetLocalNames c)
-                                                     (cForgetLocalNames c')
-iForgetLocalNames (Fst i                     ) = Fst (iForgetLocalNames i)
-iForgetLocalNames (Snd i                     ) = Snd (iForgetLocalNames i)
-iForgetLocalNames (SumElim p _ i _ c _ c' c'') = SumElim
-  p
-  "_"
-  (iForgetLocalNames i)
-  "_"
-  (cForgetLocalNames c)
-  "_"
-  (cForgetLocalNames c')
-  (cForgetLocalNames c'')
 
