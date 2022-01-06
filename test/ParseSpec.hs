@@ -235,6 +235,14 @@ stmtCases =
     , "let 0 Bool = (((I) + (I)) : (U))"
     ]
     (ParseRes . Let Zero "Bool" $ Ann (SumType MUnitType MUnitType) Universe)
+  , TestCase
+    "Nested function application"
+    ["f ((a b) c)"]
+    (ParseRes . Eval Many $ Free (Global "f") :$: Inf
+      (   (Free (Global "a") :$: Inf (Free (Global "b")))
+      :$: Inf (Free (Global "c"))
+      )
+    )
   ]
 
 shadowedCases :: [TestCase Stmt]

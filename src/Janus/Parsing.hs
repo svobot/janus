@@ -187,7 +187,7 @@ iTermInner =
     SumElim s z m x l y r <$> local (z :) annotation
 
 cTermWith :: Bool -> Parser ITerm -> Parser CTerm
-cTermWith atomicOnly iTermP = cTermInner atomicOnly <|> Inf <$> iTermP
+cTermWith atomicOnly iTermP = try (cTermInner atomicOnly) <|> Inf <$> iTermP
 
 cTerm :: Parser CTerm
 cTerm = do
