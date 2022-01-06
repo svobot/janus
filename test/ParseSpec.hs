@@ -228,6 +228,13 @@ stmtCases =
                                          (Inf $ fg "f" :$: ib 0)
                                          (ifg "a")
     )
+  , TestCase
+    "Composed type"
+    [ "let 0 Bool = I + I : U"
+    , "let 0 Bool = (I) + I : U"
+    , "let 0 Bool = (((I) + (I)) : (U))"
+    ]
+    (ParseRes . Let Zero "Bool" $ Ann (SumType MUnitType MUnitType) Universe)
   ]
 
 shadowedCases :: [TestCase Stmt]

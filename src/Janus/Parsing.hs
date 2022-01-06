@@ -198,12 +198,11 @@ cTerm = do
 cTermInner :: Bool -> Parser CTerm
 cTermInner atomicOnly =
   choice
-      (  [universe, mUnit, mUnitType, aUnit, aUnitType, aPair]
-      <> (if atomicOnly
+      (  (if atomicOnly
            then []
            else [lam, pi, forall, mPairType, aPairType, sumL, sumR, sumType]
          )
-      <> [mPairOrParenthesised]
+      <> [universe, mUnit, mUnitType, aUnit, aUnitType, aPair, mPairOrParens]
       )
     <?> "checkable term"
  where
@@ -241,7 +240,7 @@ cTermInner atomicOnly =
   sumType =
     try (SumType <$> cTermWith True iTermInner <* (symbol "⊕" <|> symbol "+"))
       <*> cTermWith True iTermInner
-  mPairOrParenthesised = parens $ do
+  mPairOrParens = parens $ do
     t <- cTerm
     (MPair t <$> (symbol "," *> cTerm)) <|> pure t
 
