@@ -33,19 +33,17 @@ import           Data.List                      ( elemIndices
                                                 , foldl'
                                                 )
 import           Data.Maybe                     ( fromMaybe )
-import qualified Janus.Judgment                as J
-                                                ( Binding(..) )
-import           Janus.Judgment          hiding ( Binding )
+import           Janus.Judgment                 ( Binding(..) )
 import           Janus.Semiring                 ( ZeroOneMany(..) )
 import           Janus.Syntax
 import           Prelude                 hiding ( pi )
 
-type Binding = J.Binding String ZeroOneMany CTerm
+type ParsedBinding = Binding String ZeroOneMany CTerm
 
 -- | Statement in the Janus language.
 data Stmt
   = Let ZeroOneMany String ITerm
-  | Assume [Binding]
+  | Assume [ParsedBinding]
   | Eval ZeroOneMany ITerm
   deriving (Show, Eq)
 
@@ -155,14 +153,15 @@ iTerm = try (cTermInner False >>= (\t -> Ann t <$> annotation)) <|> do
   Ann (Inf t) <$> annotation <|> return t
 
 iTermInner :: Parser ITerm
-iTermInner = (var <|> parens iTerm >>= application) <|> inner
+iTermInner =
+  choice
+      [var <|> parens iTerm >>= application, letElim, fstElim, sndElim, sumElim]
+    <?> "synthesising term"
  where
-  inner = choice [letElim, fstElim, sndElim, sumElim] <?> "synthesising term"
-  restrictedSemiring = option Many
+  oneOrMany = option Many
     $ choice [One <$ symbol "1", Many <$ (keyword "ω" <|> keyword "w")]
   letElim = do
-    (q, z) <-
-      try $ (,) <$> (keyword "let" *> restrictedSemiring) <*> name <* symbol "@"
+    (q, z) <- try $ (,) <$> (keyword "let" *> oneOrMany) <*> name <* symbol "@"
     let rest elim inLocals tyLocals =
           elim
             <$> (symbol "=" *> iTerm <* keyword "in")
@@ -174,7 +173,7 @@ iTermInner = (var <|> parens iTerm >>= application) <|> inner
   fstElim = Fst <$> (keyword "fst" *> (var <|> parens iTerm))
   sndElim = Snd <$> (keyword "snd" *> (var <|> parens iTerm))
   sumElim = do
-    s <- keyword "case" *> restrictedSemiring
+    s <- keyword "case" *> oneOrMany
     z <- name <* symbol "@"
     m <- iTerm <* keyword "of"
     let branch side = do
@@ -212,7 +211,7 @@ cTermInner atomicOnly =
     return $ foldr Lam t xs
   universe = Universe <$ (keyword "𝘜" <|> keyword "U")
   pi       = do
-    J.Binding x q t <- try $ bind <* (symbol "→" <|> symbol "->")
+    Binding x q t <- try $ bind <* (symbol "→" <|> symbol "->")
     Pi q x t <$> local (x :) (cTermWith False iTermInner)
   forall = do
     keyword "forall" <|> symbol "∀"
@@ -223,7 +222,7 @@ cTermInner atomicOnly =
     p  <- local (map bndName xs <>) cTerm
     foldM (\a x -> return $ Pi (bndUsage x) (bndName x) (bndType x) a) p xs
   mPairType = do
-    J.Binding x q t <- try $ bind <* (symbol "⊗" <|> symbol "*")
+    Binding x q t <- try $ bind <* (symbol "⊗" <|> symbol "*")
     MPairType q x t <$> local (x :) (cTermWith True iTermInner)
   mUnitType = MUnitType <$ (keyword "𝟭ₘ" <|> keyword "I")
   aPair     = liftM2 (<|>)
@@ -247,6 +246,6 @@ cTermInner atomicOnly =
 mUnit :: Parser CTerm
 mUnit = MUnit <$ symbol "()"
 
-bind :: Parser Binding
-bind = parens $ flip J.Binding <$> semiring <*> name <* symbol ":" <*> cTerm
+bind :: Parser ParsedBinding
+bind = parens $ flip Binding <$> semiring <*> name <* symbol ":" <*> cTerm
 
