@@ -14,6 +14,7 @@ import           Control.Monad.Reader           ( MonadReader(local)
                                                 , ReaderT(runReaderT)
                                                 , asks
                                                 , unless
+                                                , when
                                                 )
 import           Data.Bifunctor                 ( first )
 import           Data.Function                  ( on )
@@ -48,6 +49,8 @@ data TypingError
      CheckError Type CTerm
    | -- | Term uses a variable that is missing in the context.
      UnknownVarError Name
+   | -- | An incompatible usage occurs in the eliminator.
+     IncompatibleEliminatorUsage ZeroOneMany ITerm
 
 -- | Typing judgment either fails and produces a 'TypingError' or succeeds and
 -- returns a value.
@@ -127,6 +130,8 @@ synthType s (m :$: n) = do
       (qs, ) . ty' <$> evalInEnv n
     ty -> throwError $ TypeClashError SomePi ty (m :$: n)
 synthType s elim@(MPairElim r zName xName yName m n o) = do
+  when (r == Zero) $
+    throwError $ IncompatibleEliminatorUsage r elim
   (qs1, mTy) <- first (Map.map (r .*.)) <$> synthType s m
   case mTy of
     zTy@(VMPairType p _ xTy yTy) -> do
@@ -147,6 +152,8 @@ synthType s elim@(MPairElim r zName xName yName m n o) = do
   ifn = Inf . Free . bndName
   sub i = cSubst i . Free . bndName
 synthType s elim@(MUnitElim r xName m n o) = do
+  when (r == Zero) $
+    throwError $ IncompatibleEliminatorUsage r elim
   (qs1, mTy) <- first (Map.map (r .*.)) <$> synthType s m
   case mTy of
     xTy@VMUnitType -> do
@@ -166,18 +173,20 @@ synthType s (Snd m) = do
   case ty of
     VAPairType _ _ t2 -> (qs, ) . t2 <$> evalInEnv (Inf $ Fst m)
     _                 -> throwError $ TypeClashError SomeAPair ty (Snd m)
-synthType s elim@(SumElim p zName m xName n yName o u) = do
-  (qs, mTy) <- first (Map.map (p .*.)) <$> synthType s m
+synthType s elim@(SumElim r zName m xName n yName o u) = do
+  when (r == Zero) $
+    throwError $ IncompatibleEliminatorUsage r elim
+  (qs, mTy) <- first (Map.map (r .*.)) <$> synthType s m
   case mTy of
     zTy@(VSumType xTy yTy) -> do
       z <- newLocalVar zName zero zTy
       local (with z) $ checkTypeErased (cSubst 0 (Free $ bndName z) u) VUniverse
-      let sp = extend s .*. p
-      x   <- newLocalVar xName sp xTy
+      let sr = extend s .*. r
+      x   <- newLocalVar xName sr xTy
       qs1 <- withLocalVar "Left case of the sum" x $ do
         ux <- evalInEnv $ cSubst 0 (Ann (SumL $ ifn x) $ quote0 zTy) u
         checkType s (cSubst 0 (Free $ bndName x) n) ux
-      y   <- newLocalVar yName sp yTy
+      y   <- newLocalVar yName sr yTy
       qs2 <- withLocalVar "Right case of the sum" y $ do
         uy <- evalInEnv $ cSubst 0 (Ann (SumR $ ifn y) $ quote0 zTy) u
         checkType s (cSubst 0 (Free $ bndName y) o) uy

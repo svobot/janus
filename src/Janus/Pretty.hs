@@ -121,6 +121,10 @@ instance Pretty TypingError where
       , "In the expression:" <+> pretty s expr
       ]
     go (UnknownVarError n) = "Variable not in scope: " <> pretty s (Free n)
+    go (IncompatibleEliminatorUsage m expr) = hardlines
+      [ "The eliminator contains an incompatible usage" <+> pretty s m <> ":"
+      , indent 2 $ pretty s expr
+      ]
 
 -- | Convert the output of term evaluation into the 'Doc' form.
 prettyResult :: Style -> ZeroOneMany -> Maybe String -> Value -> Value -> Doc
