@@ -32,15 +32,17 @@ let ω if = (λS b p. case 1 _ @ b of { inl x → let 1 _ @ () = x in fst p : S;
 assume (0 A : 𝘜)
 assume (ω leq : (1 _ : Pair A A) → Pair Bool (Pair A A))
 
-let w insert = (\v l. para A ((1 _ : A) -> List A)
-    (\x w i.
-        let 1 _ @ (b, xi) = leq (x, i) in
-            let 1 _ @ (x', i') = xi in
-                if (List A) b <Cons A x' ((snd w) i'), Cons A i' (Cons A x' (fst w))>
-            : List A
-        : List A)
-    (\i. Cons A i (Nil A)) l v) : (1 _ : A) -> (1 _ : List A) -> List A
-
+let ω insert = (λv l. para A ((1 _ : A) → List A)
+                      (λx w i. let 1 _ @ (b, xi) = leq (x, i)
+                               in let 1 _ @ (x', i') = xi
+                                  in if (List A) b
+                                     ⟨Cons A x' ((snd w) i'), Cons A i' (Cons A x' (fst w))⟩
+                                  : List A
+                               : List A)
+                      (λi. Cons A i (Nil A))
+                      l
+                      v)
+               : ∀ (1 _ : A) (1 _ : List A) . List A
 
 assume (ω foldr' : ∀ (0 A : 𝘜)
                      (0 B : (0 _ : List A) → 𝘜)
@@ -67,14 +69,6 @@ let ω cong = (λA B x y f p. J A x (λy _. Id B (f x) (f y)) (Refl B (f x)) y p
                  (0 f : (1 _ : A) → B)
                  (1 p : Id A x y)
                . Id B (f x) (f y)
-
-let 0 proj1 = (λA B p. let 1 z @ (x, y) = p in x : A)
-              : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (0 z : (ω x : A) ⊗ B x) . A
-let 0 proj2 = (λA B p. let 1 z @ (x, y) = p
-                       in y
-                       : B (proj1 A B z))
-              : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (0 z : (ω x : A) ⊗ B x)
-                . B (proj1 A B z)
 
 let 0 Triple = (λA B l. (1 p : (l' : List A) & B l') ⊗ Id (List A) (fst p) l)
                : ∀ (0 A : 𝘜) (0 B : (0 _ : List A) → 𝘜) (0 _ : List A) . 𝘜

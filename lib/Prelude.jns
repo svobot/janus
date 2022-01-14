@@ -1,14 +1,14 @@
 -- Identity function
 let 1 id = (\x. \y. y : (0 x : 𝘜) -> (1 y : x) -> x)
 
--- Projection to the first element of the multiplicative pair in the erased part of the theory
+-- Projection to the first element of the multiplicative pair
 let w proj1 = (λx y z. let c @ (a, b) = z in a : x)
               : ∀ (0 x : U)
                   (0 y : (0 a : x) -> U)
                   (w z : (w a : x) * y a)
                 . x
 
--- Projection to the second element of the multiplicative pair in the erased part of the theory
+-- Projection to the second element of the multiplicative pair
 let w proj2 = (λx y z. let c @ (a, b) = z in b : y (let f @ (d, e) = c in d : x))
               : ∀ (0 x : U)
                   (0 y : (0 a : x) -> U)

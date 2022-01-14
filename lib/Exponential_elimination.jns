@@ -114,8 +114,7 @@ let depMultExpToExpDepMult = (λA B wawb. let 1 _ @ (wa, wb) = wawb
                                                     (λa wb'. ofcElim (B a)
                                                                       (λ_. ofcW ((1 a : A) ⊗ B a))
                                                                       wb'
-                                                                      (λb. ((a, b), ()))
-                                                    )
+                                                                      (λb. ((a, b), ())))
                                             wb
                                          : ofcW ((1 a : A) ⊗ B a))
                              : forall (0 A : U)
