@@ -1,0 +1,115 @@
+assume (0 List : (0 _ : 𝘜) → 𝘜)
+assume (ω Nil : (0 A : 𝘜) → List A)
+assume (ω Cons : ∀ (0 A : 𝘜) (1 _ : A) (1 _ : List A) . List A)
+assume (ω foldr : ∀ (0 A : 𝘜)
+                    (0 B : 𝘜)
+                    (ω f : ∀ (1 _ : A) (1 _ : B) . B)
+                    (1 z : B)
+                    (1 l : List A)
+                  . B)
+
+let ω para = (λA B f z l. snd (foldr A ((_ : List A) & B)
+                           (λa w. ⟨Cons A a (fst w), f a w⟩)
+                           ⟨Nil A, z⟩
+                           l))
+             : ∀ (0 A : 𝘜)
+                 (0 B : 𝘜)
+                 (ω f : ∀ (1 _ : A) (1 _ : (_ : List A) & B) . B)
+                 (ω z : B)
+                 (1 l : List A)
+               . B
+
+let 0 Pair = (λA B. (1 _ : A) ⊗ B) : ∀ (0 A : 𝘜) (0 B : 𝘜) . 𝘜
+
+let 0 Bool = 𝟭ₘ ⊕ 𝟭ₘ : 𝘜
+let ω true = inl () : Bool
+let ω false = inr () : Bool
+let ω if = (λS b p. case 1 _ @ b of { inl x → let 1 _ @ () = x in fst p : S;
+                                      inr y → let 1 _ @ () = y in snd p : S
+                                    } : S)
+           : ∀ (0 S : 𝘜) (1 b : Bool) (1 p : (_ : S) & S) . S
+
+assume (0 A : 𝘜)
+assume (ω leq : (1 _ : Pair A A) → Pair Bool (Pair A A))
+
+let w insert = (\v l. para A ((1 _ : A) -> List A)
+    (\x w i.
+        let 1 _ @ (b, xi) = leq (x, i) in
+            let 1 _ @ (x', i') = xi in
+                if (List A) b <Cons A x' ((snd w) i'), Cons A i' (Cons A x' (fst w))>
+            : List A
+        : List A)
+    (\i. Cons A i (Nil A)) l v) : (1 _ : A) -> (1 _ : List A) -> List A
+
+
+assume (ω foldr' : ∀ (0 A : 𝘜)
+                     (0 B : (0 _ : List A) → 𝘜)
+                     (ω f : ∀ (1 x : A) (0 xs : List A) (1 _ : B xs) . B (Cons A x xs))
+                     (1 z : B (Nil A))
+                     (1 l : List A)
+                   . B l)
+
+assume (0 Id : ∀ (0 A : 𝘜) (0 x : A) (0 y : A) . 𝘜)
+assume (ω Refl : ∀ (0 A : 𝘜) (0 x : A) . Id A x x)
+assume (ω J : ∀ (0 A : 𝘜)
+                (0 x : A)
+                (0 B : ∀ (0 y : A) (0 _ : Id A x y) . 𝘜)
+                (1 f : B x (Refl A x))
+                (0 y : A)
+                (1 p : Id A x y)
+              . B y p)
+
+let ω cong = (λA B x y f p. J A x (λy _. Id B (f x) (f y)) (Refl B (f x)) y p)
+             : ∀ (0 A : 𝘜)
+                 (0 B : 𝘜)
+                 (0 x : A)
+                 (0 y : A)
+                 (0 f : (1 _ : A) → B)
+                 (1 p : Id A x y)
+               . Id B (f x) (f y)
+
+let 0 proj1 = (λA B p. let 1 z @ (x, y) = p in x : A)
+              : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (0 z : (ω x : A) ⊗ B x) . A
+let 0 proj2 = (λA B p. let 1 z @ (x, y) = p
+                       in y
+                       : B (proj1 A B z))
+              : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (0 z : (ω x : A) ⊗ B x)
+                . B (proj1 A B z)
+
+let 0 Triple = (λA B l. (1 p : (l' : List A) & B l') ⊗ Id (List A) (fst p) l)
+               : ∀ (0 A : 𝘜) (0 B : (0 _ : List A) → 𝘜) (0 _ : List A) . 𝘜
+
+let ω extract = (λA B l e. let 1 _ @ (pr, pf) = e
+                           in J (List A) (fst pr) (λl' _. B l') (snd pr) l pf
+                           : B l)
+                : ∀ (0 A : 𝘜)
+                    (0 B : (0 _ : List A) → 𝘜)
+                    (0 l : List A)
+                    (1 _ : Triple A B l)
+                  . B l
+
+let ω para' = (λA B f z l. extract A
+                                   B
+                                   l
+                                   (foldr' A
+                                           (Triple A B)
+                                           (λx xs p. let 1 _ @ (m, n) = p
+                                                     in (⟨Cons A x (fst m)
+                                                         , f x m⟩
+                                                        , cong (List A)
+                                                               (List A)
+                                                               (fst m)
+                                                               xs
+                                                               (Cons A x)
+                                                               n)
+                                                     : (Triple A B (Cons A x xs)))
+                                           (⟨Nil A, z⟩, Refl (List A) (Nil A))
+                                           l))
+              : ∀ (0 A : 𝘜)
+                  (0 B : (0 _ : List A) → 𝘜)
+                  (ω f : ∀ (1 x : A)
+                           (1 p : (l : List A) & B l)
+                         . B (Cons A x (fst p)))
+                  (ω z : B (Nil A))
+                  (1 l : List A)
+                . B l

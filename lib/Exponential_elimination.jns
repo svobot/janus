@@ -1,0 +1,143 @@
+let 0 ofcW = (λA. (ω _ : A) ⊗ 𝟭ₘ) : (0 _ : 𝘜) → 𝘜
+let ω ofcElim = (λ_ B exp cont. let 1 exp' @ (val, unit) = exp
+                                in let 1 unit' @ () = unit
+                                   in cont val
+                                   : B (val, unit')
+                                : B exp')
+                : ∀ (0 A : 𝘜)
+                    (0 B : (0 _ : (ω _ : A) ⊗ 𝟭ₘ) → 𝘜)
+                    (1 exp : (ω _ : A) ⊗ 𝟭ₘ)
+                    (1 _ : (ω val : A) → B (val, ()))
+                  . B exp
+let unwrap = (λA wa. ofcElim A (λ_. A) wa (λx. x))
+             : (0 A : U) → (_ : ofcW A) → A
+
+-- Exponential of a multiplicative pair produces a multiplicative pair of exponentials
+let expMultToMultExp = (λA B pair. ofcElim ((1 _ : A) ⊗ B)
+                                            (λ_. (1 _ : ofcW A) ⊗ (ofcW B))
+                                            pair
+                                            (λpair'. let w _ @ (x, y) = pair'
+                                                     in ((x, ()), (y, ()))
+                                                     : (1 _ : ofcW A) ⊗ (ofcW B)))
+                       : forall (0 A : U)
+                                (0 B : U)
+                                (1 _ : ofcW ((1 _ : A) ⊗ B))
+                         . (1 _ : ofcW A) ⊗ (ofcW B)
+
+-- Multiplicative pair of exponentials produces an exponential of a multiplicative pair
+let multExpToExpMult = (λA B pair. let 1 _ @ (x, y) = pair
+                                   in ofcElim A
+                                              (λ_. ofcW ((1 _ : A) ⊗ B))
+                                              x
+                                              (λx'. ofcElim B
+                                                            (λ_. ofcW ((1 _ : A) ⊗ B))
+                                                            y
+                                                            (λy'. ((x', y'), ())))
+                                   : ofcW ((1 _ : A) ⊗ B))
+                       : forall (0 A : U)
+                                (0 B : U)
+                                (1 _ : (1 _ : ofcW A) ⊗ (ofcW B))
+                         . ofcW ((1 _ : A) ⊗ B)
+
+
+-- Exponential of an additive pair produces an additive pair of exponentials
+let expAddToAddExp = (λA B pair. ofcElim ((_ : A) & B)
+                                         (λ_. (_ : ofcW A) & (ofcW B))
+                                         pair
+                                         (λpair'. ⟨(fst pair', ()), (snd pair', ())⟩))
+                     : forall (0 A : U)
+                              (0 B : U)
+                              (1 _ : ofcW ((_ : A) & B))
+                       . (_ : ofcW A) & (ofcW B)
+
+-- Additive pair of exponentials fails to produce an exponential of an additive pair
+--let addExpToExpAdd = (λA B pair. ofcElim A
+--                                         (λ_. ofcW ((_ : A) & B))
+--                                         (fst pair)
+--                                         (λx. ofcElim B
+--                                                      (λ_. ofcW ((_ : A) & B))
+--                                                      (snd pair)
+--                                                      (λy. (⟨x, y⟩, ()))))
+--                     : forall (0 A : U)
+--                              (0 B : U)
+--                              (1 _ : (_ : ofcW A) & (ofcW B))
+--                       . ofcW ((_ : A) & B)
+
+-- Additive pair of exponentials fails to produce an exponential of an additive pair (different form)
+--let addExpToExpAdd' = (λA B pair. (⟨ofcElim A (λ_. A) (fst pair) (λx. x),
+--                                    ofcElim B (λ_. B) (snd pair) (λy. y)⟩, ()))
+--                      : forall (0 A : U)
+--                               (0 B : U)
+--                               (1 _ : (_ : ofcW A) & (ofcW B))
+--                        . ofcW ((_ : A) & B)
+
+-- Exponential of an additive union produces an additive union of exponentials
+let expUnionToUnionExp = (λA B union. ofcElim (A ⊕ B)
+                                              (λ_. (ofcW A) ⊕ (ofcW B))
+                                              union
+                                              (λunion'. case w _ @ union'
+                                                      of { inl x → inl (x, ());
+                                                           inr y → inr (y, ())
+                                                         } : (ofcW A) ⊕ (ofcW B)))
+                         : forall (0 A : U)
+                                  (0 B : U)
+                                  (1 _ : ofcW (A ⊕ B))
+                           . (ofcW A) ⊕ (ofcW B)
+
+-- Additive union of exponentials produces an exponential of an additive union
+let unionExpToExpUnion = (λA B union. case 1 _ @ union of
+                                      { inl x → ofcElim A (λ_. ofcW (A ⊕ B)) x (λx'. (inl x', ()));
+                                        inr y → ofcElim B (λ_. ofcW (A ⊕ B)) y (λy'. (inr y', ()))
+                                      } : ofcW (A ⊕ B))
+                         : forall (0 A : U)
+                                  (0 B : U)
+                                  (1 _ : (ofcW A) ⊕ (ofcW B))
+                           . ofcW (A ⊕ B)
+
+-- Exponential of a dependent multiplicative pair produces a dependent multiplicative pair of exponentials
+let expDepMultToDepMultExp = (λA B wab. ofcElim ((1 a : A) ⊗ B a)
+                                        (λ_. (1 wa : ofcW A) ⊗ ofcW (B (unwrap A wa)))
+                                        wab
+                                        (λab. let w _ @ (a, b) = ab
+                                               in ((a, ()), (b, ()))
+                                               : (1 wa : ofcW A) ⊗ ofcW (B (unwrap A wa))))
+                             : forall (0 A : U)
+                                      (0 B : (0 _ : A) → U)
+                                      (1 _ : ofcW ((1 a : A) ⊗ B a))
+                               . (1 wa : ofcW A) ⊗ ofcW (B (unwrap A wa))
+    
+-- Dependent multiplicative pair of exponentials produces an exponential of a dependent multiplicative pair
+let depMultExpToExpDepMult = (λA B wawb. let 1 _ @ (wa, wb) = wawb
+                                         in ofcElim A
+                                                    (λwa'. (1 _ : ofcW (B (unwrap A wa'))) → ofcW ((1 a : A) ⊗ B a))
+                                                    wa
+                                                    (λa wb'. ofcElim (B a)
+                                                                      (λ_. ofcW ((1 a : A) ⊗ B a))
+                                                                      wb'
+                                                                      (λb. ((a, b), ()))
+                                                    )
+                                            wb
+                                         : ofcW ((1 a : A) ⊗ B a))
+                             : forall (0 A : U)
+                                      (0 B : (0 _ : A) → U)
+                                      (1 _ : (1 wa : ofcW A) ⊗ ofcW (B (unwrap A wa)))
+                               . ofcW ((1 a : A) ⊗ B a)
+    
+-- Exponential of a dependent additive pair produces a dependent additive pair of exponentials
+let expDepAddToDepAddExp = (λA B wab. ofcElim ((a : A) & B a)
+                                              (λ_. (wa : ofcW A) & (ofcW (B (unwrap A wa))))
+                                              wab
+                                              (λab. ⟨(fst ab, ()), (snd ab, ())⟩))
+                           : forall (0 A : U)
+                                    (0 B : (0 _ : A) → U)
+                                    (1 _ : ofcW ((a : A) & B a))
+                             . (wa : ofcW A) & (ofcW (B (unwrap A wa)))
+
+-- Dependent additive pair of exponentials fails to produce an exponential of a dependent additive pair
+--let depAddExpToExpDepAdd = (λA B wawb. (⟨unwrap A (fst wawb)
+--                                        , unwrap (B (unwrap A (fst wawb))) (snd wawb)⟩
+--                                       , ()))
+--                           : forall (0 A : U)
+--                                    (0 B : (0 _ : A) → U)
+--                                    (1 _ : (wa : ofcW A) & (ofcW (B (unwrap A wa))))
+--                             . ofcW ((a : A) & B a)
