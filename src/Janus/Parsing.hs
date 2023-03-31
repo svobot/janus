@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-missed-specialisations #-}
+
 -- | Parser for the Janus language.
 module Janus.Parsing
   ( Binding
@@ -199,7 +201,7 @@ cTermInner atomicOnly =
   choice
       (  (if atomicOnly
            then []
-           else [lam, pi, forall, mPairType, aPairType, sumL, sumR, sumType]
+           else [lam, pi, forall_, mPairType, aPairType, sumL, sumR, sumType]
          )
       <> [universe, mUnit, mUnitType, aUnit, aUnitType, aPair, mPairOrParens]
       )
@@ -213,7 +215,7 @@ cTermInner atomicOnly =
   pi       = do
     Binding x q t <- try $ bind <* (symbol "→" <|> symbol "->")
     Pi q x t <$> local (x :) (cTermWith False iTermInner)
-  forall = do
+  forall_ = do
     keyword "forall" <|> symbol "∀"
     let go bs = do
           b <- bind

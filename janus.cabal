@@ -45,12 +45,15 @@ common common
   if (impl(ghc >= 8.10))
     ghc-options:       -Wno-missing-safe-haskell-mode
                        -Wno-prepositive-qualified-module
+  if impl(ghc >= 9.2)
+    ghc-options:
+      -Wno-missing-kind-signatures
   default-extensions:  LambdaCase
                      , OverloadedStrings
                      , TupleSections
                      , TypeApplications
                      , RecordWildCards
-  build-depends:       base ^>=4.14
+  build-depends:       base
 
 common threaded
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
@@ -62,7 +65,7 @@ library
                      , megaparsec
                      , prettyprinter
                      , prettyprinter-ansi-terminal
-                     , repline ^>=0.4
+                     , repline
                      , text
   exposed-modules:     Janus.Evaluation
                      , Janus.Infer
