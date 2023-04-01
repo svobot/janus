@@ -130,8 +130,6 @@ synthType s (m :$: n) = do
       (qs, ) . ty' <$> evalInEnv n
     ty -> throwError $ TypeClashError SomePi ty (m :$: n)
 synthType s elim@(MPairElim r zName xName yName m n o) = do
-  when (r == Zero) $
-    throwError $ IncompatibleEliminatorUsage r elim
   (qs1, mTy) <- first (Map.map (r .*.)) <$> synthType s m
   case mTy of
     zTy@(VMPairType p _ xTy yTy) -> do

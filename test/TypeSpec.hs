@@ -146,16 +146,6 @@ cases =
       , (Global "y", vfree $ Global "b", Many, One)
       ]
     )
-  , TestCase
-    "Eliminator erases the usage of the pair elements"
-    -- let 0 _ @ (_,_) = pair in M : U
-    ([], [])
-    Many
-    (MPairElim Zero "_" "_" "_" (fg "pair") (ifg "M") (ifg "U"))
-    (TestResult . throwError $ IncompatibleEliminatorUsage
-      Zero
-      (MPairElim Zero "_" "_" "_" (fg "pair") (ifg "M") (ifg "U"))
-    )
   ]
  where
   fg  = Free . Global

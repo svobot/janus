@@ -163,7 +163,7 @@ iTermInner =
   oneOrMany = option Many
     $ choice [One <$ symbol "1", Many <$ (keyword "ω" <|> keyword "w")]
   letElim = do
-    (q, z) <- try $ (,) <$> (keyword "let" *> oneOrMany) <*> name <* symbol "@"
+    (q, z) <- try $ (,) <$> (keyword "let" *> semiring) <*> name <* symbol "@"
     let rest elim inLocals tyLocals =
           elim
             <$> (symbol "=" *> iTerm <* keyword "in")

@@ -200,6 +200,44 @@ cases =
     "error: Mismatched multiplicities (Right case of the sum):\n\
     \         y : b\n\
     \           Used 0-times, but available 1-times."
+  , TestCase
+    "Erasing in multiplicative pair elimination"
+    [ "assume (0 Id : ∀ (0 A : 𝘜) (0 x : A) (0 y : A) . 𝘜)"
+    , "assume (ω Refl : ∀ (0 A : 𝘜) (0 x : A) . Id A x x)"
+    , "assume (ω J : ∀ (0 A : 𝘜)\n\
+      \                (0 x : A)\n\
+      \                (0 B : ∀ (0 y : A) (0 _ : Id A x y) . 𝘜)\n\
+      \                (1 f : B x (Refl A x))\n\
+      \                (0 y : A)\n\
+      \                (1 p : Id A x y)\n\
+      \              . B y p)"
+    , "let 0 Fst = (λA B p. let 1 q @ (a, b) = p in a : A)\n\
+      \          : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (0 p : (1 a : A) ⊗ B a) . A"
+    , "let 0 Snd = (λA B p. let 1 q @ (a, b) = p in b : B (Fst A B q))\n\
+      \          : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (0 p : (1 a : A) ⊗ B a)\n\
+      \            . B (Fst A B p)"
+    , "let ω eta = (λA B p. let 0 q @ (a, b) = p\n\
+      \                     in Refl ((1 a : A) ⊗ B a) (a, b)\n\
+      \                     : (Id ((1 a : A) ⊗ B a) (Fst A B q, Snd A B q) q))\n\
+      \            : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (0 p : (1 a : A) ⊗ B a)\n\
+      \              . Id ((1 a : A) ⊗ B a) (Fst A B p, Snd A B p) p"
+    ]
+    "ω eta = (λA B p. let 0 q @ (a, b) = p\n\
+    \                 in Refl ((1 a : A) ⊗ B a) (a, b)\n\
+    \                 : Id ((1 a : A) ⊗ B a)\n\
+    \                   (let 1 q @ (a, b) = q in a : A, let 1 q @ (a, b) = q\n\
+    \                                                   in b\n\
+    \                                                   : B\n\
+    \                                                     (let 1 q @ (a, b) = q\n\
+    \                                                      in a\n\
+    \                                                      : A))\n\
+    \                   q)\n\
+    \        : ∀ (0 A : 𝘜) (0 B : (0 _ : A) → 𝘜) (0 p : (1 a : A) ⊗ B a)\n\
+    \          . Id ((1 a : A) ⊗ B a)\n\
+    \            (let 1 q @ (a, b) = p in a : A, let 1 q @ (a, b) = p\n\
+    \                                            in b\n\
+    \                                            : B (let 1 q @ (a, b) = q in a : A))\n\
+    \            p"
   ]
 
 prettyCases :: [TestCase]
