@@ -1,2 +1,4 @@
 packages: .
 
+allow-newer: haskeline:base
+           , terminfo:base

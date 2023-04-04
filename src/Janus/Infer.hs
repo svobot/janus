@@ -10,11 +10,12 @@ module Janus.Infer
   ) where
 
 import           Control.Monad.Except           ( throwError )
+import           Control.Monad                  ( unless
+                                                , when
+                                                )
 import           Control.Monad.Reader           ( MonadReader(local)
                                                 , ReaderT(runReaderT)
                                                 , asks
-                                                , unless
-                                                , when
                                                 )
 import           Data.Bifunctor                 ( first )
 import           Data.Function                  ( on )
