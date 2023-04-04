@@ -126,6 +126,9 @@ module Janus.REPL
 import           Control.Exception              ( IOException
                                                 , try
                                                 )
+import           Control.Monad                  ( forM_
+                                                , unless
+                                                )
 import           Control.Monad.Reader           ( MonadReader(ask)
                                                 , ReaderT
                                                 , runReaderT
@@ -134,11 +137,9 @@ import           Control.Monad.State            ( MonadIO
                                                 , MonadState(..)
                                                 , StateT
                                                 , evalStateT
-                                                , forM_
                                                 , gets
                                                 , liftIO
                                                 , modify
-                                                , unless
                                                 )
 import           Data.Bifunctor                 ( bimap )
 import           Data.Char                      ( isSpace )
